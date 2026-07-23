@@ -13,14 +13,8 @@ from PySide6.QtWidgets import (
 )
 
 from core.create import CreateBlankPDF
+from ui.page_sizes import CUSTOM_SIZE_LABEL, PAGE_SIZES
 from ui.widgets.file_picker import FilePicker
-
-_PAGE_SIZES = {
-    "A4": (595, 842),
-    "Carta (Letter)": (612, 792),
-    "Ofício (Legal)": (612, 1008),
-}
-_CUSTOM_LABEL = "Personalizado"
 
 
 class CreatePage(QWidget):
@@ -36,7 +30,7 @@ class CreatePage(QWidget):
         self.page_count_spin.setValue(1)
 
         self.size_combo = QComboBox()
-        self.size_combo.addItems([*_PAGE_SIZES.keys(), _CUSTOM_LABEL])
+        self.size_combo.addItems([*PAGE_SIZES.keys(), CUSTOM_SIZE_LABEL])
         self.size_combo.currentTextChanged.connect(self._on_size_changed)
 
         self.width_spin = QDoubleSpinBox()
@@ -65,11 +59,11 @@ class CreatePage(QWidget):
         layout.addWidget(create_button)
 
     def _on_size_changed(self, label: str):
-        is_custom = label == _CUSTOM_LABEL
+        is_custom = label == CUSTOM_SIZE_LABEL
         self.width_spin.setEnabled(is_custom)
         self.height_spin.setEnabled(is_custom)
         if not is_custom:
-            width, height = _PAGE_SIZES[label]
+            width, height = PAGE_SIZES[label]
             self.width_spin.setValue(width)
             self.height_spin.setValue(height)
 

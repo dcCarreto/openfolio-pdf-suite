@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.crop import CropPages, ScalePages
+from ui.page_sizes import CUSTOM_SIZE_LABEL, PAGE_SIZES
 from ui.widgets.file_picker import FilePicker
 
 
@@ -78,14 +79,19 @@ class CropPage(QWidget):
         self.scale_input_picker = FilePicker(mode="open")
         self.scale_output_picker = FilePicker(mode="save")
 
+        self.scale_size_combo = QComboBox()
+        self.scale_size_combo.addItems([*PAGE_SIZES.keys(), CUSTOM_SIZE_LABEL])
+        self.scale_size_combo.currentTextChanged.connect(self._on_scale_size_changed)
+
         self.width_spin = QDoubleSpinBox()
         self.width_spin.setRange(1, 20000)
-        self.width_spin.setValue(595)
         self.height_spin = QDoubleSpinBox()
         self.height_spin.setRange(1, 20000)
-        self.height_spin.setValue(842)
+        self._on_scale_size_changed(self.scale_size_combo.currentText())
 
         size_layout = QHBoxLayout()
+        size_layout.addWidget(QLabel("Tamanho:"))
+        size_layout.addWidget(self.scale_size_combo)
         size_layout.addWidget(QLabel("Largura:"))
         size_layout.addWidget(self.width_spin)
         size_layout.addWidget(QLabel("Altura:"))
@@ -102,6 +108,15 @@ class CropPage(QWidget):
         layout.addLayout(size_layout)
         layout.addWidget(apply_button)
         return widget
+
+    def _on_scale_size_changed(self, label: str):
+        is_custom = label == CUSTOM_SIZE_LABEL
+        self.width_spin.setEnabled(is_custom)
+        self.height_spin.setEnabled(is_custom)
+        if not is_custom:
+            width, height = PAGE_SIZES[label]
+            self.width_spin.setValue(width)
+            self.height_spin.setValue(height)
 
     def _margin_spin(self) -> QDoubleSpinBox:
         spin = QDoubleSpinBox()

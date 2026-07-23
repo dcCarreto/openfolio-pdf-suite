@@ -100,25 +100,41 @@ class PagesPage(QWidget):
             return
 
         operation = self.operation_combo.currentText()
+        field_by_operation = {
+            "Rotacionar": self.rotate_pages_edit,
+            "Reordenar": self.reorder_edit,
+            "Remover": self.remove_edit,
+        }
+
+        try:
+            pages = _parse_page_list(field_by_operation[operation].text())
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Páginas",
+                "Lista de páginas inválida. Use números separados por vírgula, ex: 0,2.",
+            )
+            return
+
+        if operation == "Reordenar" and not pages:
+            QMessageBox.warning(self, "Páginas", "Informe a nova ordem das páginas.")
+            return
+        if operation == "Remover" and not pages:
+            QMessageBox.warning(self, "Páginas", "Informe quais páginas remover.")
+            return
 
         try:
             if operation == "Rotacionar":
-                pages = _parse_page_list(self.rotate_pages_edit.text()) or None
                 RotatePages().run(
-                    input_path, output_path, angle=self.rotate_angle_spin.value(), pages=pages
+                    input_path, output_path, angle=self.rotate_angle_spin.value(), pages=pages or None
                 )
             elif operation == "Reordenar":
-                order = _parse_page_list(self.reorder_edit.text())
-                if not order:
-                    QMessageBox.warning(self, "Páginas", "Informe a nova ordem das páginas.")
-                    return
-                ReorderPages().run(input_path, output_path, order=order)
+                ReorderPages().run(input_path, output_path, order=pages)
             else:
-                pages = _parse_page_list(self.remove_edit.text())
-                if not pages:
-                    QMessageBox.warning(self, "Páginas", "Informe quais páginas remover.")
-                    return
                 RemovePages().run(input_path, output_path, pages=pages)
+        except IndexError:
+            QMessageBox.warning(self, "Páginas", "Uma das páginas informadas não existe neste PDF.")
+            return
         except Exception as exc:
             QMessageBox.critical(self, "Páginas", f"Falha ao processar: {exc}")
             return
