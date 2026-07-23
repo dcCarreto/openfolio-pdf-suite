@@ -11,8 +11,12 @@ from PySide6.QtWidgets import (
 )
 
 from ui.icon import build_app_icon
+from ui.pages.bookmarks_page import BookmarksPage
 from ui.pages.compress_page import CompressPage
 from ui.pages.convert_page import ConvertPage
+from ui.pages.crop_page import CropPage
+from ui.pages.extract_images_page import ExtractImagesPage
+from ui.pages.extract_text_page import ExtractTextPage
 from ui.pages.merge_page import MergePage
 from ui.pages.metadata_page import MetadataPage
 from ui.pages.page_numbers_page import PageNumbersPage
@@ -35,6 +39,10 @@ _SECTIONS = [
     ("🔒", "Proteger", "Proteja um PDF com senha, ou remova a senha de um PDF protegido.", ProtectPage),
     ("🏷️", "Metadados", "Edite título, autor, assunto e palavras-chave de um PDF.", MetadataPage),
     ("🔢", "Numeração", "Adicione números de página no rodapé de um PDF.", PageNumbersPage),
+    ("📝", "Extrair texto", "Extraia todo o texto de um PDF para um arquivo .txt.", ExtractTextPage),
+    ("📷", "Extrair imagens", "Extraia as imagens embutidas nas páginas de um PDF.", ExtractImagesPage),
+    ("📐", "Cortar/Redimensionar", "Corte margens ou redimensione as páginas de um PDF.", CropPage),
+    ("🔖", "Marcadores", "Monte um sumário de navegação (marcadores) para um PDF.", BookmarksPage),
 ]
 
 
