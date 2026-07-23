@@ -14,8 +14,12 @@ from ui.icon import build_app_icon
 from ui.pages.compress_page import CompressPage
 from ui.pages.convert_page import ConvertPage
 from ui.pages.merge_page import MergePage
+from ui.pages.metadata_page import MetadataPage
+from ui.pages.page_numbers_page import PageNumbersPage
 from ui.pages.pages_page import PagesPage
+from ui.pages.protect_page import ProtectPage
 from ui.pages.split_page import SplitPage
+from ui.pages.watermark_page import WatermarkPage
 from ui.theme import apply_dark_titlebar
 from ui.widgets.page_container import PageContainer
 
@@ -27,6 +31,10 @@ _SECTIONS = [
     ("🔃", "Páginas", "Rotacione, reordene ou remova páginas de um PDF.", PagesPage),
     ("🗜️", "Comprimir", "Reduza o tamanho de um arquivo PDF.", CompressPage),
     ("🖼️", "Converter", "Converta entre páginas de PDF e imagens.", ConvertPage),
+    ("💧", "Marca d'água", "Adicione um texto de marca d'água sobre as páginas de um PDF.", WatermarkPage),
+    ("🔒", "Proteger", "Proteja um PDF com senha, ou remova a senha de um PDF protegido.", ProtectPage),
+    ("🏷️", "Metadados", "Edite título, autor, assunto e palavras-chave de um PDF.", MetadataPage),
+    ("🔢", "Numeração", "Adicione números de página no rodapé de um PDF.", PageNumbersPage),
 ]
 
 

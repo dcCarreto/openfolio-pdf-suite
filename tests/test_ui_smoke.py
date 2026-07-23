@@ -22,15 +22,19 @@ def test_main_window_builds_with_all_sections():
 
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
-    assert sidebar.count() == 5
+    assert sidebar.count() == 9
     assert [sidebar.item(i).text() for i in range(sidebar.count())] == [
         "📄  Mesclar",
         "✂️  Dividir",
         "🔃  Páginas",
         "🗜️  Comprimir",
         "🖼️  Converter",
+        "💧  Marca d'água",
+        "🔒  Proteger",
+        "🏷️  Metadados",
+        "🔢  Numeração",
     ]
-    assert window.stack.count() == 5
+    assert window.stack.count() == 9
 
     window.close()
 
