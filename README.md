@@ -52,7 +52,7 @@ tem seus próprios campos de entrada/saída e botão de ação.
 | ✂️ Dividir | Separa um PDF em vários arquivos menores (uma ou N páginas por arquivo) |
 | 🔃 Páginas | Rotaciona, reordena ou remove páginas de um PDF |
 | 🗜️ Comprimir | Reduz o tamanho de um PDF recomprimindo conteúdo e removendo objetos duplicados |
-| 🖼️ Converter | Converte páginas de PDF em imagens, ou um conjunto de imagens em um PDF |
+| 🖼️ Converter | Converte entre PDF e imagens, Word/Excel/PowerPoint e PDF, e XML e PDF |
 | 💧 Marca d'água | Adiciona um texto de marca d'água (opacidade, tamanho e rotação configuráveis) |
 | 🔒 Proteger | Protege um PDF com senha (AES-256), ou remove a senha de um PDF protegido |
 | 🏷️ Metadados | Lê e edita título, autor, assunto e palavras-chave de um PDF |
@@ -121,6 +121,9 @@ campo pode ser clicado e preenchido normalmente.
 
 - Python 3.10 ou superior
 - Windows, Linux ou macOS (interface gráfica via PySide6/Qt)
+- [LibreOffice](https://www.libreoffice.org/) (opcional) — se instalado, a conversão de
+  Word/Excel/PowerPoint para PDF preserva a formatação original. Sem ele, a conversão ainda
+  funciona, mas com uma formatação básica (só texto e estrutura, via Python puro).
 
 ## Como instalar
 
@@ -131,7 +134,7 @@ pip install -e .
 ```
 
 Isso instala o pacote em modo editável junto com todas as dependências (`pypdf`, `PySide6`,
-`pypdfium2`, `Pillow`, `reportlab`, `cryptography`).
+`pypdfium2`, `Pillow`, `reportlab`, `cryptography`, `python-docx`, `openpyxl`, `python-pptx`).
 
 ## Como rodar
 
@@ -150,8 +153,12 @@ escolher a ferramenta desejada na barra lateral.
 | [PySide6](https://doc.qt.io/qtforpython/) | Interface gráfica (Qt para Python) |
 | [pypdfium2](https://pypdfium2.readthedocs.io/) | Renderização de páginas PDF em imagens (conversão PDF → imagem) |
 | [Pillow](https://pillow.readthedocs.io/) | Leitura/escrita de imagens (conversão imagem → PDF, extração de imagens) |
-| [reportlab](https://www.reportlab.com/) | Geração de conteúdo vetorial (marca d'água, numeração de página, campos de formulário) |
+| [reportlab](https://www.reportlab.com/) | Geração de conteúdo vetorial (marca d'água, numeração de página, campos de formulário, fallback de conversão do Office/XML) |
 | [cryptography](https://cryptography.io/) | Criptografia AES-256 usada na proteção por senha (via `pypdf[crypto]`) |
+| [python-docx](https://python-docx.readthedocs.io/) | Leitura de documentos Word (.docx) no fallback de conversão para PDF |
+| [openpyxl](https://openpyxl.readthedocs.io/) | Leitura de planilhas Excel (.xlsx) no fallback de conversão para PDF |
+| [python-pptx](https://python-pptx.readthedocs.io/) | Leitura de apresentações PowerPoint (.pptx) no fallback de conversão para PDF |
+| [LibreOffice](https://www.libreoffice.org/) (opcional, externo) | Conversão de Word/Excel/PowerPoint para PDF com formatação fiel ao original |
 
 ## Estrutura do projeto
 
