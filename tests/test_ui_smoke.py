@@ -18,6 +18,7 @@ def test_main_window_builds_with_all_sections():
     window = MainWindow()
 
     assert window.windowTitle() == "OpenFolio PDF Suite"
+    assert not window.windowIcon().isNull()
 
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None

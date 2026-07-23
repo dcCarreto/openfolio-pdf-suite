@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon.png" alt="OpenFolio PDF Suite" width="120">
+</p>
+
 # OpenFolio PDF Suite
 
 Suite completa e open source de manipulação de PDF, 100% local, sem paywall.

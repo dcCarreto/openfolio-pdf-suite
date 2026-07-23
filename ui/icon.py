@@ -1,24 +1,27 @@
-"""Ícone da aplicação, desenhado em runtime (sem depender de arquivos externos)."""
+"""Ícone da aplicação, renderizado a partir do logo vetorial em assets/logo.svg."""
 
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from pathlib import Path
+
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QIcon, QPainter, QPixmap
+from PySide6.QtSvg import QSvgRenderer
+
+_LOGO_PATH = Path(__file__).resolve().parent.parent / "assets" / "logo.svg"
+_ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
 
 
 def build_app_icon() -> QIcon:
-    """Gera o ícone do OpenFolio PDF Suite: um quadrado arredondado com o monograma 'OF'."""
-    pixmap = QPixmap(256, 256)
-    pixmap.fill(Qt.GlobalColor.transparent)
+    """Monta o QIcon do OpenFolio PDF Suite em várias resoluções, a partir do SVG do logo."""
+    renderer = QSvgRenderer(str(_LOGO_PATH))
+    icon = QIcon()
 
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    for size in _ICON_SIZES:
+        pixmap = QPixmap(QSize(size, size))
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        renderer.render(painter)
+        painter.end()
+        icon.addPixmap(pixmap)
 
-    painter.setBrush(QColor("#0a84ff"))
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.drawRoundedRect(QRectF(8, 8, 240, 240), 56, 56)
-
-    painter.setPen(QColor("#f5f5f7"))
-    painter.setFont(QFont("Segoe UI", 92, QFont.Weight.Bold))
-    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "OF")
-
-    painter.end()
-    return QIcon(pixmap)
+    return icon
