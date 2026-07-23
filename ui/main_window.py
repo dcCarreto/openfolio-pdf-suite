@@ -37,7 +37,12 @@ _SECTIONS = [
     ("✂️", "Dividir", "Separe um PDF em vários arquivos menores.", SplitPage),
     ("🔃", "Páginas", "Rotacione, reordene ou remova páginas de um PDF.", PagesPage),
     ("🗜️", "Comprimir", "Reduza o tamanho de um arquivo PDF.", CompressPage),
-    ("🖼️", "Converter", "Converta entre páginas de PDF e imagens.", ConvertPage),
+    (
+        "🖼️",
+        "Converter",
+        "Converta entre PDF e imagens, documentos do Office (Word/Excel/PowerPoint) e XML.",
+        ConvertPage,
+    ),
     ("💧", "Marca d'água", "Adicione um texto de marca d'água sobre as páginas de um PDF.", WatermarkPage),
     ("🔒", "Proteger", "Proteja um PDF com senha, ou remova a senha de um PDF protegido.", ProtectPage),
     ("🏷️", "Metadados", "Edite título, autor, assunto e palavras-chave de um PDF.", MetadataPage),

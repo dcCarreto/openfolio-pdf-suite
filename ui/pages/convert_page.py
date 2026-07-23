@@ -1,4 +1,4 @@
-"""Aba de conversão entre PDF e imagens."""
+"""Aba de conversão entre PDF, imagens, documentos do Office e XML."""
 
 from PySide6.QtWidgets import (
     QComboBox,
@@ -11,23 +11,34 @@ from PySide6.QtWidgets import (
 )
 
 from core.convert import ConvertFromImages, ConvertToImages
+from core.office_convert import ConvertOfficeToPDF, find_libreoffice
+from core.xml_convert import ConvertXMLToPDF
 from ui.widgets.file_list_editor import FileListEditor
 from ui.widgets.file_picker import FilePicker
 
 
 class ConvertPage(QWidget):
-    """Permite converter páginas de um PDF em imagens, ou imagens em um PDF."""
+    """Permite converter entre PDF e imagens, documentos do Office e PDF, e XML e PDF."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.direction_combo = QComboBox()
-        self.direction_combo.addItems(["PDF para imagens", "Imagens para PDF"])
+        self.direction_combo.addItems(
+            [
+                "PDF para imagens",
+                "Imagens para PDF",
+                "Word/Excel/PowerPoint para PDF",
+                "XML para PDF",
+            ]
+        )
         self.direction_combo.currentIndexChanged.connect(self._on_direction_changed)
 
         self.stack = QStackedWidget()
         self.stack.addWidget(self._build_to_images_widget())
         self.stack.addWidget(self._build_from_images_widget())
+        self.stack.addWidget(self._build_office_widget())
+        self.stack.addWidget(self._build_xml_widget())
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Direção:"))
@@ -71,6 +82,54 @@ class ConvertPage(QWidget):
         layout.addWidget(convert_button)
         return widget
 
+    def _build_office_widget(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.office_input_picker = FilePicker(
+            mode="open", file_filter="Documentos do Office (*.docx *.xlsx *.xls *.pptx)"
+        )
+        self.office_output_picker = FilePicker(mode="save")
+
+        if find_libreoffice():
+            engine_note = "LibreOffice encontrado: a conversão preserva a formatação original."
+        else:
+            engine_note = (
+                "LibreOffice não encontrado: usando conversão básica em Python "
+                "(preserva texto, mas não a formatação visual exata)."
+            )
+        engine_label = QLabel(engine_note)
+        engine_label.setWordWrap(True)
+
+        convert_button = QPushButton("Converter")
+        convert_button.clicked.connect(self._convert_office)
+
+        layout.addWidget(QLabel("Arquivo Word, Excel ou PowerPoint de entrada:"))
+        layout.addWidget(self.office_input_picker)
+        layout.addWidget(QLabel("Arquivo PDF de saída:"))
+        layout.addWidget(self.office_output_picker)
+        layout.addWidget(engine_label)
+        layout.addWidget(convert_button)
+        return widget
+
+    def _build_xml_widget(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.xml_input_picker = FilePicker(mode="open", file_filter="XML (*.xml)")
+        self.xml_output_picker = FilePicker(mode="save")
+        convert_button = QPushButton("Converter")
+        convert_button.clicked.connect(self._convert_xml)
+
+        layout.addWidget(QLabel("Arquivo XML de entrada:"))
+        layout.addWidget(self.xml_input_picker)
+        layout.addWidget(QLabel("Arquivo PDF de saída:"))
+        layout.addWidget(self.xml_output_picker)
+        layout.addWidget(convert_button)
+        return widget
+
     def _on_direction_changed(self, index: int):
         self.stack.setCurrentIndex(index)
 
@@ -108,6 +167,44 @@ class ConvertPage(QWidget):
 
         try:
             ConvertFromImages().run(input_paths, output_path)
+        except Exception as exc:
+            QMessageBox.critical(self, "Converter", f"Falha ao converter: {exc}")
+            return
+
+        QMessageBox.information(self, "Converter", "PDF gerado com sucesso.")
+
+    def _convert_office(self):
+        input_path = self.office_input_picker.path()
+        output_path = self.office_output_picker.path()
+
+        if not input_path:
+            QMessageBox.warning(self, "Converter", "Escolha o arquivo de entrada.")
+            return
+        if not output_path:
+            QMessageBox.warning(self, "Converter", "Escolha o arquivo PDF de saída.")
+            return
+
+        try:
+            ConvertOfficeToPDF().run(input_path, output_path)
+        except Exception as exc:
+            QMessageBox.critical(self, "Converter", f"Falha ao converter: {exc}")
+            return
+
+        QMessageBox.information(self, "Converter", "PDF gerado com sucesso.")
+
+    def _convert_xml(self):
+        input_path = self.xml_input_picker.path()
+        output_path = self.xml_output_picker.path()
+
+        if not input_path:
+            QMessageBox.warning(self, "Converter", "Escolha o arquivo XML de entrada.")
+            return
+        if not output_path:
+            QMessageBox.warning(self, "Converter", "Escolha o arquivo PDF de saída.")
+            return
+
+        try:
+            ConvertXMLToPDF().run(input_path, output_path)
         except Exception as exc:
             QMessageBox.critical(self, "Converter", f"Falha ao converter: {exc}")
             return
