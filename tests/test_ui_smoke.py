@@ -22,8 +22,9 @@ def test_main_window_builds_with_all_sections():
 
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
-    assert sidebar.count() == 13
+    assert sidebar.count() == 15
     assert [sidebar.item(i).text() for i in range(sidebar.count())] == [
+        "🆕  Criar PDF",
         "📄  Mesclar",
         "✂️  Dividir",
         "🔃  Páginas",
@@ -37,8 +38,9 @@ def test_main_window_builds_with_all_sections():
         "📷  Extrair imagens",
         "📐  Cortar/Redimensionar",
         "🔖  Marcadores",
+        "🧾  Campos de formulário",
     ]
-    assert window.stack.count() == 13
+    assert window.stack.count() == 15
 
     window.close()
 

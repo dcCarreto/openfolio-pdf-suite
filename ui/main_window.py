@@ -14,9 +14,11 @@ from ui.icon import build_app_icon
 from ui.pages.bookmarks_page import BookmarksPage
 from ui.pages.compress_page import CompressPage
 from ui.pages.convert_page import ConvertPage
+from ui.pages.create_page import CreatePage
 from ui.pages.crop_page import CropPage
 from ui.pages.extract_images_page import ExtractImagesPage
 from ui.pages.extract_text_page import ExtractTextPage
+from ui.pages.form_fields_page import FormFieldsPage
 from ui.pages.merge_page import MergePage
 from ui.pages.metadata_page import MetadataPage
 from ui.pages.page_numbers_page import PageNumbersPage
@@ -30,6 +32,7 @@ from ui.widgets.page_container import PageContainer
 APP_VERSION = "0.1.0"
 
 _SECTIONS = [
+    ("🆕", "Criar PDF", "Crie um novo PDF em branco, com uma ou mais páginas.", CreatePage),
     ("📄", "Mesclar", "Combine vários PDFs em um único arquivo, na ordem que você escolher.", MergePage),
     ("✂️", "Dividir", "Separe um PDF em vários arquivos menores.", SplitPage),
     ("🔃", "Páginas", "Rotacione, reordene ou remova páginas de um PDF.", PagesPage),
@@ -43,6 +46,12 @@ _SECTIONS = [
     ("📷", "Extrair imagens", "Extraia as imagens embutidas nas páginas de um PDF.", ExtractImagesPage),
     ("📐", "Cortar/Redimensionar", "Corte margens ou redimensione as páginas de um PDF.", CropPage),
     ("🔖", "Marcadores", "Monte um sumário de navegação (marcadores) para um PDF.", BookmarksPage),
+    (
+        "🧾",
+        "Campos de formulário",
+        "Adicione campos de formulário interativos (texto ou caixa de seleção) a um PDF.",
+        FormFieldsPage,
+    ),
 ]
 
 
