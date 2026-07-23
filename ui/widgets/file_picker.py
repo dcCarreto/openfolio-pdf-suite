@@ -1,5 +1,6 @@
 """Widget reutilizável de seleção de arquivo ou diretório."""
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLineEdit, QPushButton, QWidget
 
 _PLACEHOLDERS = {
@@ -17,6 +18,8 @@ _TOOLTIPS = {
 
 class FilePicker(QWidget):
     """Linha com campo de caminho somente-leitura e botão de busca."""
+
+    path_changed = Signal(str)
 
     def __init__(self, mode: str = "open", file_filter: str = "PDF (*.pdf)", parent=None):
         super().__init__(parent)
@@ -49,6 +52,7 @@ class FilePicker(QWidget):
         if path:
             self._path = path
             self.path_edit.setText(path)
+            self.path_changed.emit(path)
 
     def path(self) -> str:
         return self._path

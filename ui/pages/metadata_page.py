@@ -13,6 +13,7 @@ class MetadataPage(QWidget):
         super().__init__(parent)
 
         self.input_picker = FilePicker(mode="open")
+        self.input_picker.path_changed.connect(self._load)
         load_button = QPushButton("Carregar metadados")
         load_button.clicked.connect(self._load)
 
