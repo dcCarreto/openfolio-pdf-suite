@@ -21,12 +21,16 @@ class FileListEditor(QWidget):
         self.list_widget = QListWidget()
 
         add_button = QPushButton("Adicionar...")
+        add_button.setToolTip("Adicionar arquivos à lista")
         add_button.clicked.connect(self._add)
         remove_button = QPushButton("Remover selecionado")
+        remove_button.setToolTip("Remover o item selecionado da lista")
         remove_button.clicked.connect(self._remove_selected)
         up_button = QPushButton("Subir")
+        up_button.setToolTip("Mover o item selecionado para cima")
         up_button.clicked.connect(lambda: self._move_selected(-1))
         down_button = QPushButton("Descer")
+        down_button.setToolTip("Mover o item selecionado para baixo")
         down_button.clicked.connect(lambda: self._move_selected(1))
 
         buttons_layout = QHBoxLayout()

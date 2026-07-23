@@ -2,6 +2,18 @@
 
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLineEdit, QPushButton, QWidget
 
+_PLACEHOLDERS = {
+    "open": "Nenhum arquivo selecionado",
+    "save": "Nenhum destino selecionado",
+    "directory": "Nenhuma pasta selecionada",
+}
+
+_TOOLTIPS = {
+    "open": "Escolher arquivo",
+    "save": "Escolher onde salvar",
+    "directory": "Escolher pasta",
+}
+
 
 class FilePicker(QWidget):
     """Linha com campo de caminho somente-leitura e botão de busca."""
@@ -16,7 +28,9 @@ class FilePicker(QWidget):
 
         self.path_edit = QLineEdit()
         self.path_edit.setReadOnly(True)
+        self.path_edit.setPlaceholderText(_PLACEHOLDERS[mode])
         browse_button = QPushButton("Procurar...")
+        browse_button.setToolTip(_TOOLTIPS[mode])
         browse_button.clicked.connect(self._browse)
 
         layout = QHBoxLayout(self)

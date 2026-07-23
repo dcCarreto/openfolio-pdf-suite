@@ -171,6 +171,87 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
 QMessageBox {{
     background-color: {_PANEL};
 }}
+
+QLabel#pageTitle {{
+    font-size: 17pt;
+    font-weight: 600;
+}}
+
+QLabel#pageSubtitle {{
+    font-size: 10pt;
+    color: {_TEXT_MUTED};
+}}
+
+QListWidget#sidebar {{
+    background-color: {_PANEL};
+    border: none;
+    border-right: 1px solid {_BORDER};
+    border-radius: 0;
+    padding: 8px 0;
+    font-size: 11pt;
+}}
+
+QListWidget#sidebar::item {{
+    padding: 10px 18px;
+    border-radius: 0;
+    margin: 0;
+    border-left: 3px solid transparent;
+}}
+
+QListWidget#sidebar::item:selected {{
+    background-color: {_ELEVATED};
+    color: {_TEXT};
+    border-left: 3px solid {_ACCENT};
+}}
+
+QListWidget#sidebar::item:hover:!selected {{
+    background-color: rgba(255, 255, 255, 12);
+}}
+
+QMenuBar {{
+    background-color: {_PANEL};
+    border-bottom: 1px solid {_BORDER};
+    padding: 2px 4px;
+}}
+
+QMenuBar::item {{
+    padding: 4px 10px;
+    background: transparent;
+    border-radius: 4px;
+}}
+
+QMenuBar::item:selected {{
+    background-color: {_ELEVATED};
+}}
+
+QMenu {{
+    background-color: {_PANEL};
+    border: 1px solid {_BORDER};
+    border-radius: 6px;
+    padding: 4px;
+}}
+
+QMenu::item {{
+    padding: 6px 24px;
+    border-radius: 4px;
+}}
+
+QMenu::item:selected {{
+    background-color: {_ACCENT};
+    color: white;
+}}
+
+QMenu::separator {{
+    height: 1px;
+    background: {_BORDER};
+    margin: 4px 0;
+}}
+
+QStatusBar {{
+    background-color: {_PANEL};
+    border-top: 1px solid {_BORDER};
+    color: {_TEXT_MUTED};
+}}
 """
 
 
