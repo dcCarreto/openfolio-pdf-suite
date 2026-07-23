@@ -22,3 +22,4 @@ class PageContainer(QWidget):
         layout.addWidget(subtitle_label)
         layout.addSpacing(12)
         layout.addWidget(content)
+        layout.addStretch()
