@@ -13,14 +13,20 @@ def _app() -> QApplication:
     return QApplication.instance() or QApplication([])
 
 
-def test_main_window_builds_with_three_tabs():
+def test_main_window_builds_with_all_tabs():
     _app()
     window = MainWindow()
 
     assert window.windowTitle() == "OpenFolio PDF Suite"
     tabs = window.centralWidget()
     assert isinstance(tabs, QTabWidget)
-    assert tabs.count() == 3
-    assert [tabs.tabText(i) for i in range(tabs.count())] == ["Mesclar", "Dividir", "Páginas"]
+    assert tabs.count() == 5
+    assert [tabs.tabText(i) for i in range(tabs.count())] == [
+        "Mesclar",
+        "Dividir",
+        "Páginas",
+        "Comprimir",
+        "Converter",
+    ]
 
     window.close()

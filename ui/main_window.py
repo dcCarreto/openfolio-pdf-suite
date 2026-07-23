@@ -2,6 +2,8 @@
 
 from PySide6.QtWidgets import QMainWindow, QTabWidget
 
+from ui.pages.compress_page import CompressPage
+from ui.pages.convert_page import ConvertPage
 from ui.pages.merge_page import MergePage
 from ui.pages.pages_page import PagesPage
 from ui.pages.split_page import SplitPage
@@ -20,6 +22,8 @@ class MainWindow(QMainWindow):
         tabs.addTab(MergePage(), "Mesclar")
         tabs.addTab(SplitPage(), "Dividir")
         tabs.addTab(PagesPage(), "Páginas")
+        tabs.addTab(CompressPage(), "Comprimir")
+        tabs.addTab(ConvertPage(), "Converter")
         self.setCentralWidget(tabs)
 
         apply_dark_titlebar(self)
