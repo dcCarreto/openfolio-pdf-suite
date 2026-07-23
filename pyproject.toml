@@ -4,7 +4,13 @@ version = "0.1.0"
 description = "Suite completa e open source de manipulação de PDF, 100% local, sem paywall."
 requires-python = ">=3.10"
 license = { text = "MIT" }
-dependencies = []
+dependencies = ["pypdf>=5.0"]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[tool.setuptools]
+packages = ["core", "ui"]
 
 [build-system]
 requires = ["setuptools>=68"]
