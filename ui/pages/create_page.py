@@ -1,6 +1,7 @@
 """Aba de criação de novos PDFs em branco."""
 
 from PySide6.QtWidgets import (
+    QComboBox,
     QDoubleSpinBox,
     QHBoxLayout,
     QLabel,
@@ -13,6 +14,13 @@ from PySide6.QtWidgets import (
 
 from core.create import CreateBlankPDF
 from ui.widgets.file_picker import FilePicker
+
+_PAGE_SIZES = {
+    "A4": (595, 842),
+    "Carta (Letter)": (612, 792),
+    "Ofício (Legal)": (612, 1008),
+}
+_CUSTOM_LABEL = "Personalizado"
 
 
 class CreatePage(QWidget):
@@ -27,16 +35,21 @@ class CreatePage(QWidget):
         self.page_count_spin.setRange(1, 999)
         self.page_count_spin.setValue(1)
 
+        self.size_combo = QComboBox()
+        self.size_combo.addItems([*_PAGE_SIZES.keys(), _CUSTOM_LABEL])
+        self.size_combo.currentTextChanged.connect(self._on_size_changed)
+
         self.width_spin = QDoubleSpinBox()
         self.width_spin.setRange(1, 20000)
-        self.width_spin.setValue(595)
         self.height_spin = QDoubleSpinBox()
         self.height_spin.setRange(1, 20000)
-        self.height_spin.setValue(842)
+        self._on_size_changed(self.size_combo.currentText())
 
         options_layout = QHBoxLayout()
         options_layout.addWidget(QLabel("Páginas:"))
         options_layout.addWidget(self.page_count_spin)
+        options_layout.addWidget(QLabel("Tamanho:"))
+        options_layout.addWidget(self.size_combo)
         options_layout.addWidget(QLabel("Largura:"))
         options_layout.addWidget(self.width_spin)
         options_layout.addWidget(QLabel("Altura:"))
@@ -50,6 +63,15 @@ class CreatePage(QWidget):
         layout.addWidget(self.output_picker)
         layout.addLayout(options_layout)
         layout.addWidget(create_button)
+
+    def _on_size_changed(self, label: str):
+        is_custom = label == _CUSTOM_LABEL
+        self.width_spin.setEnabled(is_custom)
+        self.height_spin.setEnabled(is_custom)
+        if not is_custom:
+            width, height = _PAGE_SIZES[label]
+            self.width_spin.setValue(width)
+            self.height_spin.setValue(height)
 
     def _create(self):
         output_path = self.output_picker.path()

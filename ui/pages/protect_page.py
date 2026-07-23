@@ -54,12 +54,21 @@ class ProtectPage(QWidget):
         layout.addWidget(output_picker)
         layout.addWidget(QLabel("Senha:"))
         layout.addWidget(password_edit)
+
+        if kind == "Proteger":
+            confirm_password_edit = QLineEdit()
+            confirm_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+            confirm_password_edit.setPlaceholderText("Confirmar senha")
+            layout.addWidget(QLabel("Confirmar senha:"))
+            layout.addWidget(confirm_password_edit)
+
         layout.addWidget(apply_button)
 
         if kind == "Proteger":
             self.protect_input_picker = input_picker
             self.protect_output_picker = output_picker
             self.protect_password_edit = password_edit
+            self.protect_confirm_password_edit = confirm_password_edit
             apply_button.clicked.connect(self._protect)
         else:
             self.unlock_input_picker = input_picker
@@ -85,6 +94,9 @@ class ProtectPage(QWidget):
             return
         if not password:
             QMessageBox.warning(self, "Proteger", "Digite uma senha.")
+            return
+        if password != self.protect_confirm_password_edit.text():
+            QMessageBox.warning(self, "Proteger", "As senhas não coincidem.")
             return
 
         try:
