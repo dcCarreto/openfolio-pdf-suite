@@ -12,8 +12,8 @@ class CompressPDF(PDFOperation):
         reader = PdfReader(input_path)
         writer = PdfWriter()
         for page in reader.pages:
-            page.compress_content_streams()
-            writer.add_page(page)
+            added_page = writer.add_page(page)
+            added_page.compress_content_streams()
 
         writer.compress_identical_objects(remove_duplicates=True, remove_unreferenced=True)
 
