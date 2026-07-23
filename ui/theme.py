@@ -1,7 +1,9 @@
 """Tema visual único: modo escuro, limpo, inspirado no macOS."""
 
+import sys
+
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 _BG = "#1e1e1e"
 _PANEL = "#2c2c2e"
@@ -199,3 +201,24 @@ def apply_theme(app: QApplication) -> None:
     app.setStyle("Fusion")
     app.setPalette(_dark_palette())
     app.setStyleSheet(_STYLESHEET)
+
+
+def apply_dark_titlebar(window: QWidget) -> None:
+    """No Windows, escurece a barra de título nativa (o DWM não segue a paleta do Qt)."""
+    if sys.platform != "win32":
+        return
+
+    app = QApplication.instance()
+    if app is not None and app.platformName() == "offscreen":
+        return
+
+    import ctypes
+
+    hwnd = int(window.winId())
+    value = ctypes.c_int(1)
+    for attribute in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE varia por build do Windows
+        result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)
+        )
+        if result == 0:
+            break

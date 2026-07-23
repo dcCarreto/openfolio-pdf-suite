@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QMainWindow, QTabWidget
 from ui.pages.merge_page import MergePage
 from ui.pages.pages_page import PagesPage
 from ui.pages.split_page import SplitPage
+from ui.theme import apply_dark_titlebar
 
 
 class MainWindow(QMainWindow):
@@ -20,3 +21,5 @@ class MainWindow(QMainWindow):
         tabs.addTab(SplitPage(), "Dividir")
         tabs.addTab(PagesPage(), "Páginas")
         self.setCentralWidget(tabs)
+
+        apply_dark_titlebar(self)
