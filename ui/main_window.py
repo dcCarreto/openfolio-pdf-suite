@@ -2,20 +2,24 @@
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QWidget,
 )
 
 from ui import i18n
+from ui.document_session import DocumentSession
 from ui.flags import build_br_flag_icon, build_us_flag_icon
 from ui.i18n import tr
 from ui.icon import build_app_icon
+from ui.viewer.pdf_viewer import PdfViewer
 from ui.sidebar_icons import (
     build_bookmarks_icon,
     build_compress_icon,
@@ -156,7 +160,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("OpenFolio PDF Suite")
         self.setWindowIcon(build_app_icon())
-        self.resize(900, 580)
+        self.resize(1440, 820)
+
+        # A sessão precisa sobreviver à reconstrução da UI ao trocar de idioma,
+        # por isso vive no __init__ e não em _build_ui().
+        self.session = DocumentSession()
 
         i18n.language_changed.changed.connect(self._on_language_changed)
 
@@ -175,17 +183,28 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(name)
             item.setIcon(build_icon())
             self.sidebar.addItem(item)
-            self.stack.addWidget(PageContainer(name, subtitle, page_class()))
+
+            panel = PageContainer(name, subtitle, page_class(self.session))
+            scroll_area = QScrollArea()
+            scroll_area.setObjectName("toolPanelScroll")
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setWidget(panel)
+            self.stack.addWidget(scroll_area)
 
         self.sidebar.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.sidebar.setCurrentRow(0)
+
+        self.viewer = PdfViewer(self.session)
+
+        self.stack.setFixedWidth(480)
 
         central = QWidget()
         layout = QHBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.sidebar)
-        layout.addWidget(self.stack, 1)
+        layout.addWidget(self.viewer, 1)
+        layout.addWidget(self.stack)
         self.setCentralWidget(central)
 
         self._build_menu_bar()
@@ -196,6 +215,10 @@ class MainWindow(QMainWindow):
         menu_bar.clear()
 
         file_menu = menu_bar.addMenu(tr("Arquivo"))
+        open_action = file_menu.addAction(tr("Abrir PDF..."))
+        open_action.setShortcut("Ctrl+O")
+        open_action.triggered.connect(self._open_pdf)
+        file_menu.addSeparator()
         quit_action = file_menu.addAction(tr("Sair"))
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
@@ -258,6 +281,11 @@ class MainWindow(QMainWindow):
             self.sidebar.setCurrentRow(current_row)
 
         apply_dark_titlebar(self)
+
+    def _open_pdf(self):
+        path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), "", "PDF (*.pdf)")
+        if path:
+            self.session.open(path)
 
     def _show_about(self):
         QMessageBox.about(

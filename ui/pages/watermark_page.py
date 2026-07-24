@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
-    QHBoxLayout,
+    QFormLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -14,16 +14,18 @@ from PySide6.QtWidgets import (
 
 from core.watermark import AddWatermark
 from ui.i18n import tr
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 
 class WatermarkPage(QWidget):
     """Permite adicionar uma marca d'água de texto sobre as páginas de um PDF."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
 
-        self.input_picker = FilePicker(mode="open")
+        self.source_bar = DocumentSourceBar(session)
         self.output_picker = FilePicker(mode="save")
 
         self.text_edit = QLineEdit()
@@ -42,20 +44,17 @@ class WatermarkPage(QWidget):
         self.rotation_spin.setRange(0, 359)
         self.rotation_spin.setValue(45)
 
-        options_layout = QHBoxLayout()
-        options_layout.addWidget(QLabel(tr("Opacidade:")))
-        options_layout.addWidget(self.opacity_spin)
-        options_layout.addWidget(QLabel(tr("Tamanho da fonte:")))
-        options_layout.addWidget(self.font_size_spin)
-        options_layout.addWidget(QLabel(tr("Rotação:")))
-        options_layout.addWidget(self.rotation_spin)
+        options_layout = QFormLayout()
+        options_layout.addRow(tr("Opacidade:"), self.opacity_spin)
+        options_layout.addRow(tr("Tamanho da fonte:"), self.font_size_spin)
+        options_layout.addRow(tr("Rotação:"), self.rotation_spin)
 
         apply_button = QPushButton(tr("Aplicar marca d'água"))
         apply_button.clicked.connect(self._apply)
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(self.input_picker)
+        layout.addWidget(self.source_bar)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
         layout.addWidget(QLabel(tr("Texto:")))
@@ -64,12 +63,12 @@ class WatermarkPage(QWidget):
         layout.addWidget(apply_button)
 
     def _apply(self):
-        input_path = self.input_picker.path()
+        input_path = self.session.path()
         output_path = self.output_picker.path()
         text = self.text_edit.text().strip()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Marca d'água"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Marca d'água"), tr("Abra um PDF para começar."))
             return
         if not output_path:
             QMessageBox.warning(self, tr("Marca d'água"), tr("Escolha o arquivo de saída."))
@@ -95,4 +94,5 @@ class WatermarkPage(QWidget):
             )
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Marca d'água"), tr("Marca d'água aplicada com sucesso."))

@@ -11,8 +11,9 @@ from ui.widgets.file_picker import FilePicker
 class MergePage(QWidget):
     """Permite escolher vários PDFs, reordená-los e mesclá-los em um único arquivo."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
 
         self.file_list_editor = FileListEditor(
             dialog_caption=tr("Selecionar PDFs"), file_filter="PDF (*.pdf)"
@@ -46,4 +47,5 @@ class MergePage(QWidget):
             QMessageBox.critical(self, tr("Mesclar"), tr("Falha ao mesclar: {error}").format(error=exc))
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Mesclar"), tr("PDFs mesclados com sucesso."))

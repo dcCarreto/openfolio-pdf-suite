@@ -4,16 +4,18 @@ from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWi
 
 from core.extract_images import ExtractImages
 from ui.i18n import tr
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 
 class ExtractImagesPage(QWidget):
     """Permite extrair as imagens embutidas nas páginas de um PDF."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
 
-        self.input_picker = FilePicker(mode="open")
+        self.source_bar = DocumentSourceBar(session)
         self.output_picker = FilePicker(mode="directory")
 
         extract_button = QPushButton(tr("Extrair imagens"))
@@ -21,17 +23,17 @@ class ExtractImagesPage(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(self.input_picker)
+        layout.addWidget(self.source_bar)
         layout.addWidget(QLabel(tr("Pasta de saída:")))
         layout.addWidget(self.output_picker)
         layout.addWidget(extract_button)
 
     def _extract(self):
-        input_path = self.input_picker.path()
+        input_path = self.session.path()
         output_dir = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Extrair imagens"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Extrair imagens"), tr("Abra um PDF para começar."))
             return
         if not output_dir:
             QMessageBox.warning(self, tr("Extrair imagens"), tr("Escolha a pasta de saída."))

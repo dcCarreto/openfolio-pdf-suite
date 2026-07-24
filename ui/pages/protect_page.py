@@ -13,14 +13,18 @@ from PySide6.QtWidgets import (
 
 from core.protect import ProtectPDF, UnlockPDF
 from ui.i18n import tr
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 
 class ProtectPage(QWidget):
     """Permite proteger um PDF com senha ou remover a senha de um PDF protegido."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
+
+        self.source_bar = DocumentSourceBar(session)
 
         self.mode_combo = QComboBox()
         self.mode_combo.addItems([tr("Proteger com senha"), tr("Remover senha")])
@@ -31,6 +35,8 @@ class ProtectPage(QWidget):
         self.stack.addWidget(self._build_panel("Remover"))
 
         layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
+        layout.addWidget(self.source_bar)
         layout.addWidget(QLabel(tr("Operação:")))
         layout.addWidget(self.mode_combo)
         layout.addWidget(self.stack)
@@ -40,7 +46,6 @@ class ProtectPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        input_picker = FilePicker(mode="open")
         output_picker = FilePicker(mode="save")
         password_edit = QLineEdit()
         password_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -49,8 +54,6 @@ class ProtectPage(QWidget):
         button_label = "Proteger" if kind == "Proteger" else "Remover senha"
         apply_button = QPushButton(tr(button_label))
 
-        layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(input_picker)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(output_picker)
         layout.addWidget(QLabel(tr("Senha:")))
@@ -66,13 +69,11 @@ class ProtectPage(QWidget):
         layout.addWidget(apply_button)
 
         if kind == "Proteger":
-            self.protect_input_picker = input_picker
             self.protect_output_picker = output_picker
             self.protect_password_edit = password_edit
             self.protect_confirm_password_edit = confirm_password_edit
             apply_button.clicked.connect(self._protect)
         else:
-            self.unlock_input_picker = input_picker
             self.unlock_output_picker = output_picker
             self.unlock_password_edit = password_edit
             apply_button.clicked.connect(self._unlock)
@@ -83,12 +84,12 @@ class ProtectPage(QWidget):
         self.stack.setCurrentIndex(index)
 
     def _protect(self):
-        input_path = self.protect_input_picker.path()
+        input_path = self.session.path()
         output_path = self.protect_output_picker.path()
         password = self.protect_password_edit.text()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Proteger"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Proteger"), tr("Abra um PDF para começar."))
             return
         if not output_path:
             QMessageBox.warning(self, tr("Proteger"), tr("Escolha o arquivo de saída."))
@@ -108,15 +109,16 @@ class ProtectPage(QWidget):
             )
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Proteger"), tr("PDF protegido com sucesso."))
 
     def _unlock(self):
-        input_path = self.unlock_input_picker.path()
+        input_path = self.session.path()
         output_path = self.unlock_output_picker.path()
         password = self.unlock_password_edit.text()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Remover senha"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Remover senha"), tr("Abra um PDF para começar."))
             return
         if not output_path:
             QMessageBox.warning(self, tr("Remover senha"), tr("Escolha o arquivo de saída."))
@@ -133,4 +135,5 @@ class ProtectPage(QWidget):
             )
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Remover senha"), tr("Senha removida com sucesso."))

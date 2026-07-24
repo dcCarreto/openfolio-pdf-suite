@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from core.pages import RemovePages, ReorderPages, RotatePages
 from ui.i18n import tr
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 _OPERATIONS = ["Rotacionar", "Reordenar", "Remover"]
@@ -29,10 +30,11 @@ def _parse_page_list(text: str) -> list[int]:
 class PagesPage(QWidget):
     """Permite rotacionar, reordenar ou remover páginas de um PDF."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
 
-        self.input_picker = FilePicker(mode="open")
+        self.source_bar = DocumentSourceBar(session)
         self.output_picker = FilePicker(mode="save")
 
         self.operation_combo = QComboBox()
@@ -64,7 +66,7 @@ class PagesPage(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(self.input_picker)
+        layout.addWidget(self.source_bar)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
         layout.addWidget(QLabel(tr("Operação:")))
@@ -94,11 +96,11 @@ class PagesPage(QWidget):
         self.params_stack.setCurrentIndex(index)
 
     def _apply(self):
-        input_path = self.input_picker.path()
+        input_path = self.session.path()
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Páginas"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Páginas"), tr("Abra um PDF para começar."))
             return
         if not output_path:
             QMessageBox.warning(self, tr("Páginas"), tr("Escolha o arquivo de saída."))
@@ -146,4 +148,5 @@ class PagesPage(QWidget):
             QMessageBox.critical(self, tr("Páginas"), tr("Falha ao processar: {error}").format(error=exc))
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Páginas"), tr("Operação concluída com sucesso."))

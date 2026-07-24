@@ -16,16 +16,18 @@ from PySide6.QtWidgets import (
 
 from core.bookmarks import AddBookmarks
 from ui.i18n import tr
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 
 class BookmarksPage(QWidget):
     """Permite montar um sumário (marcadores de navegação) e aplicá-lo a um PDF."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
 
-        self.input_picker = FilePicker(mode="open")
+        self.source_bar = DocumentSourceBar(session)
         self.output_picker = FilePicker(mode="save")
 
         self.bookmark_list = QListWidget()
@@ -40,18 +42,21 @@ class BookmarksPage(QWidget):
         remove_button = QPushButton(tr("Remover selecionado"))
         remove_button.clicked.connect(self._remove_selected)
 
-        add_row = QHBoxLayout()
+        page_row = QHBoxLayout()
+        page_row.addWidget(QLabel(tr("Página (0 = primeira):")))
+        page_row.addWidget(self.page_spin)
+        page_row.addWidget(add_button)
+
+        add_row = QVBoxLayout()
         add_row.addWidget(self.title_edit)
-        add_row.addWidget(QLabel(tr("Página (0 = primeira):")))
-        add_row.addWidget(self.page_spin)
-        add_row.addWidget(add_button)
+        add_row.addLayout(page_row)
 
         save_button = QPushButton(tr("Salvar"))
         save_button.clicked.connect(self._save)
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(self.input_picker)
+        layout.addWidget(self.source_bar)
         layout.addWidget(QLabel(tr("Marcadores:")))
         layout.addWidget(self.bookmark_list)
         layout.addLayout(add_row)
@@ -77,11 +82,11 @@ class BookmarksPage(QWidget):
             self.bookmark_list.takeItem(self.bookmark_list.row(item))
 
     def _save(self):
-        input_path = self.input_picker.path()
+        input_path = self.session.path()
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Marcadores"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Marcadores"), tr("Abra um PDF para começar."))
             return
         if not output_path:
             QMessageBox.warning(self, tr("Marcadores"), tr("Escolha o arquivo de saída."))
@@ -103,4 +108,5 @@ class BookmarksPage(QWidget):
             )
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Marcadores"), tr("Marcadores salvos com sucesso."))

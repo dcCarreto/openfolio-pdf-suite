@@ -4,17 +4,21 @@ from PySide6.QtWidgets import QLabel, QLineEdit, QMessageBox, QPushButton, QVBox
 
 from core.metadata import ReadMetadata, SetMetadata
 from ui.i18n import tr
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 
 class MetadataPage(QWidget):
     """Permite ler e editar os metadados (título, autor, assunto, palavras-chave) de um PDF."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
 
-        self.input_picker = FilePicker(mode="open")
-        self.input_picker.path_changed.connect(self._load)
+        self.source_bar = DocumentSourceBar(session)
+        # Ao trocar de arquivo em qualquer parte do app, recarrega os campos aqui em
+        # silêncio (sem popups) — esta página pode não estar visível no momento.
+        self.session.path_changed.connect(self._auto_load)
         load_button = QPushButton(tr("Carregar metadados"))
         load_button.clicked.connect(self._load)
 
@@ -30,7 +34,7 @@ class MetadataPage(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(self.input_picker)
+        layout.addWidget(self.source_bar)
         layout.addWidget(load_button)
         layout.addWidget(QLabel(tr("Título:")))
         layout.addWidget(self.title_edit)
@@ -45,30 +49,39 @@ class MetadataPage(QWidget):
         layout.addWidget(save_button)
 
     def _load(self):
-        input_path = self.input_picker.path()
+        input_path = self.session.path()
         if not input_path:
-            QMessageBox.warning(self, tr("Metadados"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Metadados"), tr("Abra um PDF para começar."))
             return
 
         try:
-            metadata = ReadMetadata().run(input_path)
+            self._apply_metadata_fields(ReadMetadata().run(input_path))
         except Exception as exc:
             QMessageBox.critical(
                 self, tr("Metadados"), tr("Falha ao ler metadados: {error}").format(error=exc)
             )
-            return
 
+    def _auto_load(self):
+        input_path = self.session.path()
+        if not input_path:
+            return
+        try:
+            self._apply_metadata_fields(ReadMetadata().run(input_path))
+        except Exception:
+            pass
+
+    def _apply_metadata_fields(self, metadata):
         self.title_edit.setText(metadata["title"])
         self.author_edit.setText(metadata["author"])
         self.subject_edit.setText(metadata["subject"])
         self.keywords_edit.setText(metadata["keywords"])
 
     def _save(self):
-        input_path = self.input_picker.path()
+        input_path = self.session.path()
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Metadados"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Metadados"), tr("Abra um PDF para começar."))
             return
         if not output_path:
             QMessageBox.warning(self, tr("Metadados"), tr("Escolha o arquivo de saída."))
@@ -89,4 +102,5 @@ class MetadataPage(QWidget):
             )
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Metadados"), tr("Metadados salvos com sucesso."))

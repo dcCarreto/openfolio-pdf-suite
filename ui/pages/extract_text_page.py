@@ -4,16 +4,18 @@ from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWi
 
 from core.extract_text import ExtractText
 from ui.i18n import tr
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 
 class ExtractTextPage(QWidget):
     """Permite extrair todo o texto de um PDF para um arquivo .txt."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
 
-        self.input_picker = FilePicker(mode="open")
+        self.source_bar = DocumentSourceBar(session)
         self.output_picker = FilePicker(mode="save", file_filter="Texto (*.txt)")
 
         extract_button = QPushButton(tr("Extrair texto"))
@@ -21,17 +23,17 @@ class ExtractTextPage(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(self.input_picker)
+        layout.addWidget(self.source_bar)
         layout.addWidget(QLabel(tr("Arquivo de saída (.txt):")))
         layout.addWidget(self.output_picker)
         layout.addWidget(extract_button)
 
     def _extract(self):
-        input_path = self.input_picker.path()
+        input_path = self.session.path()
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Extrair texto"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Extrair texto"), tr("Abra um PDF para começar."))
             return
         if not output_path:
             QMessageBox.warning(self, tr("Extrair texto"), tr("Escolha o arquivo de saída."))

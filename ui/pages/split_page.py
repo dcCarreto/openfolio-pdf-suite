@@ -12,16 +12,18 @@ from PySide6.QtWidgets import (
 
 from core.split import SplitPDF
 from ui.i18n import tr
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 
 class SplitPage(QWidget):
     """Permite dividir um PDF em múltiplos arquivos, N páginas por vez."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
 
-        self.input_picker = FilePicker(mode="open")
+        self.source_bar = DocumentSourceBar(session)
         self.output_picker = FilePicker(mode="directory")
 
         self.pages_per_file_spin = QSpinBox()
@@ -37,18 +39,18 @@ class SplitPage(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(self.input_picker)
+        layout.addWidget(self.source_bar)
         layout.addWidget(QLabel(tr("Pasta de saída:")))
         layout.addWidget(self.output_picker)
         layout.addLayout(pages_layout)
         layout.addWidget(split_button)
 
     def _split(self):
-        input_path = self.input_picker.path()
+        input_path = self.session.path()
         output_dir = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Dividir"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Dividir"), tr("Abra um PDF para começar."))
             return
         if not output_dir:
             QMessageBox.warning(self, tr("Dividir"), tr("Escolha a pasta de saída."))

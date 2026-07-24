@@ -14,6 +14,7 @@ from core.convert import ConvertFromImages, ConvertToImages
 from core.office_convert import ConvertOfficeToPDF, find_libreoffice
 from core.xml_convert import ConvertXMLToPDF
 from ui.i18n import tr
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_list_editor import FileListEditor
 from ui.widgets.file_picker import FilePicker
 
@@ -21,8 +22,9 @@ from ui.widgets.file_picker import FilePicker
 class ConvertPage(QWidget):
     """Permite converter entre PDF e imagens, documentos do Office e PDF, e XML e PDF."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
 
         self.direction_combo = QComboBox()
         self.direction_combo.addItems(
@@ -51,13 +53,13 @@ class ConvertPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.pdf_input_picker = FilePicker(mode="open")
+        self.pdf_source_bar = DocumentSourceBar(self.session)
         self.images_output_picker = FilePicker(mode="directory")
         convert_button = QPushButton(tr("Converter"))
         convert_button.clicked.connect(self._convert_to_images)
 
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(self.pdf_input_picker)
+        layout.addWidget(self.pdf_source_bar)
         layout.addWidget(QLabel(tr("Pasta de saída das imagens:")))
         layout.addWidget(self.images_output_picker)
         layout.addWidget(convert_button)
@@ -135,11 +137,11 @@ class ConvertPage(QWidget):
         self.stack.setCurrentIndex(index)
 
     def _convert_to_images(self):
-        input_path = self.pdf_input_picker.path()
+        input_path = self.session.path()
         output_dir = self.images_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Converter"), tr("Escolha o arquivo PDF de entrada."))
+            QMessageBox.warning(self, tr("Converter"), tr("Abra um PDF para começar."))
             return
         if not output_dir:
             QMessageBox.warning(self, tr("Converter"), tr("Escolha a pasta de saída."))
@@ -178,6 +180,7 @@ class ConvertPage(QWidget):
             )
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Converter"), tr("PDF gerado com sucesso."))
 
     def _convert_office(self):
@@ -199,6 +202,7 @@ class ConvertPage(QWidget):
             )
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Converter"), tr("PDF gerado com sucesso."))
 
     def _convert_xml(self):
@@ -220,4 +224,5 @@ class ConvertPage(QWidget):
             )
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Converter"), tr("PDF gerado com sucesso."))

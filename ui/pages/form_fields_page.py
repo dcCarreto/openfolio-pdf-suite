@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
-    QHBoxLayout,
+    QFormLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from core.form_fields import AddFormField
 from ui.i18n import tr
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 _FIELD_TYPE_LABELS = ["Texto", "Caixa de seleção"]
@@ -25,10 +26,11 @@ _FIELD_TYPE_VALUES = {"Texto": "text", "Caixa de seleção": "checkbox"}
 class FormFieldsPage(QWidget):
     """Permite adicionar campos de formulário interativos (texto ou caixa de seleção) a um PDF."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
 
-        self.input_picker = FilePicker(mode="open")
+        self.source_bar = DocumentSourceBar(session)
         self.output_picker = FilePicker(mode="save")
 
         self.name_edit = QLineEdit()
@@ -51,28 +53,24 @@ class FormFieldsPage(QWidget):
         self.height_spin.setRange(1, 2000)
         self.height_spin.setValue(20)
 
-        self.checked_box = QCheckBox(tr("Marcado (apenas para caixa de seleção)"))
+        self.checked_box = QCheckBox(tr("Marcado"))
+        self.checked_box.setToolTip(tr("Aplica-se apenas ao tipo caixa de seleção"))
 
-        position_layout = QHBoxLayout()
-        position_layout.addWidget(QLabel(tr("Página (0 = primeira):")))
-        position_layout.addWidget(self.page_spin)
-        position_layout.addWidget(QLabel("X:"))
-        position_layout.addWidget(self.x_spin)
-        position_layout.addWidget(QLabel("Y:"))
-        position_layout.addWidget(self.y_spin)
+        position_layout = QFormLayout()
+        position_layout.addRow(tr("Página (0 = primeira):"), self.page_spin)
+        position_layout.addRow("X:", self.x_spin)
+        position_layout.addRow("Y:", self.y_spin)
 
-        size_layout = QHBoxLayout()
-        size_layout.addWidget(QLabel(tr("Largura:")))
-        size_layout.addWidget(self.width_spin)
-        size_layout.addWidget(QLabel(tr("Altura:")))
-        size_layout.addWidget(self.height_spin)
+        size_layout = QFormLayout()
+        size_layout.addRow(tr("Largura:"), self.width_spin)
+        size_layout.addRow(tr("Altura:"), self.height_spin)
 
         add_button = QPushButton(tr("Adicionar campo"))
         add_button.clicked.connect(self._add_field)
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(self.input_picker)
+        layout.addWidget(self.source_bar)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
         layout.addWidget(QLabel(tr("Nome do campo:")))
@@ -85,12 +83,12 @@ class FormFieldsPage(QWidget):
         layout.addWidget(add_button)
 
     def _add_field(self):
-        input_path = self.input_picker.path()
+        input_path = self.session.path()
         output_path = self.output_picker.path()
         field_name = self.name_edit.text().strip()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Campo de formulário"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Campo de formulário"), tr("Abra um PDF para começar."))
             return
         if not output_path:
             QMessageBox.warning(self, tr("Campo de formulário"), tr("Escolha o arquivo de saída."))
@@ -124,4 +122,5 @@ class FormFieldsPage(QWidget):
             )
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Campo de formulário"), tr("Campo adicionado com sucesso."))

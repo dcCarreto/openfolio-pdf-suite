@@ -3,7 +3,7 @@
 from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
-    QHBoxLayout,
+    QFormLayout,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -23,8 +23,9 @@ _SIZE_LABELS = [*PAGE_SIZES.keys(), CUSTOM_SIZE_LABEL]
 class CreatePage(QWidget):
     """Permite criar um novo PDF em branco, com uma ou mais páginas."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
 
         self.output_picker = FilePicker(mode="save")
 
@@ -42,15 +43,11 @@ class CreatePage(QWidget):
         self.height_spin.setRange(1, 20000)
         self._on_size_changed(self.size_combo.currentIndex())
 
-        options_layout = QHBoxLayout()
-        options_layout.addWidget(QLabel(tr("Páginas:")))
-        options_layout.addWidget(self.page_count_spin)
-        options_layout.addWidget(QLabel(tr("Tamanho:")))
-        options_layout.addWidget(self.size_combo)
-        options_layout.addWidget(QLabel(tr("Largura:")))
-        options_layout.addWidget(self.width_spin)
-        options_layout.addWidget(QLabel(tr("Altura:")))
-        options_layout.addWidget(self.height_spin)
+        options_layout = QFormLayout()
+        options_layout.addRow(tr("Páginas:"), self.page_count_spin)
+        options_layout.addRow(tr("Tamanho:"), self.size_combo)
+        options_layout.addRow(tr("Largura:"), self.width_spin)
+        options_layout.addRow(tr("Altura:"), self.height_spin)
 
         create_button = QPushButton(tr("Criar PDF"))
         create_button.clicked.connect(self._create)
@@ -91,4 +88,5 @@ class CreatePage(QWidget):
             )
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Criar PDF"), tr("PDF criado com sucesso."))

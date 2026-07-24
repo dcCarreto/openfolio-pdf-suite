@@ -35,16 +35,19 @@ class FileListEditor(QWidget):
         down_button.setToolTip(tr("Mover o item selecionado para baixo"))
         down_button.clicked.connect(lambda: self._move_selected(1))
 
-        buttons_layout = QHBoxLayout()
-        buttons_layout.addWidget(add_button)
-        buttons_layout.addWidget(remove_button)
-        buttons_layout.addWidget(up_button)
-        buttons_layout.addWidget(down_button)
+        buttons_row_1 = QHBoxLayout()
+        buttons_row_1.addWidget(add_button)
+        buttons_row_1.addWidget(remove_button)
+
+        buttons_row_2 = QHBoxLayout()
+        buttons_row_2.addWidget(up_button)
+        buttons_row_2.addWidget(down_button)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.list_widget)
-        layout.addLayout(buttons_layout)
+        layout.addLayout(buttons_row_1)
+        layout.addLayout(buttons_row_2)
 
     def _add(self):
         paths, _ = QFileDialog.getOpenFileNames(self, self._dialog_caption, "", self._file_filter)

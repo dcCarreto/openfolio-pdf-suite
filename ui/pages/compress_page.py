@@ -6,16 +6,18 @@ from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWi
 
 from core.compress import CompressPDF
 from ui.i18n import tr
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 
 class CompressPage(QWidget):
     """Permite reduzir o tamanho de um arquivo PDF."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
 
-        self.input_picker = FilePicker(mode="open")
+        self.source_bar = DocumentSourceBar(session)
         self.output_picker = FilePicker(mode="save")
 
         compress_button = QPushButton(tr("Comprimir"))
@@ -23,17 +25,17 @@ class CompressPage(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(self.input_picker)
+        layout.addWidget(self.source_bar)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
         layout.addWidget(compress_button)
 
     def _compress(self):
-        input_path = self.input_picker.path()
+        input_path = self.session.path()
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Comprimir"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Comprimir"), tr("Abra um PDF para começar."))
             return
         if not output_path:
             QMessageBox.warning(self, tr("Comprimir"), tr("Escolha o arquivo de saída."))
@@ -50,6 +52,7 @@ class CompressPage(QWidget):
         original_size = Path(input_path).stat().st_size
         compressed_size = Path(output_path).stat().st_size
         reduction = 100 * (1 - compressed_size / original_size) if original_size else 0
+        self.session.open(output_path)
         QMessageBox.information(
             self,
             tr("Comprimir"),

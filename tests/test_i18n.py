@@ -65,12 +65,16 @@ def test_set_language_emits_signal_only_on_change():
 def test_main_window_rebuilds_sidebar_on_language_change():
     _app()
     window = MainWindow()
+    original_session = window.session
 
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar.item(1).text() == "Mesclar"
 
     sidebar.setCurrentRow(4)  # Comprimir
     i18n.set_language(i18n.EN_US)
+
+    # A sessão do documento aberto precisa sobreviver ao rebuild da UI.
+    assert window.session is original_session
 
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar.item(1).text() == "Merge"

@@ -6,30 +6,11 @@ veio exatamente disso). Desenhar cada ícone como um glifo vetorial simples
 garante o mesmo visual em qualquer sistema operacional.
 """
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtCore import QPointF, QRectF
+from PySide6.QtGui import QColor, QIcon, QPolygonF
 
-_COLOR = "#e8e8ed"
-_SIZE = 22
-
-
-def _build(draw) -> QIcon:
-    pixmap = QPixmap(_SIZE, _SIZE)
-    pixmap.fill(Qt.GlobalColor.transparent)
-
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(QColor(_COLOR))
-    pen.setWidthF(1.6)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-    painter.setPen(pen)
-    painter.setBrush(Qt.BrushStyle.NoBrush)
-
-    draw(painter)
-
-    painter.end()
-    return QIcon(pixmap)
+from ui.icon_utils import DEFAULT_COLOR as _COLOR
+from ui.icon_utils import build_icon as _build
 
 
 def build_create_icon() -> QIcon:

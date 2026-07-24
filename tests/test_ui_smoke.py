@@ -7,6 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QListWidget
 
 from ui.main_window import MainWindow
+from ui.viewer.pdf_viewer import PdfViewer
 
 
 def _app() -> QApplication:
@@ -42,6 +43,10 @@ def test_main_window_builds_with_all_sections():
     ]
     assert all(not sidebar.item(i).icon().isNull() for i in range(sidebar.count()))
     assert window.stack.count() == 15
+
+    assert isinstance(window.viewer, PdfViewer)
+    assert window.viewer.content_stack.currentIndex() == 0  # nenhum PDF aberto ainda
+    assert window.session.path() is None
 
     window.close()
 

@@ -3,7 +3,7 @@
 from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
-    QHBoxLayout,
+    QFormLayout,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from core.crop import CropPages, ScalePages
 from ui.i18n import tr
 from ui.page_sizes import CUSTOM_SIZE_LABEL, PAGE_SIZES
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 _SIZE_LABELS = [*PAGE_SIZES.keys(), CUSTOM_SIZE_LABEL]
@@ -23,8 +24,11 @@ _SIZE_LABELS = [*PAGE_SIZES.keys(), CUSTOM_SIZE_LABEL]
 class CropPage(QWidget):
     """Permite cortar margens ou redimensionar as páginas de um PDF."""
 
-    def __init__(self, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.session = session
+
+        self.source_bar = DocumentSourceBar(session)
 
         self.mode_combo = QComboBox()
         self.mode_combo.addItems([tr("Cortar margens"), tr("Redimensionar")])
@@ -35,6 +39,8 @@ class CropPage(QWidget):
         self.stack.addWidget(self._build_scale_panel())
 
         layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
+        layout.addWidget(self.source_bar)
         layout.addWidget(QLabel(tr("Operação:")))
         layout.addWidget(self.mode_combo)
         layout.addWidget(self.stack)
@@ -44,7 +50,6 @@ class CropPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.crop_input_picker = FilePicker(mode="open")
         self.crop_output_picker = FilePicker(mode="save")
 
         self.left_spin = self._margin_spin()
@@ -52,21 +57,15 @@ class CropPage(QWidget):
         self.right_spin = self._margin_spin()
         self.top_spin = self._margin_spin()
 
-        margins_layout = QHBoxLayout()
-        margins_layout.addWidget(QLabel(tr("Esquerda:")))
-        margins_layout.addWidget(self.left_spin)
-        margins_layout.addWidget(QLabel(tr("Baixo:")))
-        margins_layout.addWidget(self.bottom_spin)
-        margins_layout.addWidget(QLabel(tr("Direita:")))
-        margins_layout.addWidget(self.right_spin)
-        margins_layout.addWidget(QLabel(tr("Topo:")))
-        margins_layout.addWidget(self.top_spin)
+        margins_layout = QFormLayout()
+        margins_layout.addRow(tr("Esquerda:"), self.left_spin)
+        margins_layout.addRow(tr("Baixo:"), self.bottom_spin)
+        margins_layout.addRow(tr("Direita:"), self.right_spin)
+        margins_layout.addRow(tr("Topo:"), self.top_spin)
 
         apply_button = QPushButton(tr("Cortar"))
         apply_button.clicked.connect(self._crop)
 
-        layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(self.crop_input_picker)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.crop_output_picker)
         layout.addWidget(QLabel(tr("Margens a cortar (pontos):")))
@@ -79,7 +78,6 @@ class CropPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.scale_input_picker = FilePicker(mode="open")
         self.scale_output_picker = FilePicker(mode="save")
 
         self.scale_size_combo = QComboBox()
@@ -92,19 +90,14 @@ class CropPage(QWidget):
         self.height_spin.setRange(1, 20000)
         self._on_scale_size_changed(self.scale_size_combo.currentIndex())
 
-        size_layout = QHBoxLayout()
-        size_layout.addWidget(QLabel(tr("Tamanho:")))
-        size_layout.addWidget(self.scale_size_combo)
-        size_layout.addWidget(QLabel(tr("Largura:")))
-        size_layout.addWidget(self.width_spin)
-        size_layout.addWidget(QLabel(tr("Altura:")))
-        size_layout.addWidget(self.height_spin)
+        size_layout = QFormLayout()
+        size_layout.addRow(tr("Tamanho:"), self.scale_size_combo)
+        size_layout.addRow(tr("Largura:"), self.width_spin)
+        size_layout.addRow(tr("Altura:"), self.height_spin)
 
         apply_button = QPushButton(tr("Redimensionar"))
         apply_button.clicked.connect(self._scale)
 
-        layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
-        layout.addWidget(self.scale_input_picker)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.scale_output_picker)
         layout.addWidget(QLabel(tr("Novo tamanho da página (pontos):")))
@@ -132,11 +125,11 @@ class CropPage(QWidget):
         self.stack.setCurrentIndex(index)
 
     def _crop(self):
-        input_path = self.crop_input_picker.path()
+        input_path = self.session.path()
         output_path = self.crop_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Cortar"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Cortar"), tr("Abra um PDF para começar."))
             return
         if not output_path:
             QMessageBox.warning(self, tr("Cortar"), tr("Escolha o arquivo de saída."))
@@ -157,14 +150,15 @@ class CropPage(QWidget):
             )
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Cortar"), tr("Páginas cortadas com sucesso."))
 
     def _scale(self):
-        input_path = self.scale_input_picker.path()
+        input_path = self.session.path()
         output_path = self.scale_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Redimensionar"), tr("Escolha o arquivo de entrada."))
+            QMessageBox.warning(self, tr("Redimensionar"), tr("Abra um PDF para começar."))
             return
         if not output_path:
             QMessageBox.warning(self, tr("Redimensionar"), tr("Escolha o arquivo de saída."))
@@ -185,4 +179,5 @@ class CropPage(QWidget):
             )
             return
 
+        self.session.open(output_path)
         QMessageBox.information(self, tr("Redimensionar"), tr("Páginas redimensionadas com sucesso."))
