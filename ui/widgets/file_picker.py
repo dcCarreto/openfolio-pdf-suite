@@ -3,6 +3,8 @@
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLineEdit, QPushButton, QWidget
 
+from ui.i18n import tr
+
 _PLACEHOLDERS = {
     "open": "Nenhum arquivo selecionado",
     "save": "Nenhum destino selecionado",
@@ -31,9 +33,9 @@ class FilePicker(QWidget):
 
         self.path_edit = QLineEdit()
         self.path_edit.setReadOnly(True)
-        self.path_edit.setPlaceholderText(_PLACEHOLDERS[mode])
-        browse_button = QPushButton("Procurar...")
-        browse_button.setToolTip(_TOOLTIPS[mode])
+        self.path_edit.setPlaceholderText(tr(_PLACEHOLDERS[mode]))
+        browse_button = QPushButton(tr("Procurar..."))
+        browse_button.setToolTip(tr(_TOOLTIPS[mode]))
         browse_button.clicked.connect(self._browse)
 
         layout = QHBoxLayout(self)
@@ -43,11 +45,13 @@ class FilePicker(QWidget):
 
     def _browse(self):
         if self._mode == "open":
-            path, _ = QFileDialog.getOpenFileName(self, "Selecionar arquivo", "", self._file_filter)
+            path, _ = QFileDialog.getOpenFileName(
+                self, tr("Selecionar arquivo"), "", self._file_filter
+            )
         elif self._mode == "save":
-            path, _ = QFileDialog.getSaveFileName(self, "Salvar como", "", self._file_filter)
+            path, _ = QFileDialog.getSaveFileName(self, tr("Salvar como"), "", self._file_filter)
         else:
-            path = QFileDialog.getExistingDirectory(self, "Selecionar pasta")
+            path = QFileDialog.getExistingDirectory(self, tr("Selecionar pasta"))
 
         if path:
             self._path = path

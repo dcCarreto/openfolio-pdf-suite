@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.bookmarks import AddBookmarks
+from ui.i18n import tr
 from ui.widgets.file_picker import FilePicker
 
 
@@ -30,43 +31,43 @@ class BookmarksPage(QWidget):
         self.bookmark_list = QListWidget()
 
         self.title_edit = QLineEdit()
-        self.title_edit.setPlaceholderText("Título do marcador")
+        self.title_edit.setPlaceholderText(tr("Título do marcador"))
         self.page_spin = QSpinBox()
         self.page_spin.setRange(0, 9999)
 
-        add_button = QPushButton("Adicionar")
+        add_button = QPushButton(tr("Adicionar"))
         add_button.clicked.connect(self._add_bookmark)
-        remove_button = QPushButton("Remover selecionado")
+        remove_button = QPushButton(tr("Remover selecionado"))
         remove_button.clicked.connect(self._remove_selected)
 
         add_row = QHBoxLayout()
         add_row.addWidget(self.title_edit)
-        add_row.addWidget(QLabel("Página (0 = primeira):"))
+        add_row.addWidget(QLabel(tr("Página (0 = primeira):")))
         add_row.addWidget(self.page_spin)
         add_row.addWidget(add_button)
 
-        save_button = QPushButton("Salvar")
+        save_button = QPushButton(tr("Salvar"))
         save_button.clicked.connect(self._save)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Arquivo PDF de entrada:"))
+        layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
         layout.addWidget(self.input_picker)
-        layout.addWidget(QLabel("Marcadores:"))
+        layout.addWidget(QLabel(tr("Marcadores:")))
         layout.addWidget(self.bookmark_list)
         layout.addLayout(add_row)
         layout.addWidget(remove_button)
-        layout.addWidget(QLabel("Arquivo de saída:"))
+        layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
         layout.addWidget(save_button)
 
     def _add_bookmark(self):
         title = self.title_edit.text().strip()
         if not title:
-            QMessageBox.warning(self, "Marcadores", "Digite um título para o marcador.")
+            QMessageBox.warning(self, tr("Marcadores"), tr("Digite um título para o marcador."))
             return
 
         page_number = self.page_spin.value()
-        item = QListWidgetItem(f"{title} — página {page_number}")
+        item = QListWidgetItem(tr("{title} — página {page}").format(title=title, page=page_number))
         item.setData(Qt.ItemDataRole.UserRole, (title, page_number))
         self.bookmark_list.addItem(item)
         self.title_edit.clear()
@@ -80,10 +81,10 @@ class BookmarksPage(QWidget):
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, "Marcadores", "Escolha o arquivo de entrada.")
+            QMessageBox.warning(self, tr("Marcadores"), tr("Escolha o arquivo de entrada."))
             return
         if not output_path:
-            QMessageBox.warning(self, "Marcadores", "Escolha o arquivo de saída.")
+            QMessageBox.warning(self, tr("Marcadores"), tr("Escolha o arquivo de saída."))
             return
 
         bookmarks = [
@@ -91,13 +92,15 @@ class BookmarksPage(QWidget):
             for i in range(self.bookmark_list.count())
         ]
         if not bookmarks:
-            QMessageBox.warning(self, "Marcadores", "Adicione pelo menos um marcador.")
+            QMessageBox.warning(self, tr("Marcadores"), tr("Adicione pelo menos um marcador."))
             return
 
         try:
             AddBookmarks().run(input_path, output_path, bookmarks=bookmarks)
         except Exception as exc:
-            QMessageBox.critical(self, "Marcadores", f"Falha ao salvar marcadores: {exc}")
+            QMessageBox.critical(
+                self, tr("Marcadores"), tr("Falha ao salvar marcadores: {error}").format(error=exc)
+            )
             return
 
-        QMessageBox.information(self, "Marcadores", "Marcadores salvos com sucesso.")
+        QMessageBox.information(self, tr("Marcadores"), tr("Marcadores salvos com sucesso."))

@@ -13,8 +13,11 @@ from PySide6.QtWidgets import (
 )
 
 from core.create import CreateBlankPDF
+from ui.i18n import tr
 from ui.page_sizes import CUSTOM_SIZE_LABEL, PAGE_SIZES
 from ui.widgets.file_picker import FilePicker
+
+_SIZE_LABELS = [*PAGE_SIZES.keys(), CUSTOM_SIZE_LABEL]
 
 
 class CreatePage(QWidget):
@@ -30,35 +33,36 @@ class CreatePage(QWidget):
         self.page_count_spin.setValue(1)
 
         self.size_combo = QComboBox()
-        self.size_combo.addItems([*PAGE_SIZES.keys(), CUSTOM_SIZE_LABEL])
-        self.size_combo.currentTextChanged.connect(self._on_size_changed)
+        self.size_combo.addItems([tr(label) for label in _SIZE_LABELS])
+        self.size_combo.currentIndexChanged.connect(self._on_size_changed)
 
         self.width_spin = QDoubleSpinBox()
         self.width_spin.setRange(1, 20000)
         self.height_spin = QDoubleSpinBox()
         self.height_spin.setRange(1, 20000)
-        self._on_size_changed(self.size_combo.currentText())
+        self._on_size_changed(self.size_combo.currentIndex())
 
         options_layout = QHBoxLayout()
-        options_layout.addWidget(QLabel("Páginas:"))
+        options_layout.addWidget(QLabel(tr("Páginas:")))
         options_layout.addWidget(self.page_count_spin)
-        options_layout.addWidget(QLabel("Tamanho:"))
+        options_layout.addWidget(QLabel(tr("Tamanho:")))
         options_layout.addWidget(self.size_combo)
-        options_layout.addWidget(QLabel("Largura:"))
+        options_layout.addWidget(QLabel(tr("Largura:")))
         options_layout.addWidget(self.width_spin)
-        options_layout.addWidget(QLabel("Altura:"))
+        options_layout.addWidget(QLabel(tr("Altura:")))
         options_layout.addWidget(self.height_spin)
 
-        create_button = QPushButton("Criar PDF")
+        create_button = QPushButton(tr("Criar PDF"))
         create_button.clicked.connect(self._create)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Arquivo de saída:"))
+        layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
         layout.addLayout(options_layout)
         layout.addWidget(create_button)
 
-    def _on_size_changed(self, label: str):
+    def _on_size_changed(self, index: int):
+        label = _SIZE_LABELS[index]
         is_custom = label == CUSTOM_SIZE_LABEL
         self.width_spin.setEnabled(is_custom)
         self.height_spin.setEnabled(is_custom)
@@ -71,7 +75,7 @@ class CreatePage(QWidget):
         output_path = self.output_picker.path()
 
         if not output_path:
-            QMessageBox.warning(self, "Criar PDF", "Escolha o arquivo de saída.")
+            QMessageBox.warning(self, tr("Criar PDF"), tr("Escolha o arquivo de saída."))
             return
 
         try:
@@ -82,7 +86,9 @@ class CreatePage(QWidget):
                 height=self.height_spin.value(),
             )
         except Exception as exc:
-            QMessageBox.critical(self, "Criar PDF", f"Falha ao criar PDF: {exc}")
+            QMessageBox.critical(
+                self, tr("Criar PDF"), tr("Falha ao criar PDF: {error}").format(error=exc)
+            )
             return
 
-        QMessageBox.information(self, "Criar PDF", "PDF criado com sucesso.")
+        QMessageBox.information(self, tr("Criar PDF"), tr("PDF criado com sucesso."))

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.protect import ProtectPDF, UnlockPDF
+from ui.i18n import tr
 from ui.widgets.file_picker import FilePicker
 
 
@@ -22,7 +23,7 @@ class ProtectPage(QWidget):
         super().__init__(parent)
 
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Proteger com senha", "Remover senha"])
+        self.mode_combo.addItems([tr("Proteger com senha"), tr("Remover senha")])
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
 
         self.stack = QStackedWidget()
@@ -30,7 +31,7 @@ class ProtectPage(QWidget):
         self.stack.addWidget(self._build_panel("Remover"))
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Operação:"))
+        layout.addWidget(QLabel(tr("Operação:")))
         layout.addWidget(self.mode_combo)
         layout.addWidget(self.stack)
 
@@ -43,23 +44,23 @@ class ProtectPage(QWidget):
         output_picker = FilePicker(mode="save")
         password_edit = QLineEdit()
         password_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        password_edit.setPlaceholderText("Senha")
+        password_edit.setPlaceholderText(tr("Senha"))
 
         button_label = "Proteger" if kind == "Proteger" else "Remover senha"
-        apply_button = QPushButton(button_label)
+        apply_button = QPushButton(tr(button_label))
 
-        layout.addWidget(QLabel("Arquivo PDF de entrada:"))
+        layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
         layout.addWidget(input_picker)
-        layout.addWidget(QLabel("Arquivo de saída:"))
+        layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(output_picker)
-        layout.addWidget(QLabel("Senha:"))
+        layout.addWidget(QLabel(tr("Senha:")))
         layout.addWidget(password_edit)
 
         if kind == "Proteger":
             confirm_password_edit = QLineEdit()
             confirm_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
-            confirm_password_edit.setPlaceholderText("Confirmar senha")
-            layout.addWidget(QLabel("Confirmar senha:"))
+            confirm_password_edit.setPlaceholderText(tr("Confirmar senha"))
+            layout.addWidget(QLabel(tr("Confirmar senha:")))
             layout.addWidget(confirm_password_edit)
 
         layout.addWidget(apply_button)
@@ -87,25 +88,27 @@ class ProtectPage(QWidget):
         password = self.protect_password_edit.text()
 
         if not input_path:
-            QMessageBox.warning(self, "Proteger", "Escolha o arquivo de entrada.")
+            QMessageBox.warning(self, tr("Proteger"), tr("Escolha o arquivo de entrada."))
             return
         if not output_path:
-            QMessageBox.warning(self, "Proteger", "Escolha o arquivo de saída.")
+            QMessageBox.warning(self, tr("Proteger"), tr("Escolha o arquivo de saída."))
             return
         if not password:
-            QMessageBox.warning(self, "Proteger", "Digite uma senha.")
+            QMessageBox.warning(self, tr("Proteger"), tr("Digite uma senha."))
             return
         if password != self.protect_confirm_password_edit.text():
-            QMessageBox.warning(self, "Proteger", "As senhas não coincidem.")
+            QMessageBox.warning(self, tr("Proteger"), tr("As senhas não coincidem."))
             return
 
         try:
             ProtectPDF().run(input_path, output_path, password=password)
         except Exception as exc:
-            QMessageBox.critical(self, "Proteger", f"Falha ao proteger o PDF: {exc}")
+            QMessageBox.critical(
+                self, tr("Proteger"), tr("Falha ao proteger o PDF: {error}").format(error=exc)
+            )
             return
 
-        QMessageBox.information(self, "Proteger", "PDF protegido com sucesso.")
+        QMessageBox.information(self, tr("Proteger"), tr("PDF protegido com sucesso."))
 
     def _unlock(self):
         input_path = self.unlock_input_picker.path()
@@ -113,19 +116,21 @@ class ProtectPage(QWidget):
         password = self.unlock_password_edit.text()
 
         if not input_path:
-            QMessageBox.warning(self, "Remover senha", "Escolha o arquivo de entrada.")
+            QMessageBox.warning(self, tr("Remover senha"), tr("Escolha o arquivo de entrada."))
             return
         if not output_path:
-            QMessageBox.warning(self, "Remover senha", "Escolha o arquivo de saída.")
+            QMessageBox.warning(self, tr("Remover senha"), tr("Escolha o arquivo de saída."))
             return
         if not password:
-            QMessageBox.warning(self, "Remover senha", "Digite a senha atual do PDF.")
+            QMessageBox.warning(self, tr("Remover senha"), tr("Digite a senha atual do PDF."))
             return
 
         try:
             UnlockPDF().run(input_path, output_path, password=password)
         except Exception as exc:
-            QMessageBox.critical(self, "Remover senha", f"Falha ao remover a senha: {exc}")
+            QMessageBox.critical(
+                self, tr("Remover senha"), tr("Falha ao remover a senha: {error}").format(error=exc)
+            )
             return
 
-        QMessageBox.information(self, "Remover senha", "Senha removida com sucesso.")
+        QMessageBox.information(self, tr("Remover senha"), tr("Senha removida com sucesso."))

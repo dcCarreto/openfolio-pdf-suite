@@ -3,6 +3,7 @@
 from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from core.extract_text import ExtractText
+from ui.i18n import tr
 from ui.widgets.file_picker import FilePicker
 
 
@@ -15,13 +16,13 @@ class ExtractTextPage(QWidget):
         self.input_picker = FilePicker(mode="open")
         self.output_picker = FilePicker(mode="save", file_filter="Texto (*.txt)")
 
-        extract_button = QPushButton("Extrair texto")
+        extract_button = QPushButton(tr("Extrair texto"))
         extract_button.clicked.connect(self._extract)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Arquivo PDF de entrada:"))
+        layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
         layout.addWidget(self.input_picker)
-        layout.addWidget(QLabel("Arquivo de saída (.txt):"))
+        layout.addWidget(QLabel(tr("Arquivo de saída (.txt):")))
         layout.addWidget(self.output_picker)
         layout.addWidget(extract_button)
 
@@ -30,16 +31,18 @@ class ExtractTextPage(QWidget):
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, "Extrair texto", "Escolha o arquivo de entrada.")
+            QMessageBox.warning(self, tr("Extrair texto"), tr("Escolha o arquivo de entrada."))
             return
         if not output_path:
-            QMessageBox.warning(self, "Extrair texto", "Escolha o arquivo de saída.")
+            QMessageBox.warning(self, tr("Extrair texto"), tr("Escolha o arquivo de saída."))
             return
 
         try:
             ExtractText().run(input_path, output_path)
         except Exception as exc:
-            QMessageBox.critical(self, "Extrair texto", f"Falha ao extrair texto: {exc}")
+            QMessageBox.critical(
+                self, tr("Extrair texto"), tr("Falha ao extrair texto: {error}").format(error=exc)
+            )
             return
 
-        QMessageBox.information(self, "Extrair texto", "Texto extraído com sucesso.")
+        QMessageBox.information(self, tr("Extrair texto"), tr("Texto extraído com sucesso."))

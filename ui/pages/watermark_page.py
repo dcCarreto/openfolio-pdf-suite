@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.watermark import AddWatermark
+from ui.i18n import tr
 from ui.widgets.file_picker import FilePicker
 
 
@@ -26,7 +27,7 @@ class WatermarkPage(QWidget):
         self.output_picker = FilePicker(mode="save")
 
         self.text_edit = QLineEdit()
-        self.text_edit.setPlaceholderText("Texto da marca d'água, ex: CONFIDENCIAL")
+        self.text_edit.setPlaceholderText(tr("Texto da marca d'água, ex: CONFIDENCIAL"))
 
         self.opacity_spin = QDoubleSpinBox()
         self.opacity_spin.setRange(0.05, 1.0)
@@ -42,22 +43,22 @@ class WatermarkPage(QWidget):
         self.rotation_spin.setValue(45)
 
         options_layout = QHBoxLayout()
-        options_layout.addWidget(QLabel("Opacidade:"))
+        options_layout.addWidget(QLabel(tr("Opacidade:")))
         options_layout.addWidget(self.opacity_spin)
-        options_layout.addWidget(QLabel("Tamanho da fonte:"))
+        options_layout.addWidget(QLabel(tr("Tamanho da fonte:")))
         options_layout.addWidget(self.font_size_spin)
-        options_layout.addWidget(QLabel("Rotação:"))
+        options_layout.addWidget(QLabel(tr("Rotação:")))
         options_layout.addWidget(self.rotation_spin)
 
-        apply_button = QPushButton("Aplicar marca d'água")
+        apply_button = QPushButton(tr("Aplicar marca d'água"))
         apply_button.clicked.connect(self._apply)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Arquivo PDF de entrada:"))
+        layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
         layout.addWidget(self.input_picker)
-        layout.addWidget(QLabel("Arquivo de saída:"))
+        layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
-        layout.addWidget(QLabel("Texto:"))
+        layout.addWidget(QLabel(tr("Texto:")))
         layout.addWidget(self.text_edit)
         layout.addLayout(options_layout)
         layout.addWidget(apply_button)
@@ -68,13 +69,13 @@ class WatermarkPage(QWidget):
         text = self.text_edit.text().strip()
 
         if not input_path:
-            QMessageBox.warning(self, "Marca d'água", "Escolha o arquivo de entrada.")
+            QMessageBox.warning(self, tr("Marca d'água"), tr("Escolha o arquivo de entrada."))
             return
         if not output_path:
-            QMessageBox.warning(self, "Marca d'água", "Escolha o arquivo de saída.")
+            QMessageBox.warning(self, tr("Marca d'água"), tr("Escolha o arquivo de saída."))
             return
         if not text:
-            QMessageBox.warning(self, "Marca d'água", "Digite o texto da marca d'água.")
+            QMessageBox.warning(self, tr("Marca d'água"), tr("Digite o texto da marca d'água."))
             return
 
         try:
@@ -87,7 +88,11 @@ class WatermarkPage(QWidget):
                 rotation=self.rotation_spin.value(),
             )
         except Exception as exc:
-            QMessageBox.critical(self, "Marca d'água", f"Falha ao aplicar marca d'água: {exc}")
+            QMessageBox.critical(
+                self,
+                tr("Marca d'água"),
+                tr("Falha ao aplicar marca d'água: {error}").format(error=exc),
+            )
             return
 
-        QMessageBox.information(self, "Marca d'água", "Marca d'água aplicada com sucesso.")
+        QMessageBox.information(self, tr("Marca d'água"), tr("Marca d'água aplicada com sucesso."))

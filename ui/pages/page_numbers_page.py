@@ -3,6 +3,7 @@
 from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
 from core.page_numbers import AddPageNumbers
+from ui.i18n import tr
 from ui.widgets.file_picker import FilePicker
 
 
@@ -19,15 +20,15 @@ class PageNumbersPage(QWidget):
         self.start_at_spin.setRange(0, 9999)
         self.start_at_spin.setValue(1)
 
-        apply_button = QPushButton("Adicionar numeração")
+        apply_button = QPushButton(tr("Adicionar numeração"))
         apply_button.clicked.connect(self._apply)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Arquivo PDF de entrada:"))
+        layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
         layout.addWidget(self.input_picker)
-        layout.addWidget(QLabel("Arquivo de saída:"))
+        layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
-        layout.addWidget(QLabel("Começar em:"))
+        layout.addWidget(QLabel(tr("Começar em:")))
         layout.addWidget(self.start_at_spin)
         layout.addWidget(apply_button)
 
@@ -36,16 +37,22 @@ class PageNumbersPage(QWidget):
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, "Numeração de páginas", "Escolha o arquivo de entrada.")
+            QMessageBox.warning(self, tr("Numeração de páginas"), tr("Escolha o arquivo de entrada."))
             return
         if not output_path:
-            QMessageBox.warning(self, "Numeração de páginas", "Escolha o arquivo de saída.")
+            QMessageBox.warning(self, tr("Numeração de páginas"), tr("Escolha o arquivo de saída."))
             return
 
         try:
             AddPageNumbers().run(input_path, output_path, start_at=self.start_at_spin.value())
         except Exception as exc:
-            QMessageBox.critical(self, "Numeração de páginas", f"Falha ao numerar páginas: {exc}")
+            QMessageBox.critical(
+                self,
+                tr("Numeração de páginas"),
+                tr("Falha ao numerar páginas: {error}").format(error=exc),
+            )
             return
 
-        QMessageBox.information(self, "Numeração de páginas", "Numeração adicionada com sucesso.")
+        QMessageBox.information(
+            self, tr("Numeração de páginas"), tr("Numeração adicionada com sucesso.")
+        )

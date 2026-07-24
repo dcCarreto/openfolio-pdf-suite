@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.split import SplitPDF
+from ui.i18n import tr
 from ui.widgets.file_picker import FilePicker
 
 
@@ -27,17 +28,17 @@ class SplitPage(QWidget):
         self.pages_per_file_spin.setMinimum(1)
         self.pages_per_file_spin.setValue(1)
 
-        split_button = QPushButton("Dividir")
+        split_button = QPushButton(tr("Dividir"))
         split_button.clicked.connect(self._split)
 
         pages_layout = QHBoxLayout()
-        pages_layout.addWidget(QLabel("Páginas por arquivo:"))
+        pages_layout.addWidget(QLabel(tr("Páginas por arquivo:")))
         pages_layout.addWidget(self.pages_per_file_spin)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Arquivo PDF de entrada:"))
+        layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
         layout.addWidget(self.input_picker)
-        layout.addWidget(QLabel("Pasta de saída:"))
+        layout.addWidget(QLabel(tr("Pasta de saída:")))
         layout.addWidget(self.output_picker)
         layout.addLayout(pages_layout)
         layout.addWidget(split_button)
@@ -47,10 +48,10 @@ class SplitPage(QWidget):
         output_dir = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, "Dividir", "Escolha o arquivo de entrada.")
+            QMessageBox.warning(self, tr("Dividir"), tr("Escolha o arquivo de entrada."))
             return
         if not output_dir:
-            QMessageBox.warning(self, "Dividir", "Escolha a pasta de saída.")
+            QMessageBox.warning(self, tr("Dividir"), tr("Escolha a pasta de saída."))
             return
 
         try:
@@ -58,7 +59,11 @@ class SplitPage(QWidget):
                 input_path, output_dir, pages_per_file=self.pages_per_file_spin.value()
             )
         except Exception as exc:
-            QMessageBox.critical(self, "Dividir", f"Falha ao dividir: {exc}")
+            QMessageBox.critical(self, tr("Dividir"), tr("Falha ao dividir: {error}").format(error=exc))
             return
 
-        QMessageBox.information(self, "Dividir", f"PDF dividido em {len(output_paths)} arquivo(s).")
+        QMessageBox.information(
+            self,
+            tr("Dividir"),
+            tr("PDF dividido em {count} arquivo(s).").format(count=len(output_paths)),
+        )
