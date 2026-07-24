@@ -181,6 +181,7 @@ class MainWindow(QMainWindow):
         icon_size = QSize(26, 17)
 
         us_button = QPushButton()
+        us_button.setObjectName("flagButton")
         us_button.setIcon(build_us_flag_icon())
         us_button.setIconSize(icon_size)
         us_button.setToolTip("English")
@@ -189,6 +190,7 @@ class MainWindow(QMainWindow):
         us_button.clicked.connect(lambda: i18n.set_language(i18n.EN_US))
 
         br_button = QPushButton()
+        br_button.setObjectName("flagButton")
         br_button.setIcon(build_br_flag_icon())
         br_button.setIconSize(icon_size)
         br_button.setToolTip("Português (Brasil)")

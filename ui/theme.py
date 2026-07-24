@@ -78,6 +78,21 @@ QPushButton:disabled {{
     border-color: {_BORDER};
 }}
 
+QPushButton#flagButton {{
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 0;
+}}
+
+QPushButton#flagButton:hover {{
+    background-color: rgba(255, 255, 255, 20);
+}}
+
+QPushButton#flagButton:pressed {{
+    background-color: rgba(255, 255, 255, 35);
+}}
+
 QLineEdit, QComboBox, QSpinBox {{
     background-color: {_PANEL};
     border: 1px solid {_BORDER};
