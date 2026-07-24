@@ -65,7 +65,7 @@ from ui.pages.watermark_page import WatermarkPage
 from ui.theme import apply_dark_titlebar
 from ui.widgets.page_container import PageContainer
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 
 
 def _build_sections():

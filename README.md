@@ -25,8 +25,9 @@
   - [OCR (texto pesquisável)](#ocr-texto-pesquisável)
   - [Redigir e sanitizar](#redigir-e-sanitizar)
   - [Assinatura digital](#assinatura-digital)
+- [Baixar (instalador pronto)](#baixar-instalador-pronto)
 - [Requisitos](#requisitos)
-- [Como instalar](#como-instalar)
+- [Como instalar a partir do código-fonte](#como-instalar-a-partir-do-código-fonte)
 - [Como rodar](#como-rodar)
 - [Tecnologias utilizadas](#tecnologias-utilizadas)
 - [Estrutura do projeto](#estrutura-do-projeto)
@@ -187,6 +188,24 @@ signatário, a data da assinatura e que o documento continua íntegro:
   <img src="assets/screenshots/11-assinatura-digital.png" alt="Aba Assinatura digital mostrando o selo visível no documento e o resultado da verificação" width="900">
 </p>
 
+## Baixar (instalador pronto)
+
+Quem só quer usar o programa não precisa de Python nem de `pip`: a
+[página de Releases](https://github.com/dcCarreto/openfolio-pdf-suite/releases) tem um
+instalador pronto para cada sistema, gerado automaticamente a partir do código deste
+repositório:
+
+| Sistema | Arquivo |
+| --- | --- |
+| Windows | `OpenFolioPDFSuite-Setup-<versão>.exe` — instalador com atalho no menu Iniciar e desinstalador |
+| Linux | `OpenFolioPDFSuite-<versão>-x86_64.AppImage` (roda em qualquer distro, sem instalar nada) ou `openfolio-pdf-suite_<versão>_amd64.deb` (Debian/Ubuntu) |
+| macOS | `OpenFolioPDFSuite-<versão>.dmg` |
+
+Nenhum dos três é assinado digitalmente (isso exige certificados pagos que este projeto
+não tem). O Windows pode avisar via SmartScreen e o macOS via Gatekeeper no primeiro
+uso — isso é esperado numa release beta open source, veja como prosseguir em
+[RELEASING.md](RELEASING.md#sobre-a-assinatura-de-código).
+
 ## Requisitos
 
 - Python 3.10 ou superior
@@ -198,7 +217,7 @@ signatário, a data da assinatura e que o documento continua íntegro:
   ferramenta de OCR) — a aplicação detecta a instalação automaticamente e lista os idiomas de
   reconhecimento disponíveis.
 
-## Como instalar
+## Como instalar a partir do código-fonte
 
 ```bash
 git clone https://github.com/dcCarreto/openfolio-pdf-suite.git
@@ -262,6 +281,9 @@ ui/              Interface gráfica (PySide6)
 tests/           Testes pytest (um arquivo por operação de core, + teste de fumaça da UI)
 
 assets/          Ícone/logo da aplicação e screenshots usados neste README
+
+packaging/       Empacotamento para Windows (Inno Setup), Linux (AppImage/.deb) e
+                 macOS (.dmg) — veja RELEASING.md para o processo completo de release
 ```
 
 Cada operação em `core/` é independente da UI: pode ser usada diretamente em um script Python,

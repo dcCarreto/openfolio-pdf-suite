@@ -1,6 +1,6 @@
 [project]
 name = "openfolio-pdf-suite"
-version = "0.1.0"
+version = "0.2.0"
 description = "Suite completa e open source de manipulação de PDF, 100% local, sem paywall."
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
+build = ["pyinstaller>=6.0"]
 
 [tool.setuptools]
 packages = ["core", "ui"]

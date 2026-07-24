@@ -1,0 +1,116 @@
+name: Release
+
+# Builda o instalador de Windows, Linux (AppImage + .deb) e macOS (.dmg) e publica
+# tudo numa GitHub Release, disparado por uma tag de versao (ex.: v0.2.0-beta.1).
+#
+# Cada plataforma builda na sua propria VM nativa (windows-latest/ubuntu-latest/
+# macos-latest) porque PyInstaller empacota para o mesmo SO em que roda - nao ha
+# cross-compilation aqui.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - id: extract
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+  build-windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependencias
+        run: |
+          pip install -e ".[build]"
+      - name: Build PyInstaller
+        run: pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
+      - name: Instalar Inno Setup
+        run: choco install innosetup -y
+      - name: Compilar instalador
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=${{ needs.version.outputs.version }} packaging\windows\installer.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/installer/*.exe
+
+  build-linux:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependencias do sistema (necessarias so pra importar o PySide6)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0 libxkbcommon0 libxcb-cursor0 libgl1
+      - name: Instalar dependencias Python
+        run: |
+          pip install -e ".[build]"
+      - name: Build PyInstaller
+        run: pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
+      - name: Build AppImage
+        run: bash packaging/linux/build_appimage.sh "${{ needs.version.outputs.version }}"
+      - name: Build .deb
+        run: bash packaging/linux/build_deb.sh "${{ needs.version.outputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            dist/installer/*.AppImage
+            dist/installer/*.deb
+
+  build-macos:
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependencias
+        run: |
+          pip install -e ".[build]"
+      - name: Build PyInstaller
+        run: pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
+      - name: Build dmg
+        run: bash packaging/macos/build_dmg.sh "${{ needs.version.outputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/installer/*.dmg
+
+  release:
+    needs: [version, build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Publicar release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "OpenFolio PDF Suite ${{ needs.version.outputs.version }}"
+          prerelease: ${{ contains(needs.version.outputs.version, 'beta') }}
+          generate_release_notes: true
+          files: |
+            artifacts/windows-installer/*.exe
+            artifacts/linux-packages/*.AppImage
+            artifacts/linux-packages/*.deb
+            artifacts/macos-dmg/*.dmg

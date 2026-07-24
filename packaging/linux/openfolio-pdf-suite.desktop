@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OpenFolio PDF Suite
+GenericName=Editor de PDF
+Comment=Suite completa e open source de manipulação de PDF, 100% local
+Exec=openfolio-pdf-suite %U
+Icon=openfolio-pdf-suite
+Categories=Office;
+Terminal=false
+StartupWMClass=OpenFolioPDFSuite
