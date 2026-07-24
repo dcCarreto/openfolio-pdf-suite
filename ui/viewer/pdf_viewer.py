@@ -18,9 +18,11 @@ from PySide6.QtWidgets import (
 )
 
 from core.annotations import AnnotationSpec, spec_rect
+from core.redaction import RedactionRect
 from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
 from ui.i18n import tr
+from ui.redaction_state import RedactionState
 from ui.viewer.page_canvas import PageCanvas
 from ui.viewer.render import render_page
 from ui.viewer.search import DocumentSearch
@@ -50,10 +52,17 @@ _DRAWING_TOOLS = ("highlight", "underline", "strikeout", "note", "ink", "stamp")
 class PdfViewer(QWidget):
     """Mostra o PDF atualmente aberto na sessão compartilhada; não edita nada."""
 
-    def __init__(self, session: DocumentSession, annotation_state: AnnotationState, parent=None):
+    def __init__(
+        self,
+        session: DocumentSession,
+        annotation_state: AnnotationState,
+        redaction_state: RedactionState,
+        parent=None,
+    ):
         super().__init__(parent)
         self.session = session
         self.annotation_state = annotation_state
+        self.redaction_state = redaction_state
         self._document = None
         self._scale = _DEFAULT_SCALE
         self._continuous = False
@@ -69,16 +78,19 @@ class PdfViewer(QWidget):
         self._drag_start_pdf: tuple[float, float] | None = None
         self._ink_points_pdf: list[tuple[float, float]] = []
         self._ink_preview_base: QPixmap | None = None
+        self._redaction_drag_start_pdf: tuple[float, float] | None = None
 
         self._build_ui()
         QShortcut(QKeySequence("Ctrl+F"), self, activated=self._toggle_search)
 
         session.path_changed.connect(self._reload)
-        annotation_state.tool_changed.connect(self._on_annotation_tool_changed)
+        annotation_state.tool_changed.connect(self._on_markup_state_changed)
         annotation_state.pending_changed.connect(self._refresh_current_render)
+        redaction_state.active_changed.connect(self._on_markup_state_changed)
+        redaction_state.pending_changed.connect(self._refresh_current_render)
         if session.path():
             self._reload()
-        self._on_annotation_tool_changed()
+        self._on_markup_state_changed()
 
     # -- construção da UI -------------------------------------------------
 
@@ -255,6 +267,7 @@ class PdfViewer(QWidget):
         self._current_page = 0
         self.search_bar.hide()
         self.annotation_state.clear_pending()
+        self.redaction_state.clear_pending()
 
         self._set_document_controls_enabled(True)
         self.thumbnail_list.load_document(self._document)
@@ -315,6 +328,7 @@ class PdfViewer(QWidget):
         pixmap = render_page(self._document[index], self._scale)
         pixmap = self._with_highlight(pixmap, index)
         pixmap = self._with_pending_annotations(pixmap, index)
+        pixmap = self._with_pending_redactions(pixmap, index)
         self._page_labels[0].setPixmap(pixmap)
         self._page_labels[0].resize(pixmap.size())
         self.thumbnail_list.select_page(index)
@@ -324,6 +338,7 @@ class PdfViewer(QWidget):
         pixmap = render_page(self._document[index], self._scale)
         pixmap = self._with_highlight(pixmap, index)
         pixmap = self._with_pending_annotations(pixmap, index)
+        pixmap = self._with_pending_redactions(pixmap, index)
         label.setPixmap(pixmap)
         self._rendered_pages.add(index)
 
@@ -403,6 +418,24 @@ class PdfViewer(QWidget):
             painter.drawRect(rect)
             painter.setPen(color)
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, spec.text)
+
+    def _with_pending_redactions(self, pixmap: QPixmap, page_index: int) -> QPixmap:
+        rects = [r for r in self.redaction_state.pending() if r.page_index == page_index]
+        if not rects:
+            return pixmap
+
+        result = QPixmap(pixmap)
+        painter = QPainter(result)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 200))
+        for rect in rects:
+            x = rect.left * self._scale
+            width = (rect.right - rect.left) * self._scale
+            top_y = self._page_y_to_screen(page_index, rect.top)
+            height = (rect.top - rect.bottom) * self._scale
+            painter.drawRect(QRectF(x, top_y, width, height))
+        painter.end()
+        return result
 
     def _pdf_point_to_widget(self, page_index: int, x_pdf: float, y_pdf: float) -> QPointF:
         return QPointF(x_pdf * self._scale, self._page_y_to_screen(page_index, y_pdf))
@@ -565,9 +598,12 @@ class PdfViewer(QWidget):
 
     # -- anotações e marcação -------------------------------------------------
 
-    def _on_annotation_tool_changed(self):
+    def _on_markup_state_changed(self):
         tool = self.annotation_state.active_tool()
-        if self.annotation_state.is_page_active() and tool in _DRAWING_TOOLS and self._continuous:
+        drawing_active = (
+            self.annotation_state.is_page_active() and tool in _DRAWING_TOOLS
+        ) or self.redaction_state.is_page_active()
+        if drawing_active and self._continuous:
             self._set_continuous(False)
             if hasattr(self, "single_page_button"):
                 self.single_page_button.setChecked(True)
@@ -578,6 +614,9 @@ class PdfViewer(QWidget):
             return
         canvas = self._page_labels[0]
         if not isinstance(canvas, PageCanvas):
+            return
+        if self.redaction_state.is_page_active():
+            canvas.setCursor(Qt.CursorShape.CrossCursor)
             return
         if not self.annotation_state.is_page_active():
             canvas.setCursor(Qt.CursorShape.ArrowCursor)
@@ -595,6 +634,9 @@ class PdfViewer(QWidget):
         return (x / self._scale, page_height - y / self._scale)
 
     def _on_canvas_pressed(self, x: float, y: float):
+        if self.redaction_state.is_page_active():
+            self._redaction_drag_start_pdf = self._widget_point_to_pdf(self._current_page, x, y)
+            return
         if not self.annotation_state.is_page_active():
             return
         tool = self.annotation_state.active_tool()
@@ -639,6 +681,14 @@ class PdfViewer(QWidget):
         self._page_labels[0].setPixmap(preview)
 
     def _on_canvas_released(self, x: float, y: float):
+        if self.redaction_state.is_page_active():
+            if self._redaction_drag_start_pdf is not None:
+                page_index = self._current_page
+                end_pdf = self._widget_point_to_pdf(page_index, x, y)
+                self._finish_redaction_drag(page_index, self._redaction_drag_start_pdf, end_pdf)
+                self._redaction_drag_start_pdf = None
+            return
+
         tool = self.annotation_state.active_tool()
         page_index = self._current_page
         pdf_point = self._widget_point_to_pdf(page_index, x, y)
@@ -684,6 +734,16 @@ class PdfViewer(QWidget):
                 color=self.annotation_state.active_color(),
                 quads=quads,
             )
+        )
+
+    def _finish_redaction_drag(self, page_index: int, start_pdf, end_pdf):
+        (x1, y1), (x2, y2) = start_pdf, end_pdf
+        left, right = sorted((x1, x2))
+        bottom, top = sorted((y1, y2))
+        if right - left < 2 or top - bottom < 2:
+            return
+        self.redaction_state.add_pending(
+            RedactionRect(page_index=page_index, left=left, bottom=bottom, right=right, top=top)
         )
 
     def _prompt_note(self, page_index: int, pdf_point):

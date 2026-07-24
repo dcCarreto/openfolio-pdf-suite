@@ -6,12 +6,14 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pypdfium2 as pdfium
 import pytest
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QApplication
 from reportlab.pdfgen import canvas as rl_canvas
 
 from core.annotations import AddAnnotations, AnnotationSpec
 from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
+from ui.redaction_state import RedactionState
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.viewer.render import render_page
 from ui.viewer.search import DocumentSearch
@@ -38,14 +40,14 @@ def three_page_pdf(tmp_path):
 
 def test_viewer_starts_in_empty_state():
     _app()
-    viewer = PdfViewer(DocumentSession(), AnnotationState())
+    viewer = PdfViewer(DocumentSession(), AnnotationState(), RedactionState())
     assert viewer.content_stack.currentIndex() == 0
 
 
 def test_viewer_loads_document_and_thumbnails(three_page_pdf):
     _app()
     session = DocumentSession()
-    viewer = PdfViewer(session, AnnotationState())
+    viewer = PdfViewer(session, AnnotationState(), RedactionState())
 
     session.open(str(three_page_pdf))
 
@@ -56,7 +58,7 @@ def test_viewer_loads_document_and_thumbnails(three_page_pdf):
 def test_viewer_zoom_in_increases_scale(three_page_pdf):
     _app()
     session = DocumentSession()
-    viewer = PdfViewer(session, AnnotationState())
+    viewer = PdfViewer(session, AnnotationState(), RedactionState())
     session.open(str(three_page_pdf))
 
     initial_scale = viewer._scale
@@ -72,7 +74,7 @@ def test_viewer_loads_immediately_if_session_already_has_a_path(three_page_pdf):
 
     # Simula o rebuild da UI ao trocar de idioma: o PdfViewer é reconstruído
     # depois que a sessão já tinha um documento aberto.
-    viewer = PdfViewer(session, AnnotationState())
+    viewer = PdfViewer(session, AnnotationState(), RedactionState())
 
     assert viewer.content_stack.currentIndex() == 1
     assert viewer.thumbnail_list.count() == 3
@@ -106,7 +108,7 @@ def test_viewer_highlight_drag_creates_pending_annotation(tmp_path):
 
     session = DocumentSession()
     annotation_state = AnnotationState()
-    viewer = PdfViewer(session, annotation_state)
+    viewer = PdfViewer(session, annotation_state, RedactionState())
     session.open(str(path))
     annotation_state.set_page_active(True)
     annotation_state.set_tool("highlight")
@@ -138,7 +140,7 @@ def test_viewer_ignores_canvas_clicks_when_annotations_page_not_active(tmp_path)
 
     session = DocumentSession()
     annotation_state = AnnotationState()
-    viewer = PdfViewer(session, annotation_state)
+    viewer = PdfViewer(session, annotation_state, RedactionState())
     session.open(str(path))
     annotation_state.set_tool("highlight")
     # set_page_active nunca foi chamado com True: equivale a uma ferramenta de marcação
@@ -148,6 +150,64 @@ def test_viewer_ignores_canvas_clicks_when_annotations_page_not_active(tmp_path)
     viewer._on_canvas_released(50, 20)
 
     assert annotation_state.pending() == []
+
+
+def test_viewer_redaction_drag_creates_pending_rect(tmp_path):
+    _app()
+    path = tmp_path / "doc.pdf"
+    _make_pdf_with_text(path, ["conteúdo qualquer"])
+
+    session = DocumentSession()
+    redaction_state = RedactionState()
+    viewer = PdfViewer(session, AnnotationState(), redaction_state)
+    session.open(str(path))
+    redaction_state.set_page_active(True)
+
+    viewer._on_canvas_pressed(20, 20)
+    viewer._on_canvas_released(120, 80)
+
+    pending = redaction_state.pending()
+    assert len(pending) == 1
+    assert pending[0].page_index == 0
+    assert pending[0].right > pending[0].left
+    assert pending[0].top > pending[0].bottom
+
+
+def test_viewer_ignores_canvas_clicks_when_redaction_page_not_active(tmp_path):
+    _app()
+    path = tmp_path / "doc.pdf"
+    _make_pdf_with_text(path, ["conteúdo qualquer"])
+
+    session = DocumentSession()
+    redaction_state = RedactionState()
+    viewer = PdfViewer(session, AnnotationState(), redaction_state)
+    session.open(str(path))
+    # set_page_active nunca foi chamado com True: equivale a estar em outra aba da sidebar.
+
+    viewer._on_canvas_pressed(20, 20)
+    viewer._on_canvas_released(120, 80)
+
+    assert redaction_state.pending() == []
+
+
+def test_pending_redaction_changes_the_rendered_pixmap(tmp_path):
+    _app()
+    path = tmp_path / "doc.pdf"
+    _make_pdf_with_text(path, ["conteúdo qualquer"])
+
+    session = DocumentSession()
+    redaction_state = RedactionState()
+    viewer = PdfViewer(session, AnnotationState(), redaction_state)
+    session.open(str(path))
+
+    before = QPixmap(viewer._page_labels[0].pixmap())
+
+    redaction_state.set_page_active(True)
+    viewer._on_canvas_pressed(20, 20)
+    viewer._on_canvas_released(120, 80)
+
+    after = viewer._page_labels[0].pixmap()
+    assert before.toImage() != after.toImage()
 
 
 def test_saved_annotation_changes_the_rendered_pixmap(tmp_path):

@@ -20,6 +20,7 @@ from ui.document_session import DocumentSession
 from ui.flags import build_br_flag_icon, build_us_flag_icon
 from ui.i18n import tr
 from ui.icon import build_app_icon
+from ui.redaction_state import RedactionState
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.sidebar_icons import (
     build_annotations_icon,
@@ -37,6 +38,7 @@ from ui.sidebar_icons import (
     build_page_numbers_icon,
     build_pages_icon,
     build_protect_icon,
+    build_redaction_icon,
     build_split_icon,
     build_watermark_icon,
 )
@@ -55,6 +57,7 @@ from ui.pages.ocr_page import OCRPage
 from ui.pages.page_numbers_page import PageNumbersPage
 from ui.pages.pages_page import PagesPage
 from ui.pages.protect_page import ProtectPage
+from ui.pages.redaction_page import RedactionPage
 from ui.pages.split_page import SplitPage
 from ui.pages.watermark_page import WatermarkPage
 from ui.theme import apply_dark_titlebar
@@ -167,6 +170,12 @@ def _build_sections():
             tr("Reconheça o texto de PDFs escaneados e gere um PDF pesquisável."),
             OCRPage,
         ),
+        (
+            build_redaction_icon,
+            tr("Redigir/Sanitizar"),
+            tr("Apague definitivamente áreas de um PDF ou remova metadados, JavaScript e anexos."),
+            RedactionPage,
+        ),
     ]
 
 
@@ -179,10 +188,11 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(build_app_icon())
         self.resize(1440, 820)
 
-        # A sessão e o estado de anotações precisam sobreviver à reconstrução da UI ao
-        # trocar de idioma, por isso vivem no __init__ e não em _build_ui().
+        # A sessão e os estados de anotações/redação precisam sobreviver à reconstrução
+        # da UI ao trocar de idioma, por isso vivem no __init__ e não em _build_ui().
         self.session = DocumentSession()
         self.annotation_state = AnnotationState()
+        self.redaction_state = RedactionState()
 
         i18n.language_changed.changed.connect(self._on_language_changed)
 
@@ -197,6 +207,7 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         self._annotations_row = None
+        self._redaction_row = None
 
         for row, (build_icon, name, subtitle, page_class) in enumerate(_build_sections()):
             item = QListWidgetItem(name)
@@ -206,6 +217,9 @@ class MainWindow(QMainWindow):
             if page_class is AnnotationsPage:
                 self._annotations_row = row
                 content = page_class(self.session, self.annotation_state)
+            elif page_class is RedactionPage:
+                self._redaction_row = row
+                content = page_class(self.session, self.redaction_state)
             else:
                 content = page_class(self.session)
 
@@ -219,7 +233,7 @@ class MainWindow(QMainWindow):
         self.sidebar.currentRowChanged.connect(self._on_sidebar_row_changed)
         self.sidebar.setCurrentRow(0)
 
-        self.viewer = PdfViewer(self.session, self.annotation_state)
+        self.viewer = PdfViewer(self.session, self.annotation_state, self.redaction_state)
 
         self.stack.setFixedWidth(480)
 
@@ -311,8 +325,10 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(row)
         # Fora da aba de Anotações, cliques no visualizador não devem ser interpretados
         # como desenho de marcação (mas a ferramenta escolhida continua selecionada para
-        # quando o usuário voltar).
+        # quando o usuário voltar). Comparar cada estado com sua própria linha garante que
+        # Anotações e Redação nunca fiquem ativas ao mesmo tempo.
         self.annotation_state.set_page_active(row == self._annotations_row)
+        self.redaction_state.set_page_active(row == self._redaction_row)
 
     def _open_pdf(self):
         path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), "", "PDF (*.pdf)")

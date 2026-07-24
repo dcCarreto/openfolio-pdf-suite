@@ -195,6 +195,17 @@ def build_ocr_icon() -> QIcon:
     return _build(draw)
 
 
+def build_redaction_icon() -> QIcon:
+    def draw(p):
+        p.drawRoundedRect(QRectF(4, 3, 14, 16), 1.5, 1.5)
+        p.drawLine(QPointF(6.5, 7), QPointF(15.5, 7))
+        p.setBrush(QColor(_COLOR))
+        p.drawRect(QRectF(6.5, 10, 9, 3))
+        p.drawLine(QPointF(6.5, 16), QPointF(12, 16))
+
+    return _build(draw)
+
+
 def build_annotations_icon() -> QIcon:
     def draw(p):
         p.save()

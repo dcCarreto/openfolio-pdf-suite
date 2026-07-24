@@ -395,4 +395,34 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Francês": "French",
     "Alemão": "German",
     "Italiano": "Italian",
+    # Redaction/Sanitize: sidebar section
+    "Redigir/Sanitizar": "Redact/Sanitize",
+    "Apague definitivamente áreas de um PDF ou remova metadados, JavaScript e anexos.": (
+        "Permanently erase areas of a PDF, or remove metadata, JavaScript, and attachments."
+    ),
+    # Redaction/Sanitize: page UI
+    "Redigir": "Redact",
+    "Sanitizar": "Sanitize",
+    "Modo:": "Mode:",
+    "Arraste no visualizador para marcar as áreas a apagar. Cada página marcada "
+    "vira uma imagem achatada (perde a camada de texto pesquisável inteira, não "
+    "só a área marcada) — é assim que garantimos que nada fique recuperável.": (
+        "Drag over the viewer to mark the areas to erase. Each marked page "
+        "becomes a flattened image (it loses the entire searchable text layer, not "
+        "just the marked area) — that's how we guarantee nothing stays recoverable."
+    ),
+    "{count} área(s) marcada(s) para redação": "{count} area(s) marked for redaction",
+    "Aplicar redação": "Apply redaction",
+    "Marque pelo menos uma área no visualizador antes de aplicar.": (
+        "Mark at least one area in the viewer before applying."
+    ),
+    "Falha ao redigir: {error}": "Failed to redact: {error}",
+    "{count} página(s) redigida(s) com sucesso.": "{count} page(s) redacted successfully.",
+    "Remover metadados": "Remove metadata",
+    "Remover anotações e comentários": "Remove annotations and comments",
+    "JavaScript e anexos embutidos são sempre removidos.": (
+        "Embedded JavaScript and attachments are always removed."
+    ),
+    "Falha ao sanitizar: {error}": "Failed to sanitize: {error}",
+    "PDF sanitizado com sucesso.": "PDF sanitized successfully.",
 }
