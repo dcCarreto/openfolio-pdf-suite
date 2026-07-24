@@ -15,12 +15,14 @@ from PySide6.QtWidgets import (
 )
 
 from ui import i18n
+from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
 from ui.flags import build_br_flag_icon, build_us_flag_icon
 from ui.i18n import tr
 from ui.icon import build_app_icon
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.sidebar_icons import (
+    build_annotations_icon,
     build_bookmarks_icon,
     build_compress_icon,
     build_convert_icon,
@@ -37,6 +39,7 @@ from ui.sidebar_icons import (
     build_split_icon,
     build_watermark_icon,
 )
+from ui.pages.annotations_page import AnnotationsPage
 from ui.pages.bookmarks_page import BookmarksPage
 from ui.pages.compress_page import CompressPage
 from ui.pages.convert_page import ConvertPage
@@ -150,6 +153,12 @@ def _build_sections():
             tr("Adicione campos de formulário interativos (texto ou caixa de seleção) a um PDF."),
             FormFieldsPage,
         ),
+        (
+            build_annotations_icon,
+            tr("Anotações"),
+            tr("Realce, sublinhe, risque, adicione notas, desenhe ou carimbe sobre um PDF."),
+            AnnotationsPage,
+        ),
     ]
 
 
@@ -162,9 +171,10 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(build_app_icon())
         self.resize(1440, 820)
 
-        # A sessão precisa sobreviver à reconstrução da UI ao trocar de idioma,
-        # por isso vive no __init__ e não em _build_ui().
+        # A sessão e o estado de anotações precisam sobreviver à reconstrução da UI ao
+        # trocar de idioma, por isso vivem no __init__ e não em _build_ui().
         self.session = DocumentSession()
+        self.annotation_state = AnnotationState()
 
         i18n.language_changed.changed.connect(self._on_language_changed)
 
@@ -178,23 +188,30 @@ class MainWindow(QMainWindow):
         self.sidebar.setIconSize(QSize(20, 20))
 
         self.stack = QStackedWidget()
+        self._annotations_row = None
 
-        for build_icon, name, subtitle, page_class in _build_sections():
+        for row, (build_icon, name, subtitle, page_class) in enumerate(_build_sections()):
             item = QListWidgetItem(name)
             item.setIcon(build_icon())
             self.sidebar.addItem(item)
 
-            panel = PageContainer(name, subtitle, page_class(self.session))
+            if page_class is AnnotationsPage:
+                self._annotations_row = row
+                content = page_class(self.session, self.annotation_state)
+            else:
+                content = page_class(self.session)
+
+            panel = PageContainer(name, subtitle, content)
             scroll_area = QScrollArea()
             scroll_area.setObjectName("toolPanelScroll")
             scroll_area.setWidgetResizable(True)
             scroll_area.setWidget(panel)
             self.stack.addWidget(scroll_area)
 
-        self.sidebar.currentRowChanged.connect(self.stack.setCurrentIndex)
+        self.sidebar.currentRowChanged.connect(self._on_sidebar_row_changed)
         self.sidebar.setCurrentRow(0)
 
-        self.viewer = PdfViewer(self.session)
+        self.viewer = PdfViewer(self.session, self.annotation_state)
 
         self.stack.setFixedWidth(480)
 
@@ -281,6 +298,13 @@ class MainWindow(QMainWindow):
             self.sidebar.setCurrentRow(current_row)
 
         apply_dark_titlebar(self)
+
+    def _on_sidebar_row_changed(self, row: int):
+        self.stack.setCurrentIndex(row)
+        # Fora da aba de Anotações, cliques no visualizador não devem ser interpretados
+        # como desenho de marcação (mas a ferramenta escolhida continua selecionada para
+        # quando o usuário voltar).
+        self.annotation_state.set_page_active(row == self._annotations_row)
 
     def _open_pdf(self):
         path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), "", "PDF (*.pdf)")

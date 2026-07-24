@@ -2,12 +2,13 @@
 contínua e busca de texto."""
 
 import pypdfium2 as pdfium
-from PySide6.QtCore import QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QKeySequence, QPainter, QPixmap, QShortcut
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt
+from PySide6.QtGui import QColor, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFileDialog,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QPushButton,
     QScrollArea,
@@ -16,8 +17,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.annotations import AnnotationSpec, spec_rect
+from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
 from ui.i18n import tr
+from ui.viewer.page_canvas import PageCanvas
 from ui.viewer.render import render_page
 from ui.viewer.search import DocumentSearch
 from ui.viewer.search_bar import SearchBar
@@ -40,14 +44,16 @@ _MAX_SCALE = 4.0
 _ZOOM_STEP = 0.15
 _DEFAULT_SCALE = 1.2
 _HIGHLIGHT_COLOR = QColor(255, 235, 59, 110)
+_DRAWING_TOOLS = ("highlight", "underline", "strikeout", "note", "ink", "stamp")
 
 
 class PdfViewer(QWidget):
     """Mostra o PDF atualmente aberto na sessão compartilhada; não edita nada."""
 
-    def __init__(self, session: DocumentSession, parent=None):
+    def __init__(self, session: DocumentSession, annotation_state: AnnotationState, parent=None):
         super().__init__(parent)
         self.session = session
+        self.annotation_state = annotation_state
         self._document = None
         self._scale = _DEFAULT_SCALE
         self._continuous = False
@@ -60,13 +66,19 @@ class PdfViewer(QWidget):
         self._page_tops: list[int] = []
         self._rendered_pages: set[int] = set()
         self._document_dependent_widgets: list[QWidget] = []
+        self._drag_start_pdf: tuple[float, float] | None = None
+        self._ink_points_pdf: list[tuple[float, float]] = []
+        self._ink_preview_base: QPixmap | None = None
 
         self._build_ui()
         QShortcut(QKeySequence("Ctrl+F"), self, activated=self._toggle_search)
 
         session.path_changed.connect(self._reload)
+        annotation_state.tool_changed.connect(self._on_annotation_tool_changed)
+        annotation_state.pending_changed.connect(self._refresh_current_render)
         if session.path():
             self._reload()
+        self._on_annotation_tool_changed()
 
     # -- construção da UI -------------------------------------------------
 
@@ -242,6 +254,7 @@ class PdfViewer(QWidget):
         self._current_match = -1
         self._current_page = 0
         self.search_bar.hide()
+        self.annotation_state.clear_pending()
 
         self._set_document_controls_enabled(True)
         self.thumbnail_list.load_document(self._document)
@@ -275,11 +288,15 @@ class PdfViewer(QWidget):
             self.scroll_area.setWidget(container)
             self._update_visible_pages()
         else:
-            label = QLabel()
+            label = PageCanvas()
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.mouse_pressed.connect(self._on_canvas_pressed)
+            label.mouse_moved.connect(self._on_canvas_moved)
+            label.mouse_released.connect(self._on_canvas_released)
             self._page_labels = [label]
             self.scroll_area.setWidget(label)
             self._show_single_page(self._current_page)
+            self._update_canvas_cursor()
 
         self._update_page_indicator()
 
@@ -297,6 +314,7 @@ class PdfViewer(QWidget):
         self._current_page = index
         pixmap = render_page(self._document[index], self._scale)
         pixmap = self._with_highlight(pixmap, index)
+        pixmap = self._with_pending_annotations(pixmap, index)
         self._page_labels[0].setPixmap(pixmap)
         self._page_labels[0].resize(pixmap.size())
         self.thumbnail_list.select_page(index)
@@ -305,6 +323,7 @@ class PdfViewer(QWidget):
     def _render_page_into_label(self, index: int, label: QLabel):
         pixmap = render_page(self._document[index], self._scale)
         pixmap = self._with_highlight(pixmap, index)
+        pixmap = self._with_pending_annotations(pixmap, index)
         label.setPixmap(pixmap)
         self._rendered_pages.add(index)
 
@@ -327,6 +346,74 @@ class PdfViewer(QWidget):
         painter.drawRect(QRectF(x, top_y, width, height))
         painter.end()
         return highlighted
+
+    def _page_y_to_screen(self, page_index: int, y_pdf: float) -> float:
+        _, page_height = self._document[page_index].get_size()
+        return (page_height - y_pdf) * self._scale
+
+    def _with_pending_annotations(self, pixmap: QPixmap, page_index: int) -> QPixmap:
+        specs = [s for s in self.annotation_state.pending() if s.page_index == page_index]
+        if not specs:
+            return pixmap
+
+        result = QPixmap(pixmap)
+        painter = QPainter(result)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        for spec in specs:
+            self._paint_pending_spec(painter, page_index, spec)
+        painter.end()
+        return result
+
+    def _paint_pending_spec(self, painter: QPainter, page_index: int, spec: AnnotationSpec):
+        color = QColor(f"#{spec.color}")
+        scale = self._scale
+
+        if spec.kind in ("highlight", "underline", "strikeout"):
+            for left, bottom, right, top in spec.quads:
+                x = left * scale
+                width = (right - left) * scale
+                top_y = self._page_y_to_screen(page_index, top)
+                height = (top - bottom) * scale
+                if spec.kind == "highlight":
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    fill = QColor(color)
+                    fill.setAlpha(110)
+                    painter.setBrush(fill)
+                    painter.drawRect(QRectF(x, top_y, width, height))
+                elif spec.kind == "underline":
+                    painter.setPen(QPen(color, 2))
+                    painter.drawLine(QRectF(x, top_y, width, height).bottomLeft(), QRectF(x, top_y, width, height).bottomRight())
+                else:  # strikeout
+                    painter.setPen(QPen(color, 2))
+                    mid_y = top_y + height / 2
+                    painter.drawLine(int(x), int(mid_y), int(x + width), int(mid_y))
+        elif spec.kind == "ink":
+            self._paint_ink_stroke(painter, page_index, spec.points, color)
+        elif spec.kind == "note":
+            left, bottom, right, top = spec_rect(spec)
+            rect = QRectF(left * scale, self._page_y_to_screen(page_index, top), (right - left) * scale, (top - bottom) * scale)
+            painter.setPen(QPen(QColor("#000000"), 1))
+            painter.setBrush(color)
+            painter.drawRect(rect)
+        elif spec.kind == "stamp":
+            left, bottom, right, top = spec_rect(spec)
+            rect = QRectF(left * scale, self._page_y_to_screen(page_index, top), (right - left) * scale, (top - bottom) * scale)
+            painter.setPen(QPen(color, 2))
+            painter.setBrush(QColor("#ffffff"))
+            painter.drawRect(rect)
+            painter.setPen(color)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, spec.text)
+
+    def _pdf_point_to_widget(self, page_index: int, x_pdf: float, y_pdf: float) -> QPointF:
+        return QPointF(x_pdf * self._scale, self._page_y_to_screen(page_index, y_pdf))
+
+    def _paint_ink_stroke(self, painter: QPainter, page_index: int, points, color: QColor):
+        pen = QPen(color, max(1.0, 2.5 * self._scale))
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        polyline = QPolygonF([self._pdf_point_to_widget(page_index, x, y) for x, y in points])
+        painter.drawPolyline(polyline)
 
     def _update_visible_pages(self):
         if not self._continuous or self._document is None or not self._page_labels:
@@ -475,3 +562,160 @@ class PdfViewer(QWidget):
                 self._render_page_into_label(index, self._page_labels[index])
         else:
             self._show_single_page(self._current_page)
+
+    # -- anotações e marcação -------------------------------------------------
+
+    def _on_annotation_tool_changed(self):
+        tool = self.annotation_state.active_tool()
+        if self.annotation_state.is_page_active() and tool in _DRAWING_TOOLS and self._continuous:
+            self._set_continuous(False)
+            if hasattr(self, "single_page_button"):
+                self.single_page_button.setChecked(True)
+        self._update_canvas_cursor()
+
+    def _update_canvas_cursor(self):
+        if self._continuous or not self._page_labels:
+            return
+        canvas = self._page_labels[0]
+        if not isinstance(canvas, PageCanvas):
+            return
+        if not self.annotation_state.is_page_active():
+            canvas.setCursor(Qt.CursorShape.ArrowCursor)
+            return
+        tool = self.annotation_state.active_tool()
+        if tool in _DRAWING_TOOLS:
+            canvas.setCursor(Qt.CursorShape.CrossCursor)
+        elif tool == "select":
+            canvas.setCursor(Qt.CursorShape.PointingHandCursor)
+        else:
+            canvas.setCursor(Qt.CursorShape.ArrowCursor)
+
+    def _widget_point_to_pdf(self, page_index: int, x: float, y: float) -> tuple[float, float]:
+        _, page_height = self._document[page_index].get_size()
+        return (x / self._scale, page_height - y / self._scale)
+
+    def _on_canvas_pressed(self, x: float, y: float):
+        if not self.annotation_state.is_page_active():
+            return
+        tool = self.annotation_state.active_tool()
+        if self._document is None or tool is None:
+            return
+        page_index = self._current_page
+        pdf_point = self._widget_point_to_pdf(page_index, x, y)
+
+        if tool == "select":
+            self._erase_pending_at(page_index, pdf_point)
+            return
+        if tool == "ink":
+            self._ink_points_pdf = [pdf_point]
+            # Congela o pixmap já renderizado (sem o traço em progresso) como base do
+            # preview: cada movimento do mouse só repinta por cima dessa cópia, em vez de
+            # re-renderizar a página inteira via pdfium a cada evento.
+            self._ink_preview_base = QPixmap(self._page_labels[0].pixmap())
+            return
+        if tool in ("highlight", "underline", "strikeout"):
+            self._drag_start_pdf = pdf_point
+            return
+        if tool == "note":
+            self._prompt_note(page_index, pdf_point)
+            return
+        if tool == "stamp":
+            self._place_stamp(page_index, pdf_point)
+            return
+
+    def _on_canvas_moved(self, x: float, y: float):
+        if self.annotation_state.active_tool() != "ink" or not self._ink_points_pdf:
+            return
+        page_index = self._current_page
+        self._ink_points_pdf.append(self._widget_point_to_pdf(page_index, x, y))
+        if self._ink_preview_base is None:
+            return
+        preview = QPixmap(self._ink_preview_base)
+        painter = QPainter(preview)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        color = QColor(f"#{self.annotation_state.active_color()}")
+        self._paint_ink_stroke(painter, page_index, self._ink_points_pdf, color)
+        painter.end()
+        self._page_labels[0].setPixmap(preview)
+
+    def _on_canvas_released(self, x: float, y: float):
+        tool = self.annotation_state.active_tool()
+        page_index = self._current_page
+        pdf_point = self._widget_point_to_pdf(page_index, x, y)
+
+        if tool == "ink":
+            if len(self._ink_points_pdf) >= 2:
+                self.annotation_state.add_pending(
+                    AnnotationSpec(
+                        page_index=page_index,
+                        kind="ink",
+                        color=self.annotation_state.active_color(),
+                        points=list(self._ink_points_pdf),
+                    )
+                )
+            self._ink_points_pdf = []
+            self._ink_preview_base = None
+            return
+
+        if tool in ("highlight", "underline", "strikeout") and self._drag_start_pdf is not None:
+            self._finish_text_markup(page_index, self._drag_start_pdf, pdf_point, tool)
+            self._drag_start_pdf = None
+
+    def _finish_text_markup(self, page_index: int, start_pdf, end_pdf, tool: str):
+        textpage = self._document[page_index].get_textpage()
+        try:
+            start_index = textpage.get_index(start_pdf[0], start_pdf[1], 6, 6)
+            end_index = textpage.get_index(end_pdf[0], end_pdf[1], 6, 6)
+            if start_index is None or end_index is None:
+                return
+            lo, hi = sorted((start_index, end_index))
+            count = hi - lo + 1
+            n_rects = textpage.count_rects(lo, count)
+            quads = [textpage.get_rect(i) for i in range(n_rects)]
+        finally:
+            textpage.close()
+
+        if not quads:
+            return
+        self.annotation_state.add_pending(
+            AnnotationSpec(
+                page_index=page_index,
+                kind=tool,
+                color=self.annotation_state.active_color(),
+                quads=quads,
+            )
+        )
+
+    def _prompt_note(self, page_index: int, pdf_point):
+        text, ok = QInputDialog.getMultiLineText(self, tr("Nota adesiva"), tr("Texto da nota:"))
+        if ok and text.strip():
+            self.annotation_state.add_pending(
+                AnnotationSpec(
+                    page_index=page_index,
+                    kind="note",
+                    color=self.annotation_state.active_color(),
+                    position=pdf_point,
+                    text=text.strip(),
+                )
+            )
+
+    def _place_stamp(self, page_index: int, pdf_point):
+        self.annotation_state.add_pending(
+            AnnotationSpec(
+                page_index=page_index,
+                kind="stamp",
+                color=self.annotation_state.active_color(),
+                position=pdf_point,
+                text=self.annotation_state.stamp_text(),
+            )
+        )
+
+    def _erase_pending_at(self, page_index: int, pdf_point):
+        x, y = pdf_point
+        for spec in reversed(self.annotation_state.pending()):
+            if spec.page_index != page_index:
+                continue
+            left, bottom, right, top = spec_rect(spec)
+            if left <= x <= right and bottom <= y <= top:
+                self.annotation_state.remove_pending(spec)
+                return

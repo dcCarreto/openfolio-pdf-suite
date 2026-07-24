@@ -325,4 +325,41 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Fechar": "Close",
     "Nenhuma ocorrência": "No matches",
     "{current} de {total}": "{current} of {total}",
+    # Annotations: sidebar section
+    "Anotações": "Annotations",
+    "Realce, sublinhe, risque, adicione notas, desenhe ou carimbe sobre um PDF.": (
+        "Highlight, underline, strike through, add notes, draw, or stamp over a PDF."
+    ),
+    # Annotations: tools
+    "Selecionar/Apagar": "Select/Erase",
+    "Realce": "Highlight",
+    "Sublinhado": "Underline",
+    "Riscado": "Strikethrough",
+    "Nota adesiva": "Sticky note",
+    "Caneta": "Pen",
+    "Carimbo": "Stamp",
+    # Annotations: colors
+    "Amarelo": "Yellow",
+    "Vermelho": "Red",
+    "Verde": "Green",
+    "Azul": "Blue",
+    "Preto": "Black",
+    # Annotations: stamp presets
+    "APROVADO": "APPROVED",
+    "CONFIDENCIAL": "CONFIDENTIAL",
+    "RASCUNHO": "DRAFT",
+    "REVISADO": "REVIEWED",
+    "URGENTE": "URGENT",
+    # Annotations: page UI
+    "Ferramenta:": "Tool:",
+    "Cor:": "Color:",
+    "Texto do carimbo:": "Stamp text:",
+    "Limpar pendentes": "Clear pending",
+    "{count} anotação(ões) pendente(s)": "{count} pending annotation(s)",
+    "Salvar anotações": "Save annotations",
+    "Adicione pelo menos uma anotação antes de salvar.": "Add at least one annotation before saving.",
+    "Falha ao salvar anotações: {error}": "Failed to save annotations: {error}",
+    "Anotações salvas com sucesso.": "Annotations saved successfully.",
+    # Annotations: sticky-note dialog (viewer)
+    "Texto da nota:": "Note text:",
 }

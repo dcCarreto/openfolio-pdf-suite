@@ -23,7 +23,7 @@ def test_main_window_builds_with_all_sections():
 
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
-    assert sidebar.count() == 15
+    assert sidebar.count() == 16
     assert [sidebar.item(i).text() for i in range(sidebar.count())] == [
         "Criar PDF",
         "Mesclar",
@@ -40,13 +40,30 @@ def test_main_window_builds_with_all_sections():
         "Cortar/Redimensionar",
         "Marcadores",
         "Campos de formulário",
+        "Anotações",
     ]
     assert all(not sidebar.item(i).icon().isNull() for i in range(sidebar.count()))
-    assert window.stack.count() == 15
+    assert window.stack.count() == 16
 
     assert isinstance(window.viewer, PdfViewer)
     assert window.viewer.content_stack.currentIndex() == 0  # nenhum PDF aberto ainda
     assert window.session.path() is None
+    assert window.annotation_state.is_page_active() is False  # "Criar PDF" é a aba inicial
+
+    window.close()
+
+
+def test_selecting_annotations_row_activates_annotation_state():
+    _app()
+    window = MainWindow()
+    annotations_row = window._annotations_row
+    assert window.sidebar.item(annotations_row).text() == "Anotações"
+
+    window.sidebar.setCurrentRow(annotations_row)
+    assert window.annotation_state.is_page_active() is True
+
+    window.sidebar.setCurrentRow(0)
+    assert window.annotation_state.is_page_active() is False
 
     window.close()
 

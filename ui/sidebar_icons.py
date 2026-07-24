@@ -181,3 +181,16 @@ def build_form_fields_icon() -> QIcon:
         p.drawLine(QPointF(11.5, 13.2), QPointF(15, 13.2))
 
     return _build(draw)
+
+
+def build_annotations_icon() -> QIcon:
+    def draw(p):
+        p.save()
+        p.translate(11, 10)
+        p.rotate(45)
+        p.drawRoundedRect(QRectF(-3, -9, 6, 14), 1.5, 1.5)
+        p.drawLine(QPointF(-3, 3), QPointF(3, 3))
+        p.restore()
+        p.drawLine(QPointF(4, 19), QPointF(16, 19))
+
+    return _build(draw)
