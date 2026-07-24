@@ -1,6 +1,6 @@
 """Janela principal da aplicação."""
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QListWidget,
@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui import i18n
+from ui.flags import build_br_flag_icon, build_us_flag_icon
 from ui.i18n import tr
 from ui.icon import build_app_icon
 from ui.pages.bookmarks_page import BookmarksPage
@@ -177,15 +178,21 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(4, 0, 8, 0)
         layout.setSpacing(4)
 
-        us_button = QPushButton("🇺🇸")
+        icon_size = QSize(26, 17)
+
+        us_button = QPushButton()
+        us_button.setIcon(build_us_flag_icon())
+        us_button.setIconSize(icon_size)
         us_button.setToolTip("English")
-        us_button.setFixedSize(34, 26)
+        us_button.setFixedSize(38, 26)
         us_button.setCursor(Qt.CursorShape.PointingHandCursor)
         us_button.clicked.connect(lambda: i18n.set_language(i18n.EN_US))
 
-        br_button = QPushButton("🇧🇷")
+        br_button = QPushButton()
+        br_button.setIcon(build_br_flag_icon())
+        br_button.setIconSize(icon_size)
         br_button.setToolTip("Português (Brasil)")
-        br_button.setFixedSize(34, 26)
+        br_button.setFixedSize(38, 26)
         br_button.setCursor(Qt.CursorShape.PointingHandCursor)
         br_button.clicked.connect(lambda: i18n.set_language(i18n.PT_BR))
 
