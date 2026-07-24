@@ -362,4 +362,37 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Anotações salvas com sucesso.": "Annotations saved successfully.",
     # Annotations: sticky-note dialog (viewer)
     "Texto da nota:": "Note text:",
+    # OCR: sidebar section
+    "OCR": "OCR",
+    "Reconheça texto em páginas escaneadas, tornando-as pesquisáveis.": (
+        "Recognize text in scanned pages, making them searchable."
+    ),
+    # OCR: page UI
+    "Idioma do texto:": "Text language:",
+    "Pular páginas que já têm texto": "Skip pages that already have text",
+    "Reconhecer texto": "Recognize text",
+    "Tesseract OCR não encontrado. Instale o Tesseract "
+    "(https://github.com/tesseract-ocr/tesseract) para usar esta ferramenta.": (
+        "Tesseract OCR not found. Install Tesseract "
+        "(https://github.com/tesseract-ocr/tesseract) to use this tool."
+    ),
+    "Nenhum idioma de reconhecimento instalado no Tesseract.": (
+        "No recognition language installed in Tesseract."
+    ),
+    "Tesseract encontrado. Idiomas disponíveis: {languages}.": (
+        "Tesseract found. Available languages: {languages}."
+    ),
+    "Nenhum idioma de reconhecimento disponível.": "No recognition language available.",
+    "Falha ao reconhecer texto: {error}": "Failed to recognize text: {error}",
+    "Texto reconhecido em {count} página(s).": "Text recognized in {count} page(s).",
+    "Nenhuma página precisou de OCR (o PDF já tinha texto).": (
+        "No page needed OCR (the PDF already had text)."
+    ),
+    # OCR: language names
+    "Inglês": "English",
+    "Português": "Portuguese",
+    "Espanhol": "Spanish",
+    "Francês": "French",
+    "Alemão": "German",
+    "Italiano": "Italian",
 }

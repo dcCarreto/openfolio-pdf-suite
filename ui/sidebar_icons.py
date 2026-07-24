@@ -183,6 +183,18 @@ def build_form_fields_icon() -> QIcon:
     return _build(draw)
 
 
+def build_ocr_icon() -> QIcon:
+    def draw(p):
+        p.drawRoundedRect(QRectF(4, 3, 11, 15), 1.5, 1.5)
+        p.drawLine(QPointF(6.5, 7), QPointF(11.5, 7))
+        p.drawLine(QPointF(6.5, 10.5), QPointF(11.5, 10.5))
+        p.drawLine(QPointF(6.5, 14), QPointF(9, 14))
+        p.drawEllipse(QRectF(11, 11, 7, 7))
+        p.drawLine(QPointF(16, 16), QPointF(19, 19))
+
+    return _build(draw)
+
+
 def build_annotations_icon() -> QIcon:
     def draw(p):
         p.save()

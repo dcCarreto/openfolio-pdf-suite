@@ -33,6 +33,7 @@ from ui.sidebar_icons import (
     build_form_fields_icon,
     build_merge_icon,
     build_metadata_icon,
+    build_ocr_icon,
     build_page_numbers_icon,
     build_pages_icon,
     build_protect_icon,
@@ -50,6 +51,7 @@ from ui.pages.extract_text_page import ExtractTextPage
 from ui.pages.form_fields_page import FormFieldsPage
 from ui.pages.merge_page import MergePage
 from ui.pages.metadata_page import MetadataPage
+from ui.pages.ocr_page import OCRPage
 from ui.pages.page_numbers_page import PageNumbersPage
 from ui.pages.pages_page import PagesPage
 from ui.pages.protect_page import ProtectPage
@@ -158,6 +160,12 @@ def _build_sections():
             tr("Anotações"),
             tr("Realce, sublinhe, risque, adicione notas, desenhe ou carimbe sobre um PDF."),
             AnnotationsPage,
+        ),
+        (
+            build_ocr_icon,
+            tr("OCR"),
+            tr("Reconheça o texto de PDFs escaneados e gere um PDF pesquisável."),
+            OCRPage,
         ),
     ]
 
