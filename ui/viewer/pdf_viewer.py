@@ -261,6 +261,9 @@ class PdfViewer(QWidget):
             return
 
         self._document = pdfium.PdfDocument(path)
+        # Sem isso, carimbos de assinatura e campos de formulário (AcroForm) não aparecem
+        # no render: draw_annots=True sozinho não é suficiente para widgets de formulário.
+        self._document.init_forms()
         self._search = DocumentSearch(self._document)
         self._matches = []
         self._current_match = -1

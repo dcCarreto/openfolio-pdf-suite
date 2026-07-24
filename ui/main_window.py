@@ -39,6 +39,7 @@ from ui.sidebar_icons import (
     build_pages_icon,
     build_protect_icon,
     build_redaction_icon,
+    build_signature_icon,
     build_split_icon,
     build_watermark_icon,
 )
@@ -58,6 +59,7 @@ from ui.pages.page_numbers_page import PageNumbersPage
 from ui.pages.pages_page import PagesPage
 from ui.pages.protect_page import ProtectPage
 from ui.pages.redaction_page import RedactionPage
+from ui.pages.signature_page import SignaturePage
 from ui.pages.split_page import SplitPage
 from ui.pages.watermark_page import WatermarkPage
 from ui.theme import apply_dark_titlebar
@@ -175,6 +177,12 @@ def _build_sections():
             tr("Redigir/Sanitizar"),
             tr("Apague definitivamente áreas de um PDF ou remova metadados, JavaScript e anexos."),
             RedactionPage,
+        ),
+        (
+            build_signature_icon,
+            tr("Assinatura digital"),
+            tr("Assine um PDF com selo visível e assinatura criptográfica, ou verifique uma assinatura existente."),
+            SignaturePage,
         ),
     ]
 

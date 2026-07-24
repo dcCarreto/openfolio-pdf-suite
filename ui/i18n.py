@@ -425,4 +425,53 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     "Falha ao sanitizar: {error}": "Failed to sanitize: {error}",
     "PDF sanitizado com sucesso.": "PDF sanitized successfully.",
+    # Digital signature: sidebar section
+    "Assinatura digital": "Digital signature",
+    "Assine um PDF com selo visível e assinatura criptográfica, ou verifique uma assinatura existente.": (
+        "Sign a PDF with a visible stamp and a cryptographic signature, or verify an existing signature."
+    ),
+    # Digital signature: page UI
+    "Assinar": "Sign",
+    "Verificar assinatura": "Verify signature",
+    "Arquivo .pfx": "Certificate file (.pfx)",
+    "Gerar certificado de teste": "Generate test certificate",
+    "Nome exibido na assinatura": "Name shown on the signature",
+    "Certificado:": "Certificate:",
+    "Nome do signatário:": "Signer name:",
+    "Página:": "Page:",
+    "Posição do selo:": "Stamp position:",
+    "Inferior direito": "Bottom right",
+    "Inferior esquerdo": "Bottom left",
+    "Superior direito": "Top right",
+    "Superior esquerdo": "Top left",
+    "Certificado (*.pfx *.p12)": "Certificate (*.pfx *.p12)",
+    "Arquivo .pfx/.p12:": "Certificate file (.pfx/.p12):",
+    "Senha do certificado": "Certificate password",
+    "Senha:": "Password:",
+    "Certificado autoassinado gerado na hora, sem validade jurídica — use só "
+    "para testar o fluxo ou assinaturas de uso pessoal/interno.": (
+        "Self-signed certificate generated on the spot, with no legal validity — use it only "
+        "to test the flow or for personal/internal signatures."
+    ),
+    "Nome completo": "Full name",
+    "E-mail": "Email",
+    "Nome:": "Name:",
+    "E-mail:": "Email:",
+    "Arquivo PDF a verificar:": "PDF file to verify:",
+    "Verificar": "Verify",
+    "Abra um PDF para começar.": "Open a PDF to get started.",
+    "Digite o nome do signatário.": "Enter the signer's name.",
+    "O PDF de entrada não tem páginas.": "The input PDF has no pages.",
+    "Escolha o arquivo .pfx/.p12.": "Choose the .pfx/.p12 file.",
+    "Digite o nome para o certificado de teste.": "Enter the name for the test certificate.",
+    "Falha ao assinar: {error}": "Failed to sign: {error}",
+    "PDF assinado com sucesso.": "PDF signed successfully.",
+    "Escolha o arquivo PDF a verificar.": "Choose the PDF file to verify.",
+    "Falha ao verificar: {error}": "Failed to verify: {error}",
+    "Nenhuma assinatura encontrada neste PDF.": "No signature found in this PDF.",
+    "íntegro (não modificado)": "intact (not modified)",
+    "MODIFICADO após a assinatura": "MODIFIED after signing",
+    "Campo: {field}\nSignatário: {signer}\nData: {date}\nStatus: {status}": (
+        "Field: {field}\nSigner: {signer}\nDate: {date}\nStatus: {status}"
+    ),
 }

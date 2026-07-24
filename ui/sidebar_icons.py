@@ -206,6 +206,29 @@ def build_redaction_icon() -> QIcon:
     return _build(draw)
 
 
+def build_signature_icon() -> QIcon:
+    def draw(p):
+        p.drawPolyline(
+            QPolygonF(
+                [
+                    QPointF(4, 15),
+                    QPointF(7, 9),
+                    QPointF(9.5, 14),
+                    QPointF(12, 6),
+                    QPointF(14.5, 15),
+                    QPointF(17.5, 11),
+                ]
+            )
+        )
+        p.drawLine(QPointF(4, 18), QPointF(18, 18))
+        p.drawEllipse(QRectF(14.5, 3, 6, 6))
+        p.drawPolyline(
+            QPolygonF([QPointF(15.7, 6), QPointF(16.7, 7), QPointF(18.8, 4.5)])
+        )
+
+    return _build(draw)
+
+
 def build_annotations_icon() -> QIcon:
     def draw(p):
         p.save()

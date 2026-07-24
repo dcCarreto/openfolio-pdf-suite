@@ -23,7 +23,7 @@ def test_main_window_builds_with_all_sections():
 
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
-    assert sidebar.count() == 18
+    assert sidebar.count() == 19
     assert [sidebar.item(i).text() for i in range(sidebar.count())] == [
         "Criar PDF",
         "Mesclar",
@@ -43,9 +43,10 @@ def test_main_window_builds_with_all_sections():
         "Anotações",
         "OCR",
         "Redigir/Sanitizar",
+        "Assinatura digital",
     ]
     assert all(not sidebar.item(i).icon().isNull() for i in range(sidebar.count()))
-    assert window.stack.count() == 18
+    assert window.stack.count() == 19
 
     assert isinstance(window.viewer, PdfViewer)
     assert window.viewer.content_stack.currentIndex() == 0  # nenhum PDF aberto ainda
