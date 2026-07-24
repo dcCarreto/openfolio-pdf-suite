@@ -67,18 +67,18 @@ def test_main_window_rebuilds_sidebar_on_language_change():
     window = MainWindow()
 
     sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar.item(1).text() == "📄  Mesclar"
+    assert sidebar.item(1).text() == "Mesclar"
 
     sidebar.setCurrentRow(4)  # Comprimir
     i18n.set_language(i18n.EN_US)
 
     sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar.item(1).text() == "📄  Merge"
-    assert sidebar.item(4).text() == "🗜️  Compress"
+    assert sidebar.item(1).text() == "Merge"
+    assert sidebar.item(4).text() == "Compress"
     assert sidebar.currentRow() == 4  # preserva a seção selecionada
 
     i18n.set_language(i18n.PT_BR)
     sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar.item(1).text() == "📄  Mesclar"
+    assert sidebar.item(1).text() == "Mesclar"
 
     window.close()

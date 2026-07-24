@@ -16,6 +16,23 @@ from ui import i18n
 from ui.flags import build_br_flag_icon, build_us_flag_icon
 from ui.i18n import tr
 from ui.icon import build_app_icon
+from ui.sidebar_icons import (
+    build_bookmarks_icon,
+    build_compress_icon,
+    build_convert_icon,
+    build_create_icon,
+    build_crop_icon,
+    build_extract_images_icon,
+    build_extract_text_icon,
+    build_form_fields_icon,
+    build_merge_icon,
+    build_metadata_icon,
+    build_page_numbers_icon,
+    build_pages_icon,
+    build_protect_icon,
+    build_split_icon,
+    build_watermark_icon,
+)
 from ui.pages.bookmarks_page import BookmarksPage
 from ui.pages.compress_page import CompressPage
 from ui.pages.convert_page import ConvertPage
@@ -39,72 +56,92 @@ APP_VERSION = "0.1.0"
 
 def _build_sections():
     return [
-        ("🆕", tr("Criar PDF"), tr("Crie um novo PDF em branco, com uma ou mais páginas."), CreatePage),
         (
-            "📄",
+            build_create_icon,
+            tr("Criar PDF"),
+            tr("Crie um novo PDF em branco, com uma ou mais páginas."),
+            CreatePage,
+        ),
+        (
+            build_merge_icon,
             tr("Mesclar"),
             tr("Combine vários PDFs em um único arquivo, na ordem que você escolher."),
             MergePage,
         ),
-        ("✂️", tr("Dividir"), tr("Separe um PDF em vários arquivos menores."), SplitPage),
-        ("🔃", tr("Páginas"), tr("Rotacione, reordene ou remova páginas de um PDF."), PagesPage),
-        ("🗜️", tr("Comprimir"), tr("Reduza o tamanho de um arquivo PDF."), CompressPage),
         (
-            "🖼️",
+            build_split_icon,
+            tr("Dividir"),
+            tr("Separe um PDF em vários arquivos menores."),
+            SplitPage,
+        ),
+        (
+            build_pages_icon,
+            tr("Páginas"),
+            tr("Rotacione, reordene ou remova páginas de um PDF."),
+            PagesPage,
+        ),
+        (
+            build_compress_icon,
+            tr("Comprimir"),
+            tr("Reduza o tamanho de um arquivo PDF."),
+            CompressPage,
+        ),
+        (
+            build_convert_icon,
             tr("Converter"),
             tr("Converta entre PDF e imagens, documentos do Office (Word/Excel/PowerPoint) e XML."),
             ConvertPage,
         ),
         (
-            "💧",
+            build_watermark_icon,
             tr("Marca d'água"),
             tr("Adicione um texto de marca d'água sobre as páginas de um PDF."),
             WatermarkPage,
         ),
         (
-            "🔒",
+            build_protect_icon,
             tr("Proteger"),
             tr("Proteja um PDF com senha, ou remova a senha de um PDF protegido."),
             ProtectPage,
         ),
         (
-            "🏷️",
+            build_metadata_icon,
             tr("Metadados"),
             tr("Edite título, autor, assunto e palavras-chave de um PDF."),
             MetadataPage,
         ),
         (
-            "🔢",
+            build_page_numbers_icon,
             tr("Numeração"),
             tr("Adicione números de página no rodapé de um PDF."),
             PageNumbersPage,
         ),
         (
-            "📝",
+            build_extract_text_icon,
             tr("Extrair texto"),
             tr("Extraia todo o texto de um PDF para um arquivo .txt."),
             ExtractTextPage,
         ),
         (
-            "📷",
+            build_extract_images_icon,
             tr("Extrair imagens"),
             tr("Extraia as imagens embutidas nas páginas de um PDF."),
             ExtractImagesPage,
         ),
         (
-            "📐",
+            build_crop_icon,
             tr("Cortar/Redimensionar"),
             tr("Corte margens ou redimensione as páginas de um PDF."),
             CropPage,
         ),
         (
-            "🔖",
+            build_bookmarks_icon,
             tr("Marcadores"),
             tr("Monte um sumário de navegação (marcadores) para um PDF."),
             BookmarksPage,
         ),
         (
-            "🧾",
+            build_form_fields_icon,
             tr("Campos de formulário"),
             tr("Adicione campos de formulário interativos (texto ou caixa de seleção) a um PDF."),
             FormFieldsPage,
@@ -130,11 +167,14 @@ class MainWindow(QMainWindow):
         self.sidebar = QListWidget()
         self.sidebar.setObjectName("sidebar")
         self.sidebar.setFixedWidth(210)
+        self.sidebar.setIconSize(QSize(20, 20))
 
         self.stack = QStackedWidget()
 
-        for icon, name, subtitle, page_class in _build_sections():
-            self.sidebar.addItem(QListWidgetItem(f"{icon}  {name}"))
+        for build_icon, name, subtitle, page_class in _build_sections():
+            item = QListWidgetItem(name)
+            item.setIcon(build_icon())
+            self.sidebar.addItem(item)
             self.stack.addWidget(PageContainer(name, subtitle, page_class()))
 
         self.sidebar.currentRowChanged.connect(self.stack.setCurrentIndex)

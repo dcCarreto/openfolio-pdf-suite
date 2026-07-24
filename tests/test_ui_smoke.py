@@ -24,22 +24,23 @@ def test_main_window_builds_with_all_sections():
     assert sidebar is not None
     assert sidebar.count() == 15
     assert [sidebar.item(i).text() for i in range(sidebar.count())] == [
-        "🆕  Criar PDF",
-        "📄  Mesclar",
-        "✂️  Dividir",
-        "🔃  Páginas",
-        "🗜️  Comprimir",
-        "🖼️  Converter",
-        "💧  Marca d'água",
-        "🔒  Proteger",
-        "🏷️  Metadados",
-        "🔢  Numeração",
-        "📝  Extrair texto",
-        "📷  Extrair imagens",
-        "📐  Cortar/Redimensionar",
-        "🔖  Marcadores",
-        "🧾  Campos de formulário",
+        "Criar PDF",
+        "Mesclar",
+        "Dividir",
+        "Páginas",
+        "Comprimir",
+        "Converter",
+        "Marca d'água",
+        "Proteger",
+        "Metadados",
+        "Numeração",
+        "Extrair texto",
+        "Extrair imagens",
+        "Cortar/Redimensionar",
+        "Marcadores",
+        "Campos de formulário",
     ]
+    assert all(not sidebar.item(i).icon().isNull() for i in range(sidebar.count()))
     assert window.stack.count() == 15
 
     window.close()
