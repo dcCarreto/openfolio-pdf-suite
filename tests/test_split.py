@@ -1,6 +1,7 @@
 import pytest
 from pypdf import PdfReader
 
+from core.base import EncryptedPDFError
 from core.split import SplitPDF
 
 
@@ -44,3 +45,11 @@ def test_split_with_zero_or_negative_pages_per_file_raises(make_pdf, tmp_path):
         SplitPDF().run(str(pdf_path), str(output_dir), pages_per_file=0)
     with pytest.raises(ValueError):
         SplitPDF().run(str(pdf_path), str(output_dir), pages_per_file=-1)
+
+
+def test_split_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+    output_dir = tmp_path / "out"
+
+    with pytest.raises(EncryptedPDFError):
+        SplitPDF().run(str(encrypted_path), str(output_dir))

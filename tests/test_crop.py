@@ -1,6 +1,7 @@
 import pytest
 from pypdf import PdfReader
 
+from core.base import EncryptedPDFError
 from core.crop import CropPages, ScalePages
 
 
@@ -34,3 +35,11 @@ def test_crop_raises_when_margins_exceed_page_size(make_pdf, tmp_path):
 
     with pytest.raises(ValueError):
         CropPages().run(str(pdf_path), str(output_path), left=1000, right=1000)
+
+
+def test_crop_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+    output_path = tmp_path / "cropped.pdf"
+
+    with pytest.raises(EncryptedPDFError):
+        CropPages().run(str(encrypted_path), str(output_path), left=10)

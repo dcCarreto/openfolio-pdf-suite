@@ -1,6 +1,7 @@
 import pytest
 from pypdf import PdfReader
 
+from core.base import EncryptedPDFError
 from core.protect import ProtectPDF, UnlockPDF
 
 
@@ -36,3 +37,11 @@ def test_unlock_with_wrong_password_raises(make_pdf, tmp_path):
 
     with pytest.raises(ValueError):
         UnlockPDF().run(str(protected_path), str(unlocked_path), password="senha-errada")
+
+
+def test_protect_rejects_already_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+    output_path = tmp_path / "out.pdf"
+
+    with pytest.raises(EncryptedPDFError):
+        ProtectPDF().run(str(encrypted_path), str(output_path), password="outra-senha")

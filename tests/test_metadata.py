@@ -1,3 +1,6 @@
+import pytest
+
+from core.base import EncryptedPDFError
 from core.metadata import ReadMetadata, SetMetadata
 
 
@@ -64,3 +67,17 @@ def test_set_metadata_with_explicit_empty_string_clears_field(make_pdf, tmp_path
 
     metadata = ReadMetadata().run(str(second_pass))
     assert metadata["title"] == ""
+
+
+def test_read_metadata_rejects_encrypted_input(make_encrypted_pdf):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+
+    with pytest.raises(EncryptedPDFError):
+        ReadMetadata().run(str(encrypted_path))
+
+
+def test_set_metadata_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+
+    with pytest.raises(EncryptedPDFError):
+        SetMetadata().run(str(encrypted_path), str(tmp_path / "out.pdf"), title="X")

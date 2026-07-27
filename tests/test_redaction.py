@@ -1,10 +1,12 @@
 """Testes de core/redaction.py: redação real (rasterização) e sanitização de PDFs."""
 
+import pytest
 from pypdf import PdfReader, PdfWriter
 from pypdf.annotations import Highlight
 from pypdf.generic import ArrayObject, FloatObject
 from reportlab.pdfgen import canvas as rl_canvas
 
+from core.base import EncryptedPDFError
 from core.redaction import RedactDocument, RedactionRect, SanitizeDocument
 
 
@@ -67,6 +69,14 @@ def test_redact_with_no_rects_copies_document_unchanged(tmp_path):
     assert "Nada marcado" in PdfReader(str(path_out)).pages[0].extract_text()
 
 
+def test_redact_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+    path_out = tmp_path / "out.pdf"
+
+    with pytest.raises(EncryptedPDFError):
+        RedactDocument().run(str(encrypted_path), str(path_out), [])
+
+
 def _pdf_with_hidden_data(path) -> None:
     src_text = str(path).replace(".pdf", "_src.pdf")
     _make_pdf_with_text(src_text, ["Conteudo visivel do documento"])
@@ -122,6 +132,14 @@ def test_sanitize_removes_javascript_embedded_in_annotation_actions(tmp_path):
     # sempre eliminar, mesmo quando as anotações em si são preservadas.
     assert "/A" not in link
     assert any(a["/Subtype"] == "/Highlight" for a in annots)
+
+
+def test_sanitize_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+    path_out = tmp_path / "out.pdf"
+
+    with pytest.raises(EncryptedPDFError):
+        SanitizeDocument().run(str(encrypted_path), str(path_out))
 
 
 def test_sanitize_can_keep_metadata_and_remove_annotations(tmp_path):

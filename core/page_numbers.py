@@ -5,7 +5,7 @@ import io
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader
 
 
 class AddPageNumbers(PDFOperation):
@@ -19,7 +19,7 @@ class AddPageNumbers(PDFOperation):
         font_size: int = 10,
         margin: float = 24,
     ) -> None:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         writer = PdfWriter()
 
         for index, page in enumerate(reader.pages):

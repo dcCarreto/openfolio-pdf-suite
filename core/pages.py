@@ -1,8 +1,8 @@
 """Manipulação de páginas: rotação, reordenação e remoção."""
 
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfWriter
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader, require_valid_page_index
 
 
 class RotatePages(PDFOperation):
@@ -15,7 +15,7 @@ class RotatePages(PDFOperation):
         angle: int = 90,
         pages: list[int] | None = None,
     ) -> None:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         writer = PdfWriter()
         target_pages = set(pages) if pages is not None else None
         for index, page in enumerate(reader.pages):
@@ -30,7 +30,11 @@ class ReorderPages(PDFOperation):
     """Reordena páginas de um PDF."""
 
     def run(self, input_path: str, output_path: str, order: list[int]) -> None:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
+        total_pages = len(reader.pages)
+        for index in order:
+            require_valid_page_index(total_pages, index, label="Página em order")
+
         writer = PdfWriter()
         for index in order:
             writer.add_page(reader.pages[index])
@@ -42,7 +46,7 @@ class RemovePages(PDFOperation):
     """Remove páginas de um PDF."""
 
     def run(self, input_path: str, output_path: str, pages: list[int]) -> None:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         total_pages = len(reader.pages)
         pages_to_remove = set(pages)
         remaining = total_pages - len(pages_to_remove.intersection(range(total_pages)))

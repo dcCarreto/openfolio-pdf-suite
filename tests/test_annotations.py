@@ -1,9 +1,11 @@
 """Testes de core/annotations.py: gravação de anotações reais em um PDF."""
 
+import pytest
 from reportlab.pdfgen import canvas as rl_canvas
 from pypdf import PdfReader
 
 from core.annotations import AddAnnotations, AnnotationSpec, spec_rect
+from core.base import EncryptedPDFError
 
 
 def _make_pdf(path, text: str) -> None:
@@ -109,3 +111,28 @@ def test_add_annotations_preserves_page_count(tmp_path):
     )
 
     assert len(PdfReader(str(path_out)).pages) == len(PdfReader(str(path_in)).pages)
+
+
+def test_add_annotations_rejects_out_of_range_page_index(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    path_out = tmp_path / "doc_out.pdf"
+    _make_pdf(path_in, "texto de exemplo")
+
+    with pytest.raises(ValueError):
+        AddAnnotations().run(
+            str(path_in),
+            str(path_out),
+            [AnnotationSpec(page_index=5, kind="highlight", quads=[(40, 330, 100, 350)])],
+        )
+
+
+def test_add_annotations_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(400, 400)])
+    path_out = tmp_path / "doc_out.pdf"
+
+    with pytest.raises(EncryptedPDFError):
+        AddAnnotations().run(
+            str(encrypted_path),
+            str(path_out),
+            [AnnotationSpec(page_index=0, kind="highlight", quads=[(40, 330, 100, 350)])],
+        )

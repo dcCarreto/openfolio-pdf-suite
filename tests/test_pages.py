@@ -1,6 +1,7 @@
 import pytest
 from pypdf import PdfReader
 
+from core.base import EncryptedPDFError
 from core.pages import RemovePages, ReorderPages, RotatePages
 
 
@@ -35,6 +36,14 @@ def test_reorder_pages(make_pdf, tmp_path):
     assert widths == [300, 100, 200]
 
 
+def test_reorder_pages_rejects_out_of_range_index(make_pdf, tmp_path):
+    pdf_path = make_pdf("doc.pdf", [(100, 100), (200, 200)])
+    output_path = tmp_path / "reordered.pdf"
+
+    with pytest.raises(ValueError):
+        ReorderPages().run(str(pdf_path), str(output_path), order=[0, 5])
+
+
 def test_remove_pages(make_pdf, tmp_path):
     pdf_path = make_pdf("doc.pdf", [(100, 100), (200, 200), (300, 300)])
     output_path = tmp_path / "removed.pdf"
@@ -52,3 +61,11 @@ def test_remove_all_pages_raises(make_pdf, tmp_path):
 
     with pytest.raises(ValueError):
         RemovePages().run(str(pdf_path), str(output_path), pages=[0, 1])
+
+
+def test_rotate_pages_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+    output_path = tmp_path / "out.pdf"
+
+    with pytest.raises(EncryptedPDFError):
+        RotatePages().run(str(encrypted_path), str(output_path))

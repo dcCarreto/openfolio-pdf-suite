@@ -2,7 +2,7 @@
 
 from pypdf import PdfWriter
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader
 
 
 class MergePDF(PDFOperation):
@@ -13,6 +13,7 @@ class MergePDF(PDFOperation):
             raise ValueError("Informe ao menos um arquivo PDF para mesclar.")
         writer = PdfWriter()
         for path in input_paths:
+            open_reader(path)  # recusa PDFs protegidos por senha antes de anexar
             writer.append(path)
         with open(output_path, "wb") as f:
             writer.write(f)

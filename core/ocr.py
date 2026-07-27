@@ -20,7 +20,7 @@ import pytesseract
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas as rl_canvas
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader
 
 _TESSERACT_CANDIDATES = [
     "tesseract",
@@ -82,7 +82,7 @@ class OCRDocument(PDFOperation):
             )
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
 
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         pdfium_doc = pdfium.PdfDocument(input_path)
         writer = PdfWriter()
         pages_ocred = 0

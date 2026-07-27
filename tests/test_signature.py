@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from reportlab.pdfgen import canvas as rl_canvas
 
+from core.base import EncryptedPDFError
 from core.signature import DescribeSignatures, SignDocument, generate_test_certificate
 
 
@@ -117,6 +118,34 @@ def test_sign_requires_a_certificate_source(tmp_path):
 
     with pytest.raises(ValueError):
         SignDocument().run(str(path_in), str(tmp_path / "out.pdf"), signer_name="Alguém")
+
+
+def test_sign_rejects_out_of_range_page_index(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    _make_pdf(path_in, "Página única")
+
+    with pytest.raises(ValueError):
+        SignDocument().run(
+            str(path_in),
+            str(tmp_path / "out.pdf"),
+            signer_name="Fulano de Tal",
+            page_index=5,
+            test_common_name="Fulano de Tal",
+            test_email="fulano@example.com",
+        )
+
+
+def test_sign_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+
+    with pytest.raises(EncryptedPDFError):
+        SignDocument().run(
+            str(encrypted_path),
+            str(tmp_path / "out.pdf"),
+            signer_name="Fulano de Tal",
+            test_common_name="Fulano de Tal",
+            test_email="fulano@example.com",
+        )
 
 
 def test_sign_rejects_invalid_position(tmp_path):

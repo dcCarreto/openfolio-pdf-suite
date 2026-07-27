@@ -20,7 +20,7 @@ from pypdf.generic import (
     NumberObject,
 )
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader, require_valid_page_index
 
 _NOTE_SIZE = 24
 _STAMP_SIZE = (160, 40)
@@ -220,6 +220,11 @@ class AddAnnotations(PDFOperation):
     """Grava uma lista de anotações pendentes em um PDF."""
 
     def run(self, input_path: str, output_path: str, specs: list[AnnotationSpec]) -> None:
+        reader = open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
+        total_pages = len(reader.pages)
+        for spec in specs:
+            require_valid_page_index(total_pages, spec.page_index)
+
         writer = PdfWriter(clone_from=input_path)
         for spec in specs:
             writer.add_annotation(page_number=spec.page_index, annotation=_build_annotation(writer, spec))

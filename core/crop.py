@@ -1,8 +1,8 @@
 """Corte de margens e redimensionamento de páginas de um PDF."""
 
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfWriter
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader
 
 
 class CropPages(PDFOperation):
@@ -17,7 +17,7 @@ class CropPages(PDFOperation):
         right: float = 0,
         top: float = 0,
     ) -> None:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         writer = PdfWriter()
 
         for index, page in enumerate(reader.pages):
@@ -42,7 +42,7 @@ class ScalePages(PDFOperation):
     """Redimensiona as páginas de um PDF para um novo tamanho."""
 
     def run(self, input_path: str, output_path: str, width: float, height: float) -> None:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         writer = PdfWriter()
 
         for page in reader.pages:

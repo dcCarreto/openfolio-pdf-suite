@@ -29,7 +29,7 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader
 
 _REDACT_SCALE = 300 / 72  # mesma resolução usada em core/ocr.py
 
@@ -53,7 +53,7 @@ class RedactDocument(PDFOperation):
         for rect in rects:
             rects_by_page.setdefault(rect.page_index, []).append(rect)
 
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         pdfium_doc = pdfium.PdfDocument(input_path)
         writer = PdfWriter()
         pages_redacted = 0
@@ -121,7 +121,7 @@ class SanitizeDocument(PDFOperation):
         remove_metadata: bool = True,
         remove_annotations: bool = False,
     ) -> None:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         writer = PdfWriter()  # sem clone_from: já não carrega metadados, JS nem anexos
 
         for page in reader.pages:

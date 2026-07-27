@@ -2,16 +2,14 @@
 
 from pathlib import Path
 
-from pypdf import PdfReader
-
-from .base import PDFOperation
+from .base import PDFOperation, open_reader
 
 
 class ExtractImages(PDFOperation):
     """Extrai as imagens embutidas nas páginas de um PDF."""
 
     def run(self, input_path: str, output_dir: str) -> list[str]:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         stem = Path(input_path).stem
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(parents=True, exist_ok=True)

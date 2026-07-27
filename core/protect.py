@@ -2,14 +2,14 @@
 
 from pypdf import PdfReader, PdfWriter
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader
 
 
 class ProtectPDF(PDFOperation):
     """Protege um PDF com senha."""
 
     def run(self, input_path: str, output_path: str, password: str) -> None:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         writer = PdfWriter()
         for page in reader.pages:
             writer.add_page(page)

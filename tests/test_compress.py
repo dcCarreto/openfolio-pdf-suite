@@ -1,5 +1,7 @@
+import pytest
 from pypdf import PdfReader
 
+from core.base import EncryptedPDFError
 from core.compress import CompressPDF
 from core.watermark import AddWatermark
 
@@ -26,3 +28,10 @@ def test_compress_page_with_real_content_stream(make_pdf, tmp_path):
     reader = PdfReader(str(output_path))
     assert len(reader.pages) == 2
     assert "OpenFolio" in reader.pages[0].extract_text()
+
+
+def test_compress_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+
+    with pytest.raises(EncryptedPDFError):
+        CompressPDF().run(str(encrypted_path), str(tmp_path / "out.pdf"))

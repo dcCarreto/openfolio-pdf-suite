@@ -1,15 +1,15 @@
 """Metadados de arquivos PDF."""
 
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfWriter
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader
 
 
 class ReadMetadata(PDFOperation):
     """Lê os metadados de um PDF."""
 
     def run(self, input_path: str) -> dict:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         metadata = reader.metadata or {}
         return {
             "title": metadata.get("/Title", "") or "",
@@ -35,7 +35,7 @@ class SetMetadata(PDFOperation):
         subject: str | None = None,
         keywords: str | None = None,
     ) -> None:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         writer = PdfWriter()
         for page in reader.pages:
             writer.add_page(page)

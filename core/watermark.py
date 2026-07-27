@@ -6,7 +6,7 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.lib.colors import Color
 from reportlab.pdfgen import canvas
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader
 
 
 class AddWatermark(PDFOperation):
@@ -21,7 +21,7 @@ class AddWatermark(PDFOperation):
         font_size: int = 40,
         rotation: float = 45,
     ) -> None:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         writer = PdfWriter()
 
         for page in reader.pages:

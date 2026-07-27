@@ -31,9 +31,8 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers
 from pyhanko.sign.validation import validate_pdf_signature
-from pypdf import PdfReader
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader, require_valid_page_index
 
 _STAMP_WIDTH = 175
 _STAMP_HEIGHT = 50
@@ -132,7 +131,9 @@ class SignDocument(PDFOperation):
                     "Informe um certificado .pfx ou os dados para gerar um certificado de teste."
                 )
 
-            page = PdfReader(input_path).pages[page_index]
+            reader = open_reader(input_path)
+            require_valid_page_index(len(reader.pages), page_index)
+            page = reader.pages[page_index]
             width, height = float(page.mediabox.width), float(page.mediabox.height)
             box = _POSITIONS[position](width, height)
 

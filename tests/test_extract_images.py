@@ -1,5 +1,7 @@
+import pytest
 from PIL import Image
 
+from core.base import EncryptedPDFError
 from core.convert import ConvertFromImages
 from core.extract_images import ExtractImages
 
@@ -26,3 +28,10 @@ def test_extract_images_returns_empty_list_when_no_images(make_pdf, tmp_path):
     output_paths = ExtractImages().run(str(pdf_path), str(output_dir))
 
     assert output_paths == []
+
+
+def test_extract_images_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+
+    with pytest.raises(EncryptedPDFError):
+        ExtractImages().run(str(encrypted_path), str(tmp_path / "extracted"))

@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfWriter
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader
 
 
 class SplitPDF(PDFOperation):
@@ -15,7 +15,7 @@ class SplitPDF(PDFOperation):
     ) -> list[str]:
         if pages_per_file < 1:
             raise ValueError("pages_per_file deve ser maior ou igual a 1.")
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         stem = Path(input_path).stem
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(parents=True, exist_ok=True)

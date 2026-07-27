@@ -11,6 +11,7 @@ from pypdf import PdfReader
 from reportlab.pdfgen import canvas as rl_canvas
 
 from core import ocr
+from core.base import EncryptedPDFError
 
 
 def _make_pdf_with_text(path, text: str) -> None:
@@ -63,6 +64,14 @@ def test_run_raises_when_tesseract_missing(monkeypatch, tmp_path):
 
     with pytest.raises(RuntimeError):
         ocr.OCRDocument().run(str(path), str(tmp_path / "out.pdf"))
+
+
+def test_run_rejects_encrypted_input(monkeypatch, make_encrypted_pdf, tmp_path):
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+
+    with pytest.raises(EncryptedPDFError):
+        ocr.OCRDocument().run(str(encrypted_path), str(tmp_path / "out.pdf"))
 
 
 def test_run_skips_pages_that_already_have_text(monkeypatch, tmp_path):

@@ -1,6 +1,7 @@
 import pytest
 from pypdf import PdfReader
 
+from core.base import EncryptedPDFError
 from core.create import CreateBlankPDF
 from core.form_fields import AddFormField
 
@@ -93,4 +94,23 @@ def test_rejects_invalid_field_type(tmp_path):
             x=0,
             y=0,
             field_type="invalido",
+        )
+
+
+def test_rejects_out_of_range_page_number(tmp_path):
+    pdf_path = tmp_path / "doc.pdf"
+    CreateBlankPDF().run(str(pdf_path), page_count=1)
+
+    with pytest.raises(ValueError):
+        AddFormField().run(
+            str(pdf_path), str(tmp_path / "out.pdf"), field_name="x", page_number=5, x=0, y=0
+        )
+
+
+def test_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+
+    with pytest.raises(EncryptedPDFError):
+        AddFormField().run(
+            str(encrypted_path), str(tmp_path / "out.pdf"), field_name="x", page_number=0, x=0, y=0
         )

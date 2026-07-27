@@ -1,15 +1,15 @@
 """Compressão de arquivos PDF."""
 
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfWriter
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader
 
 
 class CompressPDF(PDFOperation):
     """Reduz o tamanho de um arquivo PDF recomprimindo conteúdo e removendo objetos duplicados."""
 
     def run(self, input_path: str, output_path: str) -> None:
-        reader = PdfReader(input_path)
+        reader = open_reader(input_path)
         writer = PdfWriter()
         for page in reader.pages:
             added_page = writer.add_page(page)

@@ -1,6 +1,7 @@
 import pytest
 from pypdf import PdfReader
 
+from core.base import EncryptedPDFError
 from core.merge import MergePDF
 
 
@@ -32,3 +33,12 @@ def test_merge_with_empty_list_raises(tmp_path):
 
     with pytest.raises(ValueError):
         MergePDF().run([], str(output_path))
+
+
+def test_merge_rejects_encrypted_input(make_pdf, make_encrypted_pdf, tmp_path):
+    pdf_a = make_pdf("a.pdf", [(200, 200)])
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+    output_path = tmp_path / "merged.pdf"
+
+    with pytest.raises(EncryptedPDFError):
+        MergePDF().run([str(pdf_a), str(encrypted_path)], str(output_path))

@@ -12,7 +12,7 @@ from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, BooleanObject, NameObject
 from reportlab.pdfgen import canvas
 
-from .base import PDFOperation
+from .base import PDFOperation, open_reader, require_valid_page_index
 
 _VALID_FIELD_TYPES = ("text", "checkbox")
 
@@ -35,6 +35,9 @@ class AddFormField(PDFOperation):
     ) -> None:
         if field_type not in _VALID_FIELD_TYPES:
             raise ValueError(f"field_type inválido: {field_type}")
+
+        reader = open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
+        require_valid_page_index(len(reader.pages), page_number)
 
         writer = PdfWriter(clone_from=input_path)
         target_page = writer.pages[page_number]
