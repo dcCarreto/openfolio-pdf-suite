@@ -49,8 +49,9 @@ servidor nenhum e sem paywall. Tudo roda localmente, na sua máquina.
 A navegação é feita por uma barra lateral com ícone e descrição de cada ferramenta. No centro
 fica o visualizador — sempre visível, com miniaturas, zoom, rolagem contínua ou página única e
 busca de texto — e é nele que você desenha as anotações e marca as áreas de redação
-diretamente sobre a página. À direita, cada seção tem seus próprios campos de entrada/saída e
-botão de ação.
+diretamente sobre a página. Se o PDF estiver protegido por senha, o próprio visualizador pede
+a senha na hora de abrir. À direita, cada seção tem seus próprios campos de entrada/saída e
+botão de ação — o campo de saída já vem com um nome sugerido a partir do arquivo de entrada.
 
 ## Por trás do projeto
 
@@ -260,7 +261,8 @@ escolher a ferramenta desejada na barra lateral.
 
 ```text
 core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
-  base.py          Classe base PDFOperation
+  base.py          Classe base PDFOperation e validações compartilhadas (PDF protegido por
+                   senha, índice de página fora do intervalo)
   merge.py, split.py, pages.py, compress.py, convert.py, ...
   annotations.py   Anotações reais (Highlight/Underline/StrikeOut/Ink/Stamp) via pypdf
   ocr.py           Reconhecimento de texto (Tesseract) com camada de texto invisível
@@ -306,7 +308,9 @@ pytest
 ```
 
 Todos os módulos de `core/` têm testes cobrindo o comportamento esperado, e há um teste de
-fumaça que garante que a janela principal monta todas as seções sem erros.
+fumaça que garante que a janela principal monta todas as seções sem erros. A suíte também
+roda automaticamente a cada push em `main` e a cada pull request, em Windows, Linux e macOS
+(veja [.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
 ## Contribuição
 
