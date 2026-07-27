@@ -80,6 +80,14 @@ def _pdf_with_hidden_data(path) -> None:
         page_number=0,
         annotation=Highlight(rect=(40, 240, 200, 260), quad_points=quads, highlight_color="ffeb3b"),
     )
+    writer.add_annotation(
+        page_number=0,
+        annotation={
+            "/Subtype": "/Link",
+            "/Rect": [40, 200, 200, 220],
+            "/A": {"/S": "/JavaScript", "/JS": 'app.alert("annotation js");'},
+        },
+    )
     with open(path, "wb") as f:
         writer.write(f)
 
@@ -96,6 +104,24 @@ def test_sanitize_default_removes_metadata_js_and_attachments_but_keeps_annotati
     assert list(reader.attachments.keys()) == []
     assert reader.pages[0].get("/Annots") is not None
     assert "Conteudo visivel do documento" in reader.pages[0].extract_text()
+
+
+def test_sanitize_removes_javascript_embedded_in_annotation_actions(tmp_path):
+    path_in = tmp_path / "loaded.pdf"
+    _pdf_with_hidden_data(path_in)
+    path_out = tmp_path / "out.pdf"
+
+    SanitizeDocument().run(str(path_in), str(path_out))
+
+    reader = PdfReader(str(path_out))
+    annots = [ref.get_object() for ref in reader.pages[0]["/Annots"]]
+    link = next(a for a in annots if a["/Subtype"] == "/Link")
+
+    # A anotação de link continua lá (remove_annotations=False por padrão), mas a ação de
+    # JavaScript embutida nela foi removida — é exatamente o conteúdo que "sanitizar" promete
+    # sempre eliminar, mesmo quando as anotações em si são preservadas.
+    assert "/A" not in link
+    assert any(a["/Subtype"] == "/Highlight" for a in annots)
 
 
 def test_sanitize_can_keep_metadata_and_remove_annotations(tmp_path):

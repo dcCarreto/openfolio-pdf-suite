@@ -13,9 +13,12 @@ Efeito colateral aceito: a página inteira perde a camada de texto pesquisável,
 Sanitizar: um PdfWriter novo (sem clone_from) já não carrega metadados, JavaScript nem
 anexos do documento original (eles vivem em `/Info` e `/Names`, no catálogo, que só existem
 no resultado se algo os adicionar de volta) — confirmado empiricamente nesta sessão com um
-PDF de teste contendo os três. JavaScript e anexos são sempre removidos (não faz sentido
-uma ferramenta de sanitização manter JavaScript escondido de propósito); metadados e
-anotações/comentários são opcionais porque o usuário pode querer preservá-los.
+PDF de teste contendo os três. Isso cobre JavaScript em nível de documento, mas não
+JavaScript embutido em ações de anotação (`/A` de um Link, ou `/AA` de um campo de
+formulário), que sobrevive à cópia normal da página quando `remove_annotations=False` — por
+isso essas ações são varridas anotação por anotação, à parte, para que a garantia "JavaScript
+é sempre removido" valha de verdade. Metadados e anotações/comentários (sem JS) são opcionais
+porque o usuário pode querer preservá-los.
 """
 
 import io
@@ -83,6 +86,31 @@ class RedactDocument(PDFOperation):
         return pages_redacted
 
 
+def _is_javascript_action(action) -> bool:
+    return action is not None and action.get_object().get("/S") == "/JavaScript"
+
+
+def _strip_annotation_javascript(annotation_ref) -> None:
+    """Remove ações de JavaScript de uma anotação, preservando o restante (link, aparência etc.).
+
+    `/A` dispara ao ativar a anotação (ex.: clicar num Link); `/AA` é o dicionário de "ações
+    adicionais" por evento (ex.: campos de formulário disparando JS em keystroke/format/
+    validate/calculate). Qualquer uma das duas pode carregar uma ação de Subtype /JavaScript.
+    """
+    annotation = annotation_ref.get_object()
+
+    action = annotation.get("/A")
+    if _is_javascript_action(action):
+        del annotation["/A"]
+
+    additional_actions = annotation.get("/AA")
+    if additional_actions is not None:
+        aa = additional_actions.get_object()
+        for trigger in list(aa.keys()):
+            if _is_javascript_action(aa[trigger]):
+                del aa[trigger]
+
+
 class SanitizeDocument(PDFOperation):
     """Remove metadados, JavaScript, anexos e (opcionalmente) anotações de um PDF."""
 
@@ -99,6 +127,9 @@ class SanitizeDocument(PDFOperation):
         for page in reader.pages:
             if remove_annotations and "/Annots" in page:
                 del page["/Annots"]
+            elif "/Annots" in page:
+                for annotation_ref in page["/Annots"]:
+                    _strip_annotation_javascript(annotation_ref)
             writer.add_page(page)
 
         if not remove_metadata and reader.metadata:
