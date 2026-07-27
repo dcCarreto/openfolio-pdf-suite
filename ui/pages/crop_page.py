@@ -50,7 +50,9 @@ class CropPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.crop_output_picker = FilePicker(mode="save")
+        self.crop_output_picker = FilePicker(
+            mode="save", suggested_source=self.session.path, suggested_suffix="cortado"
+        )
 
         self.left_spin = self._margin_spin()
         self.bottom_spin = self._margin_spin()
@@ -78,7 +80,9 @@ class CropPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.scale_output_picker = FilePicker(mode="save")
+        self.scale_output_picker = FilePicker(
+            mode="save", suggested_source=self.session.path, suggested_suffix="redimensionado"
+        )
 
         self.scale_size_combo = QComboBox()
         self.scale_size_combo.addItems([tr(label) for label in _SIZE_LABELS])

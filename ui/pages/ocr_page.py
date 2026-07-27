@@ -46,7 +46,9 @@ class OCRPage(QWidget):
         self.tesseract_note.setWordWrap(True)
         self._update_tesseract_note()
 
-        self.output_picker = FilePicker(mode="save")
+        self.output_picker = FilePicker(
+            mode="save", suggested_source=session.path, suggested_suffix="ocr"
+        )
         self.apply_button = QPushButton(tr("Reconhecer texto"))
         self.apply_button.clicked.connect(self._apply)
         self.apply_button.setEnabled(find_tesseract() is not None and bool(self._languages))

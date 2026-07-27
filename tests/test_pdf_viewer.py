@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pypdfium2 as pdfium
 import pytest
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox
 from reportlab.pdfgen import canvas as rl_canvas
 
 from core.annotations import AddAnnotations, AnnotationSpec
@@ -81,17 +81,75 @@ def test_viewer_loads_immediately_if_session_already_has_a_path(three_page_pdf):
     assert viewer.thumbnail_list.count() == 3
 
 
-def test_viewer_handles_password_protected_pdf_without_crashing(three_page_pdf, tmp_path, monkeypatch):
+def test_viewer_prompts_for_password_and_opens_on_correct_password(three_page_pdf, tmp_path, monkeypatch):
     _app()
     protected_path = tmp_path / "protected.pdf"
     ProtectPDF().run(str(three_page_pdf), str(protected_path), password="segredo123")
 
-    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        QInputDialog, "getText", staticmethod(lambda *args, **kwargs: ("segredo123", True))
+    )
 
     session = DocumentSession()
     viewer = PdfViewer(session, AnnotationState(), RedactionState())
 
     session.open(str(protected_path))
+
+    assert viewer.content_stack.currentIndex() == 1
+    assert viewer.thumbnail_list.count() == 3
+
+
+def test_viewer_retries_password_prompt_after_wrong_password(three_page_pdf, tmp_path, monkeypatch):
+    _app()
+    protected_path = tmp_path / "protected.pdf"
+    ProtectPDF().run(str(three_page_pdf), str(protected_path), password="segredo123")
+
+    attempts = iter([("senha-errada", True), ("segredo123", True)])
+    monkeypatch.setattr(QInputDialog, "getText", staticmethod(lambda *args, **kwargs: next(attempts)))
+
+    session = DocumentSession()
+    viewer = PdfViewer(session, AnnotationState(), RedactionState())
+
+    session.open(str(protected_path))
+
+    assert viewer.content_stack.currentIndex() == 1
+    assert viewer.thumbnail_list.count() == 3
+
+
+def test_viewer_handles_password_protected_pdf_without_crashing_when_user_cancels(
+    three_page_pdf, tmp_path, monkeypatch
+):
+    _app()
+    protected_path = tmp_path / "protected.pdf"
+    ProtectPDF().run(str(three_page_pdf), str(protected_path), password="segredo123")
+
+    monkeypatch.setattr(QInputDialog, "getText", staticmethod(lambda *args, **kwargs: ("", False)))
+
+    session = DocumentSession()
+    viewer = PdfViewer(session, AnnotationState(), RedactionState())
+
+    session.open(str(protected_path))
+
+    assert viewer.content_stack.currentIndex() == 0
+    assert viewer._document is None
+
+
+def test_viewer_shows_error_for_corrupted_pdf_without_prompting_password(tmp_path, monkeypatch):
+    _app()
+    garbage_path = tmp_path / "garbage.pdf"
+    garbage_path.write_bytes(b"isto nao e um pdf de verdade")
+
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: None)
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("nao deveria pedir senha para um PDF corrompido (nao criptografado)")
+
+    monkeypatch.setattr(QInputDialog, "getText", staticmethod(_fail_if_called))
+
+    session = DocumentSession()
+    viewer = PdfViewer(session, AnnotationState(), RedactionState())
+
+    session.open(str(garbage_path))
 
     assert viewer.content_stack.currentIndex() == 0
     assert viewer._document is None

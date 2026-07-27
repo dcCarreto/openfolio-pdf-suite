@@ -46,7 +46,10 @@ class ProtectPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        output_picker = FilePicker(mode="save")
+        suffix = "protegido" if kind == "Proteger" else "sem_senha"
+        output_picker = FilePicker(
+            mode="save", suggested_source=self.session.path, suggested_suffix=suffix
+        )
         password_edit = QLineEdit()
         password_edit.setEchoMode(QLineEdit.EchoMode.Password)
         password_edit.setPlaceholderText(tr("Senha"))

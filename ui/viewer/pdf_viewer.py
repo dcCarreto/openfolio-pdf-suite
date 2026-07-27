@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -261,20 +262,8 @@ class PdfViewer(QWidget):
             self._update_page_indicator()
             return
 
-        try:
-            document = pdfium.PdfDocument(path)
-            # Sem isso, carimbos de assinatura e campos de formulário (AcroForm) não aparecem
-            # no render: draw_annots=True sozinho não é suficiente para widgets de formulário.
-            document.init_forms()
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Abrir PDF"),
-                tr(
-                    "Não foi possível abrir o PDF no visualizador (pode estar protegido "
-                    "por senha ou corrompido): {error}"
-                ).format(error=exc),
-            )
+        document = self._open_document_with_password_prompt(path)
+        if document is None:
             self.content_stack.setCurrentIndex(0)
             self.thumbnail_list.hide()
             self._set_document_controls_enabled(False)
@@ -295,6 +284,50 @@ class PdfViewer(QWidget):
         self.thumbnail_list.setVisible(self._show_thumbnails)
         self.content_stack.setCurrentIndex(1)
         self._rebuild_canvas()
+
+    def _open_document_with_password_prompt(self, path: str):
+        """Abre o PDF em `path`, pedindo a senha ao usuário se estiver protegido.
+
+        Repete o prompt em caso de senha errada, até o usuário acertar ou cancelar. Para
+        qualquer outro tipo de falha (arquivo corrompido, formato inválido) mostra um erro
+        e desiste sem pedir senha nenhuma. Retorna None se não foi possível abrir o PDF.
+        """
+        password = None
+        while True:
+            try:
+                document = pdfium.PdfDocument(path, password=password)
+                # Sem isso, carimbos de assinatura e campos de formulário (AcroForm) não
+                # aparecem no render: draw_annots=True sozinho não é suficiente para
+                # widgets de formulário.
+                document.init_forms()
+                return document
+            except pdfium.PdfiumError as exc:
+                if exc.err_code != pdfium.raw.FPDF_ERR_PASSWORD:
+                    QMessageBox.critical(
+                        self,
+                        tr("Abrir PDF"),
+                        tr("Não foi possível abrir o PDF (pode estar corrompido): {error}").format(
+                            error=exc
+                        ),
+                    )
+                    return None
+
+                prompt = (
+                    tr("Senha incorreta. Tente novamente:")
+                    if password is not None
+                    else tr("Este PDF está protegido por senha. Digite a senha para abri-lo:")
+                )
+                entered, ok = QInputDialog.getText(
+                    self, tr("PDF protegido por senha"), prompt, QLineEdit.EchoMode.Password
+                )
+                if not ok:
+                    return None
+                password = entered
+            except Exception as exc:
+                QMessageBox.critical(
+                    self, tr("Abrir PDF"), tr("Não foi possível abrir o PDF: {error}").format(error=exc)
+                )
+                return None
 
     # -- renderização --------------------------------------------------------
 

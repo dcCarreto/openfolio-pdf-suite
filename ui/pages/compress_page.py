@@ -18,7 +18,9 @@ class CompressPage(QWidget):
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
-        self.output_picker = FilePicker(mode="save")
+        self.output_picker = FilePicker(
+            mode="save", suggested_source=session.path, suggested_suffix="comprimido"
+        )
 
         compress_button = QPushButton(tr("Comprimir"))
         compress_button.clicked.connect(self._compress)

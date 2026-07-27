@@ -35,7 +35,7 @@ class PagesPage(QWidget):
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
-        self.output_picker = FilePicker(mode="save")
+        self.output_picker = FilePicker(mode="save", suggested_source=session.path)
 
         self.operation_combo = QComboBox()
         self.operation_combo.addItems([tr(op) for op in _OPERATIONS])

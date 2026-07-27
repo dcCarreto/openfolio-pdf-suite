@@ -104,7 +104,9 @@ class AnnotationsPage(QWidget):
         annotation_state.pending_changed.connect(self._update_pending_label)
         self._update_pending_label()
 
-        self.output_picker = FilePicker(mode="save")
+        self.output_picker = FilePicker(
+            mode="save", suggested_source=session.path, suggested_suffix="anotado"
+        )
         save_button = QPushButton(tr("Salvar anotações"))
         save_button.clicked.connect(self._save)
 

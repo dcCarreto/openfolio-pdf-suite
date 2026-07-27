@@ -18,7 +18,11 @@ class MergePage(QWidget):
         self.file_list_editor = FileListEditor(
             dialog_caption=tr("Selecionar PDFs"), file_filter="PDF (*.pdf)"
         )
-        self.output_picker = FilePicker(mode="save")
+        self.output_picker = FilePicker(
+            mode="save",
+            suggested_source=lambda: (self.file_list_editor.paths() or [None])[0],
+            suggested_suffix="mesclado",
+        )
 
         merge_button = QPushButton(tr("Mesclar"))
         merge_button.clicked.connect(self._merge)

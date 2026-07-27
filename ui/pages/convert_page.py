@@ -74,7 +74,11 @@ class ConvertPage(QWidget):
             dialog_caption=tr("Selecionar imagens"),
             file_filter="Imagens (*.png *.jpg *.jpeg *.bmp *.tiff *.webp)",
         )
-        self.pdf_output_picker = FilePicker(mode="save")
+        self.pdf_output_picker = FilePicker(
+            mode="save",
+            suggested_source=lambda: (self.image_list_editor.paths() or [None])[0],
+            suggested_suffix="convertido",
+        )
         convert_button = QPushButton(tr("Converter"))
         convert_button.clicked.connect(self._convert_from_images)
 
@@ -93,7 +97,11 @@ class ConvertPage(QWidget):
         self.office_input_picker = FilePicker(
             mode="open", file_filter="Documentos do Office (*.docx *.xlsx *.xls *.pptx)"
         )
-        self.office_output_picker = FilePicker(mode="save")
+        self.office_output_picker = FilePicker(
+            mode="save",
+            suggested_source=self.office_input_picker.path,
+            suggested_suffix="convertido",
+        )
 
         if find_libreoffice():
             engine_note = tr("LibreOffice encontrado: a conversão preserva a formatação original.")
@@ -122,7 +130,9 @@ class ConvertPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.xml_input_picker = FilePicker(mode="open", file_filter="XML (*.xml)")
-        self.xml_output_picker = FilePicker(mode="save")
+        self.xml_output_picker = FilePicker(
+            mode="save", suggested_source=self.xml_input_picker.path, suggested_suffix="convertido"
+        )
         convert_button = QPushButton(tr("Converter"))
         convert_button.clicked.connect(self._convert_xml)
 

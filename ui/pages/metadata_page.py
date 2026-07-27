@@ -28,7 +28,9 @@ class MetadataPage(QWidget):
         self.keywords_edit = QLineEdit()
         self.keywords_edit.setPlaceholderText(tr("Separadas por vírgula"))
 
-        self.output_picker = FilePicker(mode="save")
+        self.output_picker = FilePicker(
+            mode="save", suggested_source=session.path, suggested_suffix="metadados"
+        )
         save_button = QPushButton(tr("Salvar"))
         save_button.clicked.connect(self._save)
 

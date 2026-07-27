@@ -74,7 +74,9 @@ class SignaturePage(QWidget):
         self.position_combo = QComboBox()
         self.position_combo.addItems([tr(label) for label in _POSITION_LABELS])
 
-        self.sign_output_picker = FilePicker(mode="save")
+        self.sign_output_picker = FilePicker(
+            mode="save", suggested_source=self.session.path, suggested_suffix="assinado"
+        )
         sign_button = QPushButton(tr("Assinar"))
         sign_button.clicked.connect(self._apply_sign)
 

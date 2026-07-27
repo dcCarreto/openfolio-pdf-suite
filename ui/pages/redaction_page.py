@@ -65,7 +65,9 @@ class RedactionPage(QWidget):
         clear_button = QPushButton(tr("Limpar pendentes"))
         clear_button.clicked.connect(self.redaction_state.clear_pending)
 
-        self.redact_output_picker = FilePicker(mode="save")
+        self.redact_output_picker = FilePicker(
+            mode="save", suggested_source=self.session.path, suggested_suffix="redigido"
+        )
         redact_button = QPushButton(tr("Aplicar redação"))
         redact_button.clicked.connect(self._apply_redaction)
 
@@ -90,7 +92,9 @@ class RedactionPage(QWidget):
         note = QLabel(tr("JavaScript e anexos embutidos são sempre removidos."))
         note.setWordWrap(True)
 
-        self.sanitize_output_picker = FilePicker(mode="save")
+        self.sanitize_output_picker = FilePicker(
+            mode="save", suggested_source=self.session.path, suggested_suffix="sanitizado"
+        )
         sanitize_button = QPushButton(tr("Sanitizar"))
         sanitize_button.clicked.connect(self._apply_sanitize)
 
@@ -124,6 +128,19 @@ class RedactionPage(QWidget):
             QMessageBox.warning(
                 self, tr("Redigir"), tr("Marque pelo menos uma área no visualizador antes de aplicar.")
             )
+            return
+
+        confirmation = QMessageBox.question(
+            self,
+            tr("Redigir"),
+            tr(
+                "A redação é irreversível: cada página marcada vira uma imagem achatada e "
+                "perde toda a camada de texto pesquisável, não só a área marcada. Continuar?"
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirmation != QMessageBox.StandardButton.Yes:
             return
 
         try:

@@ -31,7 +31,9 @@ class FormFieldsPage(QWidget):
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
-        self.output_picker = FilePicker(mode="save")
+        self.output_picker = FilePicker(
+            mode="save", suggested_source=session.path, suggested_suffix="com_campo"
+        )
 
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText(tr("Nome do campo, ex: nome_completo"))
