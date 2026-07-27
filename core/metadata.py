@@ -20,28 +20,37 @@ class ReadMetadata(PDFOperation):
 
 
 class SetMetadata(PDFOperation):
-    """Atualiza os metadados de um PDF."""
+    """Atualiza os metadados de um PDF.
+
+    Campos não informados (None) preservam o valor já existente no documento;
+    para apagar um campo, passe uma string vazia explicitamente.
+    """
 
     def run(
         self,
         input_path: str,
         output_path: str,
-        title: str = "",
-        author: str = "",
-        subject: str = "",
-        keywords: str = "",
+        title: str | None = None,
+        author: str | None = None,
+        subject: str | None = None,
+        keywords: str | None = None,
     ) -> None:
         reader = PdfReader(input_path)
         writer = PdfWriter()
         for page in reader.pages:
             writer.add_page(page)
 
+        existing = reader.metadata or {}
+
+        def resolved(value: str | None, key: str) -> str:
+            return (existing.get(key) or "") if value is None else value
+
         writer.add_metadata(
             {
-                "/Title": title,
-                "/Author": author,
-                "/Subject": subject,
-                "/Keywords": keywords,
+                "/Title": resolved(title, "/Title"),
+                "/Author": resolved(author, "/Author"),
+                "/Subject": resolved(subject, "/Subject"),
+                "/Keywords": resolved(keywords, "/Keywords"),
             }
         )
 

@@ -43,8 +43,13 @@ class RemovePages(PDFOperation):
 
     def run(self, input_path: str, output_path: str, pages: list[int]) -> None:
         reader = PdfReader(input_path)
-        writer = PdfWriter()
+        total_pages = len(reader.pages)
         pages_to_remove = set(pages)
+        remaining = total_pages - len(pages_to_remove.intersection(range(total_pages)))
+        if remaining < 1:
+            raise ValueError("A remoção resultaria em um PDF sem nenhuma página.")
+
+        writer = PdfWriter()
         for index, page in enumerate(reader.pages):
             if index not in pages_to_remove:
                 writer.add_page(page)

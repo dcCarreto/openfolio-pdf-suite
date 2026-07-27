@@ -13,6 +13,8 @@ class SplitPDF(PDFOperation):
     def run(
         self, input_path: str, output_dir: str, pages_per_file: int = 1
     ) -> list[str]:
+        if pages_per_file < 1:
+            raise ValueError("pages_per_file deve ser maior ou igual a 1.")
         reader = PdfReader(input_path)
         stem = Path(input_path).stem
         output_dir_path = Path(output_dir)

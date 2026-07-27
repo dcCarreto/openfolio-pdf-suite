@@ -32,6 +32,8 @@ class ConvertFromImages(PDFOperation):
     """Converte um conjunto de imagens em um PDF."""
 
     def run(self, input_paths: list[str], output_path: str) -> None:
+        if not input_paths:
+            raise ValueError("Informe ao menos uma imagem para converter.")
         images = [Image.open(path).convert("RGB") for path in input_paths]
         first_image, remaining_images = images[0], images[1:]
         first_image.save(output_path, save_all=True, append_images=remaining_images)

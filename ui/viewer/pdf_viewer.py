@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QStackedWidget,
@@ -260,10 +261,27 @@ class PdfViewer(QWidget):
             self._update_page_indicator()
             return
 
-        self._document = pdfium.PdfDocument(path)
-        # Sem isso, carimbos de assinatura e campos de formulário (AcroForm) não aparecem
-        # no render: draw_annots=True sozinho não é suficiente para widgets de formulário.
-        self._document.init_forms()
+        try:
+            document = pdfium.PdfDocument(path)
+            # Sem isso, carimbos de assinatura e campos de formulário (AcroForm) não aparecem
+            # no render: draw_annots=True sozinho não é suficiente para widgets de formulário.
+            document.init_forms()
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                tr("Abrir PDF"),
+                tr(
+                    "Não foi possível abrir o PDF no visualizador (pode estar protegido "
+                    "por senha ou corrompido): {error}"
+                ).format(error=exc),
+            )
+            self.content_stack.setCurrentIndex(0)
+            self.thumbnail_list.hide()
+            self._set_document_controls_enabled(False)
+            self._update_page_indicator()
+            return
+
+        self._document = document
         self._search = DocumentSearch(self._document)
         self._matches = []
         self._current_match = -1

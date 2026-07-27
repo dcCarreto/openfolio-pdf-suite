@@ -1,3 +1,4 @@
+import pytest
 from pypdf import PdfReader
 
 from core.crop import CropPages, ScalePages
@@ -25,3 +26,11 @@ def test_scale_resizes_pages(make_pdf, tmp_path):
     page = reader.pages[0]
     assert round(float(page.mediabox.width)) == 100
     assert round(float(page.mediabox.height)) == 150
+
+
+def test_crop_raises_when_margins_exceed_page_size(make_pdf, tmp_path):
+    pdf_path = make_pdf("doc.pdf", [(200, 200)])
+    output_path = tmp_path / "cropped.pdf"
+
+    with pytest.raises(ValueError):
+        CropPages().run(str(pdf_path), str(output_path), left=1000, right=1000)

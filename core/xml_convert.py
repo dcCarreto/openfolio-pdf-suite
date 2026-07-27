@@ -12,8 +12,15 @@ class ConvertXMLToPDF(PDFOperation):
     """Converte um arquivo XML para PDF, imprimindo o conteúdo indentado como texto."""
 
     def run(self, input_path: str, output_path: str, font_size: int = 8) -> None:
-        with open(input_path, "r", encoding="utf-8") as f:
-            raw = f.read()
+        with open(input_path, "rb") as f:
+            raw_bytes = f.read()
+
+        try:
+            raw = raw_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            # latin-1 mapeia todo byte 0-255, então nunca falha; é o fallback mais
+            # seguro para XML legado que não declara (ou não segue) UTF-8.
+            raw = raw_bytes.decode("latin-1")
 
         try:
             pretty = xml.dom.minidom.parseString(raw).toprettyxml(indent="  ")

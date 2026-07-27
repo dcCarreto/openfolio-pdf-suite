@@ -95,7 +95,10 @@ def spec_rect(spec: AnnotationSpec) -> tuple[float, float, float, float]:
 def _make_appearance_stream(writer: PdfWriter, rect, content: str, needs_font: bool = False):
     """Registra uma appearance stream (Form XObject) no writer e retorna sua referência."""
     stream = DecodedStreamObject()
-    stream.set_data(content.encode("latin-1"))
+    # A appearance stream usa uma fonte base14 (WinAnsi/Latin-1); caracteres fora
+    # desse repertório (emoji, CJK, etc.) não seriam desenhados de qualquer forma,
+    # então são substituídos em vez de derrubar a gravação da anotação inteira.
+    stream.set_data(content.encode("latin-1", errors="replace"))
 
     resources = DictionaryObject()
     if needs_font:

@@ -26,7 +26,8 @@ class UnlockPDF(PDFOperation):
     def run(self, input_path: str, output_path: str, password: str) -> None:
         reader = PdfReader(input_path)
         if reader.is_encrypted:
-            reader.decrypt(password)
+            if not reader.decrypt(password):
+                raise ValueError("Senha incorreta.")
 
         writer = PdfWriter()
         for page in reader.pages:

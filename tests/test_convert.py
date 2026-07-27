@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from PIL import Image
 from pypdf import PdfReader
 
@@ -30,3 +31,10 @@ def test_convert_from_images_creates_multi_page_pdf(tmp_path):
 
     reader = PdfReader(str(output_path))
     assert len(reader.pages) == len(colors)
+
+
+def test_convert_from_images_with_empty_list_raises(tmp_path):
+    output_path = tmp_path / "out.pdf"
+
+    with pytest.raises(ValueError):
+        ConvertFromImages().run([], str(output_path))

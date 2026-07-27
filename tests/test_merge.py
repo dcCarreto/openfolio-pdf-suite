@@ -1,3 +1,4 @@
+import pytest
 from pypdf import PdfReader
 
 from core.merge import MergePDF
@@ -24,3 +25,10 @@ def test_merge_single_file_is_a_copy(make_pdf, tmp_path):
 
     reader = PdfReader(str(output_path))
     assert len(reader.pages) == 1
+
+
+def test_merge_with_empty_list_raises(tmp_path):
+    output_path = tmp_path / "merged.pdf"
+
+    with pytest.raises(ValueError):
+        MergePDF().run([], str(output_path))

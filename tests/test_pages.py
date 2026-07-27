@@ -1,3 +1,4 @@
+import pytest
 from pypdf import PdfReader
 
 from core.pages import RemovePages, ReorderPages, RotatePages
@@ -43,3 +44,11 @@ def test_remove_pages(make_pdf, tmp_path):
     reader = PdfReader(str(output_path))
     widths = [int(page.mediabox.width) for page in reader.pages]
     assert widths == [100, 300]
+
+
+def test_remove_all_pages_raises(make_pdf, tmp_path):
+    pdf_path = make_pdf("doc.pdf", [(100, 100), (200, 200)])
+    output_path = tmp_path / "removed.pdf"
+
+    with pytest.raises(ValueError):
+        RemovePages().run(str(pdf_path), str(output_path), pages=[0, 1])

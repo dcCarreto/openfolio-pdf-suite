@@ -9,6 +9,8 @@ class MergePDF(PDFOperation):
     """Mescla uma lista de arquivos PDF em um único arquivo de saída."""
 
     def run(self, input_paths: list[str], output_path: str) -> None:
+        if not input_paths:
+            raise ValueError("Informe ao menos um arquivo PDF para mesclar.")
         writer = PdfWriter()
         for path in input_paths:
             writer.append(path)

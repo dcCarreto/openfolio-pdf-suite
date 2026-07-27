@@ -26,3 +26,14 @@ def test_convert_invalid_xml_falls_back_to_raw_text(tmp_path):
 
     reader = PdfReader(str(output_path))
     assert len(reader.pages) >= 1
+
+
+def test_convert_xml_with_non_utf8_encoding_does_not_crash(tmp_path):
+    xml_path = tmp_path / "latin1.xml"
+    xml_path.write_bytes("<root>café com ção</root>".encode("latin-1"))
+
+    output_path = tmp_path / "latin1.pdf"
+    ConvertXMLToPDF().run(str(xml_path), str(output_path))
+
+    reader = PdfReader(str(output_path))
+    assert len(reader.pages) >= 1

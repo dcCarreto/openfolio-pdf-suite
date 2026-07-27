@@ -27,3 +27,40 @@ def test_read_metadata_on_document_without_metadata(make_pdf):
     metadata = ReadMetadata().run(str(pdf_path))
 
     assert metadata == {"title": "", "author": "", "subject": "", "keywords": ""}
+
+
+def test_set_metadata_preserves_omitted_fields(make_pdf, tmp_path):
+    pdf_path = make_pdf("doc.pdf", [(200, 200)])
+    first_pass = tmp_path / "first.pdf"
+    second_pass = tmp_path / "second.pdf"
+
+    SetMetadata().run(
+        str(pdf_path),
+        str(first_pass),
+        title="Título original",
+        author="Autor original",
+        subject="Assunto original",
+        keywords="original",
+    )
+
+    # Só o título é informado na segunda chamada; os demais campos devem
+    # permanecer com o valor gravado na primeira passada, não virar "".
+    SetMetadata().run(str(first_pass), str(second_pass), title="Título novo")
+
+    metadata = ReadMetadata().run(str(second_pass))
+    assert metadata["title"] == "Título novo"
+    assert metadata["author"] == "Autor original"
+    assert metadata["subject"] == "Assunto original"
+    assert metadata["keywords"] == "original"
+
+
+def test_set_metadata_with_explicit_empty_string_clears_field(make_pdf, tmp_path):
+    pdf_path = make_pdf("doc.pdf", [(200, 200)])
+    first_pass = tmp_path / "first.pdf"
+    second_pass = tmp_path / "second.pdf"
+
+    SetMetadata().run(str(pdf_path), str(first_pass), title="Título original")
+    SetMetadata().run(str(first_pass), str(second_pass), title="")
+
+    metadata = ReadMetadata().run(str(second_pass))
+    assert metadata["title"] == ""

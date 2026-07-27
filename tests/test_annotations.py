@@ -82,6 +82,21 @@ def test_spec_rect_matches_kind_geometry():
     assert right > left and top > bottom
 
 
+def test_stamp_with_non_latin1_text_does_not_crash(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    path_out = tmp_path / "doc_out.pdf"
+    _make_pdf(path_in, "texto de exemplo")
+
+    spec = AnnotationSpec(
+        page_index=0, kind="stamp", color="f44336", position=(100, 100), text="日本語 🎉"
+    )
+    AddAnnotations().run(str(path_in), str(path_out), [spec])
+
+    by_subtype = _annotations_by_subtype(path_out)
+    appearance = by_subtype["/FreeText"]["/AP"]["/N"].get_object()
+    assert len(appearance.get_data()) > 0
+
+
 def test_add_annotations_preserves_page_count(tmp_path):
     path_in = tmp_path / "doc.pdf"
     path_out = tmp_path / "doc_out.pdf"

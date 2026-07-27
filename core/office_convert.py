@@ -58,20 +58,34 @@ class ConvertOfficeToPDF(PDFOperation):
 
     def _convert_with_libreoffice(self, libreoffice_path: str, input_path: str, output_path: str) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            subprocess.run(
-                [
-                    libreoffice_path,
-                    "--headless",
-                    "--convert-to",
-                    "pdf",
-                    "--outdir",
-                    tmp_dir,
-                    input_path,
-                ],
-                check=True,
-                capture_output=True,
-                timeout=120,
-            )
+            # Perfil de usuário isolado por conversão: sem isso, chamadas concorrentes/
+            # rápidas ao soffice competem pelo lock do perfil padrão e podem travar até
+            # o timeout em vez de converter.
+            profile_dir = Path(tmp_dir) / "profile"
+            try:
+                subprocess.run(
+                    [
+                        libreoffice_path,
+                        "--headless",
+                        f"-env:UserInstallation={profile_dir.as_uri()}",
+                        "--convert-to",
+                        "pdf",
+                        "--outdir",
+                        tmp_dir,
+                        input_path,
+                    ],
+                    check=True,
+                    capture_output=True,
+                    timeout=120,
+                )
+            except subprocess.CalledProcessError as exc:
+                detail = exc.stderr.decode(errors="replace").strip() if exc.stderr else str(exc)
+                raise RuntimeError(f"O LibreOffice falhou ao converter o arquivo: {detail}") from exc
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(
+                    "O LibreOffice demorou demais para converter o arquivo (timeout de 120s)."
+                ) from exc
+
             generated_path = Path(tmp_dir) / f"{Path(input_path).stem}.pdf"
             if not generated_path.is_file():
                 raise RuntimeError("O LibreOffice não gerou o arquivo PDF esperado.")

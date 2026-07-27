@@ -7,10 +7,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pypdfium2 as pdfium
 import pytest
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 from reportlab.pdfgen import canvas as rl_canvas
 
 from core.annotations import AddAnnotations, AnnotationSpec
+from core.protect import ProtectPDF
 from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
 from ui.redaction_state import RedactionState
@@ -78,6 +79,22 @@ def test_viewer_loads_immediately_if_session_already_has_a_path(three_page_pdf):
 
     assert viewer.content_stack.currentIndex() == 1
     assert viewer.thumbnail_list.count() == 3
+
+
+def test_viewer_handles_password_protected_pdf_without_crashing(three_page_pdf, tmp_path, monkeypatch):
+    _app()
+    protected_path = tmp_path / "protected.pdf"
+    ProtectPDF().run(str(three_page_pdf), str(protected_path), password="segredo123")
+
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: None)
+
+    session = DocumentSession()
+    viewer = PdfViewer(session, AnnotationState(), RedactionState())
+
+    session.open(str(protected_path))
+
+    assert viewer.content_stack.currentIndex() == 0
+    assert viewer._document is None
 
 
 def test_document_search_finds_known_text(tmp_path):

@@ -20,17 +20,19 @@ class CropPages(PDFOperation):
         reader = PdfReader(input_path)
         writer = PdfWriter()
 
-        for page in reader.pages:
+        for index, page in enumerate(reader.pages):
             added_page = writer.add_page(page)
             box = added_page.mediabox
-            added_page.mediabox.lower_left = (
-                float(box.left) + left,
-                float(box.bottom) + bottom,
-            )
-            added_page.mediabox.upper_right = (
-                float(box.right) - right,
-                float(box.top) - top,
-            )
+            new_left = float(box.left) + left
+            new_bottom = float(box.bottom) + bottom
+            new_right = float(box.right) - right
+            new_top = float(box.top) - top
+            if new_right <= new_left or new_top <= new_bottom:
+                raise ValueError(
+                    f"As margens de corte excedem o tamanho da página {index + 1}."
+                )
+            added_page.mediabox.lower_left = (new_left, new_bottom)
+            added_page.mediabox.upper_right = (new_right, new_top)
 
         with open(output_path, "wb") as f:
             writer.write(f)

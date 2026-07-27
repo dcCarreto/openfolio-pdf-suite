@@ -60,7 +60,10 @@ class AddFormField(PDFOperation):
         annots_before = list(target_page.get("/Annots", []))
         target_page.merge_page(overlay_page)
         annots_after = list(target_page.get("/Annots", []))
-        new_annots = annots_after[len(annots_before) :]
+        # Comparação por identidade (não por posição): merge_page normalmente só anexa
+        # ao final de /Annots, mas depender dessa ordem seria uma suposição implícita
+        # sobre o comportamento interno do pypdf.
+        new_annots = [annot for annot in annots_after if annot not in annots_before]
 
         acroform = writer.root_object.get("/AcroForm")
         if acroform is None:

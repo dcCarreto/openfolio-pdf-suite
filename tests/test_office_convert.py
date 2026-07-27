@@ -7,6 +7,8 @@ instalado. Os testes "via_libreoffice" rodam de verdade quando o
 LibreOffice esta disponivel, e sao pulados quando nao esta.
 """
 
+import subprocess
+
 import pytest
 from docx import Document
 from openpyxl import Workbook
@@ -95,6 +97,34 @@ def test_rejects_unsupported_format(tmp_path):
 
     with pytest.raises(ValueError):
         ConvertOfficeToPDF().run(str(bogus_path), str(tmp_path / "out.pdf"))
+
+
+def test_libreoffice_conversion_wraps_called_process_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: "soffice")
+    docx_path = tmp_path / "doc.docx"
+    _make_docx(docx_path)
+
+    def fake_run(args, **kwargs):
+        raise subprocess.CalledProcessError(1, args, stderr=b"erro simulado do soffice")
+
+    monkeypatch.setattr(office_convert.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="erro simulado do soffice"):
+        ConvertOfficeToPDF().run(str(docx_path), str(tmp_path / "out.pdf"))
+
+
+def test_libreoffice_conversion_wraps_timeout(tmp_path, monkeypatch):
+    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: "soffice")
+    docx_path = tmp_path / "doc.docx"
+    _make_docx(docx_path)
+
+    def fake_run(args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args, timeout=120)
+
+    monkeypatch.setattr(office_convert.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="timeout"):
+        ConvertOfficeToPDF().run(str(docx_path), str(tmp_path / "out.pdf"))
 
 
 def test_find_libreoffice_does_not_crash():
