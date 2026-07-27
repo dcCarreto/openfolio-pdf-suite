@@ -1,0 +1,35 @@
+name: CI
+
+# Roda a suite de testes (pytest) a cada push em main e a cada pull request, para pegar
+# regressao antes do merge. Ate agora so existia CI para builds de release (release.yml),
+# disparado por tag de versao, sem nenhuma execucao de teste automatizada no caminho normal
+# de desenvolvimento.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependencias do sistema (necessarias so pra importar o PySide6)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0 libxkbcommon0 libxcb-cursor0 libgl1
+      - name: Instalar dependencias Python
+        run: pip install -e ".[test]"
+      - name: Rodar testes
+        run: pytest
