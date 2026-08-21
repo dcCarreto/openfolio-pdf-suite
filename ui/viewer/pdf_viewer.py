@@ -24,6 +24,7 @@ from core.redaction import RedactionRect
 from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
 from ui.i18n import tr
+from ui.measure_state import MeasureState, format_distance
 from ui.redaction_state import RedactionState
 from ui.viewer.page_canvas import PageCanvas
 from ui.viewer.render import render_page
@@ -59,12 +60,14 @@ class PdfViewer(QWidget):
         session: DocumentSession,
         annotation_state: AnnotationState,
         redaction_state: RedactionState,
+        measure_state: MeasureState | None = None,
         parent=None,
     ):
         super().__init__(parent)
         self.session = session
         self.annotation_state = annotation_state
         self.redaction_state = redaction_state
+        self.measure_state = measure_state or MeasureState()
         self._document = None
         self._scale = _DEFAULT_SCALE
         self._continuous = False
@@ -81,6 +84,8 @@ class PdfViewer(QWidget):
         self._ink_points_pdf: list[tuple[float, float]] = []
         self._ink_preview_base: QPixmap | None = None
         self._redaction_drag_start_pdf: tuple[float, float] | None = None
+        self._measure_drag_start_pdf: tuple[float, float] | None = None
+        self._measure_preview_base: QPixmap | None = None
 
         self._build_ui()
         QShortcut(QKeySequence("Ctrl+F"), self, activated=self._toggle_search)
@@ -90,6 +95,9 @@ class PdfViewer(QWidget):
         annotation_state.pending_changed.connect(self._refresh_current_render)
         redaction_state.active_changed.connect(self._on_markup_state_changed)
         redaction_state.pending_changed.connect(self._refresh_current_render)
+        self.measure_state.active_changed.connect(self._on_markup_state_changed)
+        self.measure_state.result_changed.connect(self._refresh_current_render)
+        self.measure_state.unit_changed.connect(self._refresh_current_render)
         if session.path():
             self._reload()
         self._on_markup_state_changed()
@@ -278,6 +286,7 @@ class PdfViewer(QWidget):
         self.search_bar.hide()
         self.annotation_state.clear_pending()
         self.redaction_state.clear_pending()
+        self.measure_state.clear_result()
 
         self._set_document_controls_enabled(True)
         self.thumbnail_list.load_document(self._document)
@@ -383,6 +392,7 @@ class PdfViewer(QWidget):
         pixmap = self._with_highlight(pixmap, index)
         pixmap = self._with_pending_annotations(pixmap, index)
         pixmap = self._with_pending_redactions(pixmap, index)
+        pixmap = self._with_measure_overlay(pixmap, index)
         self._page_labels[0].setPixmap(pixmap)
         self._page_labels[0].resize(pixmap.size())
         self.thumbnail_list.select_page(index)
@@ -393,6 +403,7 @@ class PdfViewer(QWidget):
         pixmap = self._with_highlight(pixmap, index)
         pixmap = self._with_pending_annotations(pixmap, index)
         pixmap = self._with_pending_redactions(pixmap, index)
+        pixmap = self._with_measure_overlay(pixmap, index)
         label.setPixmap(pixmap)
         self._rendered_pages.add(index)
 
@@ -490,6 +501,45 @@ class PdfViewer(QWidget):
             painter.drawRect(QRectF(x, top_y, width, height))
         painter.end()
         return result
+
+    def _with_measure_overlay(self, pixmap: QPixmap, page_index: int) -> QPixmap:
+        segment = self.measure_state.last_segment()
+        if segment is None or segment[0] != page_index:
+            return pixmap
+
+        _, start_pdf, end_pdf = segment
+        result = QPixmap(pixmap)
+        painter = QPainter(result)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._paint_measure_segment(painter, page_index, start_pdf, end_pdf)
+        painter.end()
+        return result
+
+    def _paint_measure_segment(self, painter: QPainter, page_index: int, start_pdf, end_pdf):
+        start_widget = self._pdf_point_to_widget(page_index, *start_pdf)
+        end_widget = self._pdf_point_to_widget(page_index, *end_pdf)
+        color = QColor("#ff5252")
+
+        pen = QPen(color, 2)
+        painter.setPen(pen)
+        painter.drawLine(start_widget, end_widget)
+        painter.setBrush(color)
+        for point in (start_widget, end_widget):
+            painter.drawEllipse(point, 3, 3)
+
+        dx = end_pdf[0] - start_pdf[0]
+        dy = end_pdf[1] - start_pdf[1]
+        distance_pt = (dx**2 + dy**2) ** 0.5
+        label = format_distance(distance_pt, self.measure_state.unit())
+        midpoint = QPointF((start_widget.x() + end_widget.x()) / 2, (start_widget.y() + end_widget.y()) / 2)
+
+        painter.setPen(QPen(QColor("#000000")))
+        text_rect = QRectF(midpoint.x() - 40, midpoint.y() - 22, 80, 16)
+        painter.setBrush(QColor(255, 255, 255, 220))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRect(text_rect)
+        painter.setPen(QPen(color))
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, label)
 
     def _pdf_point_to_widget(self, page_index: int, x_pdf: float, y_pdf: float) -> QPointF:
         return QPointF(x_pdf * self._scale, self._page_y_to_screen(page_index, y_pdf))
@@ -655,8 +705,10 @@ class PdfViewer(QWidget):
     def _on_markup_state_changed(self):
         tool = self.annotation_state.active_tool()
         drawing_active = (
-            self.annotation_state.is_page_active() and tool in _DRAWING_TOOLS
-        ) or self.redaction_state.is_page_active()
+            (self.annotation_state.is_page_active() and tool in _DRAWING_TOOLS)
+            or self.redaction_state.is_page_active()
+            or self.measure_state.is_page_active()
+        )
         if drawing_active and self._continuous:
             self._set_continuous(False)
             if hasattr(self, "single_page_button"):
@@ -668,6 +720,9 @@ class PdfViewer(QWidget):
             return
         canvas = self._page_labels[0]
         if not isinstance(canvas, PageCanvas):
+            return
+        if self.measure_state.is_page_active():
+            canvas.setCursor(Qt.CursorShape.CrossCursor)
             return
         if self.redaction_state.is_page_active():
             canvas.setCursor(Qt.CursorShape.CrossCursor)
@@ -688,6 +743,10 @@ class PdfViewer(QWidget):
         return (x / self._scale, page_height - y / self._scale)
 
     def _on_canvas_pressed(self, x: float, y: float):
+        if self.measure_state.is_page_active():
+            self._measure_drag_start_pdf = self._widget_point_to_pdf(self._current_page, x, y)
+            self._measure_preview_base = QPixmap(self._page_labels[0].pixmap())
+            return
         if self.redaction_state.is_page_active():
             self._redaction_drag_start_pdf = self._widget_point_to_pdf(self._current_page, x, y)
             return
@@ -720,6 +779,19 @@ class PdfViewer(QWidget):
             return
 
     def _on_canvas_moved(self, x: float, y: float):
+        if self.measure_state.is_page_active() and self._measure_drag_start_pdf is not None:
+            if self._measure_preview_base is None:
+                return
+            page_index = self._current_page
+            end_pdf = self._widget_point_to_pdf(page_index, x, y)
+            preview = QPixmap(self._measure_preview_base)
+            painter = QPainter(preview)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            self._paint_measure_segment(painter, page_index, self._measure_drag_start_pdf, end_pdf)
+            painter.end()
+            self._page_labels[0].setPixmap(preview)
+            return
+
         if self.annotation_state.active_tool() != "ink" or not self._ink_points_pdf:
             return
         page_index = self._current_page
@@ -735,6 +807,15 @@ class PdfViewer(QWidget):
         self._page_labels[0].setPixmap(preview)
 
     def _on_canvas_released(self, x: float, y: float):
+        if self.measure_state.is_page_active():
+            if self._measure_drag_start_pdf is not None:
+                page_index = self._current_page
+                end_pdf = self._widget_point_to_pdf(page_index, x, y)
+                self.measure_state.set_result(page_index, self._measure_drag_start_pdf, end_pdf)
+                self._measure_drag_start_pdf = None
+                self._measure_preview_base = None
+            return
+
         if self.redaction_state.is_page_active():
             if self._redaction_drag_start_pdf is not None:
                 page_index = self._current_page

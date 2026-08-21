@@ -20,43 +20,58 @@ from ui.document_session import DocumentSession
 from ui.flags import build_br_flag_icon, build_us_flag_icon
 from ui.i18n import tr
 from ui.icon import build_app_icon
+from ui.measure_state import MeasureState
 from ui.redaction_state import RedactionState
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.sidebar_icons import (
+    build_accessibility_icon,
     build_annotations_icon,
+    build_attachments_icon,
     build_bookmarks_icon,
+    build_compare_icon,
     build_compress_icon,
     build_convert_icon,
     build_create_icon,
     build_crop_icon,
+    build_edit_icon,
     build_extract_images_icon,
     build_extract_text_icon,
     build_form_fields_icon,
+    build_layers_icon,
+    build_measure_icon,
     build_merge_icon,
     build_metadata_icon,
     build_ocr_icon,
     build_page_numbers_icon,
     build_pages_icon,
+    build_pdfa_icon,
     build_protect_icon,
     build_redaction_icon,
     build_signature_icon,
     build_split_icon,
     build_watermark_icon,
 )
+from ui.pages.accessibility_page import AccessibilityPage
 from ui.pages.annotations_page import AnnotationsPage
+from ui.pages.attachments_page import AttachmentsPage
 from ui.pages.bookmarks_page import BookmarksPage
+from ui.pages.compare_page import ComparePage
 from ui.pages.compress_page import CompressPage
 from ui.pages.convert_page import ConvertPage
 from ui.pages.create_page import CreatePage
 from ui.pages.crop_page import CropPage
+from ui.pages.edit_page import EditPage
 from ui.pages.extract_images_page import ExtractImagesPage
 from ui.pages.extract_text_page import ExtractTextPage
 from ui.pages.form_fields_page import FormFieldsPage
+from ui.pages.layers_page import LayersPage
+from ui.pages.measure_page import MeasurePage
 from ui.pages.merge_page import MergePage
 from ui.pages.metadata_page import MetadataPage
 from ui.pages.ocr_page import OCRPage
 from ui.pages.page_numbers_page import PageNumbersPage
 from ui.pages.pages_page import PagesPage
+from ui.pages.pdfa_page import PDFAPage
 from ui.pages.protect_page import ProtectPage
 from ui.pages.redaction_page import RedactionPage
 from ui.pages.signature_page import SignaturePage
@@ -127,8 +142,14 @@ def _build_sections():
         (
             build_page_numbers_icon,
             tr("Numeração"),
-            tr("Adicione números de página no rodapé de um PDF."),
+            tr("Adicione números de página no rodapé de um PDF, ou numeração Bates."),
             PageNumbersPage,
+        ),
+        (
+            build_pdfa_icon,
+            tr("PDF/A"),
+            tr("Converta um PDF para uma aproximação de PDF/A (arquivamento) ou valide um existente."),
+            PDFAPage,
         ),
         (
             build_extract_text_icon,
@@ -149,15 +170,39 @@ def _build_sections():
             CropPage,
         ),
         (
+            build_edit_icon,
+            tr("Editar"),
+            tr(
+                "Substitua imagens embutidas, cubra e reescreva texto, ou adicione/liste/"
+                "remova links de um PDF."
+            ),
+            EditPage,
+        ),
+        (
             build_bookmarks_icon,
             tr("Marcadores"),
             tr("Monte um sumário de navegação (marcadores) para um PDF."),
             BookmarksPage,
         ),
         (
+            build_layers_icon,
+            tr("Camadas"),
+            tr("Liste as camadas (Optional Content Groups) de um PDF e alterne a visibilidade padrão de cada uma."),
+            LayersPage,
+        ),
+        (
+            build_attachments_icon,
+            tr("Anexos"),
+            tr("Liste, adicione, remova ou extraia os anexos embutidos de um PDF."),
+            AttachmentsPage,
+        ),
+        (
             build_form_fields_icon,
             tr("Campos de formulário"),
-            tr("Adicione campos de formulário interativos (texto ou caixa de seleção) a um PDF."),
+            tr(
+                "Adicione campos de formulário e grupos de opções, liste os existentes, "
+                "exporte/importe dados preenchidos ou achate o formulário."
+            ),
             FormFieldsPage,
         ),
         (
@@ -165,6 +210,12 @@ def _build_sections():
             tr("Anotações"),
             tr("Realce, sublinhe, risque, adicione notas, desenhe ou carimbe sobre um PDF."),
             AnnotationsPage,
+        ),
+        (
+            build_measure_icon,
+            tr("Medição"),
+            tr("Meça a distância entre dois pontos de um PDF, arrastando no visualizador central."),
+            MeasurePage,
         ),
         (
             build_ocr_icon,
@@ -184,6 +235,18 @@ def _build_sections():
             tr("Assine um PDF com selo visível e assinatura criptográfica, ou verifique uma assinatura existente."),
             SignaturePage,
         ),
+        (
+            build_accessibility_icon,
+            tr("Acessibilidade"),
+            tr("Verifique um subconjunto de PDF/UA e corrija idioma/título do documento."),
+            AccessibilityPage,
+        ),
+        (
+            build_compare_icon,
+            tr("Comparar"),
+            tr("Compare duas versões de um PDF: diff de texto por página ou diff visual."),
+            ComparePage,
+        ),
     ]
 
 
@@ -201,6 +264,7 @@ class MainWindow(QMainWindow):
         self.session = DocumentSession()
         self.annotation_state = AnnotationState()
         self.redaction_state = RedactionState()
+        self.measure_state = MeasureState()
 
         i18n.language_changed.changed.connect(self._on_language_changed)
 
@@ -216,6 +280,7 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self._annotations_row = None
         self._redaction_row = None
+        self._measure_row = None
 
         for row, (build_icon, name, subtitle, page_class) in enumerate(_build_sections()):
             item = QListWidgetItem(name)
@@ -228,6 +293,9 @@ class MainWindow(QMainWindow):
             elif page_class is RedactionPage:
                 self._redaction_row = row
                 content = page_class(self.session, self.redaction_state)
+            elif page_class is MeasurePage:
+                self._measure_row = row
+                content = page_class(self.session, self.measure_state)
             else:
                 content = page_class(self.session)
 
@@ -241,7 +309,9 @@ class MainWindow(QMainWindow):
         self.sidebar.currentRowChanged.connect(self._on_sidebar_row_changed)
         self.sidebar.setCurrentRow(0)
 
-        self.viewer = PdfViewer(self.session, self.annotation_state, self.redaction_state)
+        self.viewer = PdfViewer(
+            self.session, self.annotation_state, self.redaction_state, self.measure_state
+        )
 
         self.stack.setFixedWidth(480)
 
@@ -337,6 +407,7 @@ class MainWindow(QMainWindow):
         # Anotações e Redação nunca fiquem ativas ao mesmo tempo.
         self.annotation_state.set_page_active(row == self._annotations_row)
         self.redaction_state.set_page_active(row == self._redaction_row)
+        self.measure_state.set_page_active(row == self._measure_row)
 
     def _open_pdf(self):
         path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), "", "PDF (*.pdf)")

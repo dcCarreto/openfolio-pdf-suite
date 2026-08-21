@@ -7,7 +7,7 @@ from pypdf.generic import ArrayObject, FloatObject
 from reportlab.pdfgen import canvas as rl_canvas
 
 from core.base import EncryptedPDFError
-from core.redaction import RedactDocument, RedactionRect, SanitizeDocument
+from core.redaction import FindSensitiveData, RedactDocument, RedactionRect, SanitizeDocument
 
 
 def _make_pdf_with_text(path, texts: list[str]) -> None:
@@ -75,6 +75,63 @@ def test_redact_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
 
     with pytest.raises(EncryptedPDFError):
         RedactDocument().run(str(encrypted_path), str(path_out), [])
+
+
+def test_find_sensitive_data_locates_cpf_and_email(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    _make_pdf_with_text(
+        path_in, ["CPF: 123.456.789-00", "Contato: fulano@exemplo.com", "Sem dado sensivel aqui"]
+    )
+
+    rects = FindSensitiveData().run(str(path_in), kinds=["cpf", "email"])
+
+    assert len(rects) == 2
+    assert all(rect.page_index == 0 for rect in rects)
+    assert all(rect.right > rect.left and rect.top > rect.bottom for rect in rects)
+
+
+def test_find_sensitive_data_with_no_kinds_returns_empty(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    _make_pdf_with_text(path_in, ["CPF: 123.456.789-00"])
+
+    assert FindSensitiveData().run(str(path_in)) == []
+
+
+def test_find_sensitive_data_supports_custom_regex(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    _make_pdf_with_text(path_in, ["Processo numero PROC-2024-001"])
+
+    rects = FindSensitiveData().run(str(path_in), custom_pattern=r"PROC-\d{4}-\d{3}")
+
+    assert len(rects) == 1
+
+
+def test_find_sensitive_data_rejects_invalid_regex(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    _make_pdf_with_text(path_in, ["texto qualquer"])
+
+    with pytest.raises(ValueError):
+        FindSensitiveData().run(str(path_in), custom_pattern="(")
+
+
+def test_find_sensitive_data_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(200, 200)])
+
+    with pytest.raises(EncryptedPDFError):
+        FindSensitiveData().run(str(encrypted_path), kinds=["email"])
+
+
+def test_find_sensitive_data_rects_feed_into_redaction(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    path_out = tmp_path / "doc_out.pdf"
+    _make_pdf_with_text(path_in, ["CPF: 123.456.789-00", "Texto neutro"])
+
+    rects = FindSensitiveData().run(str(path_in), kinds=["cpf"])
+    pages_redacted = RedactDocument().run(str(path_in), str(path_out), rects)
+
+    assert pages_redacted == 1
+    after = PdfReader(str(path_out)).pages[0].extract_text()
+    assert after.strip() == ""
 
 
 def _pdf_with_hidden_data(path) -> None:

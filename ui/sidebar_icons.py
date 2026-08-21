@@ -229,6 +229,91 @@ def build_signature_icon() -> QIcon:
     return _build(draw)
 
 
+def build_edit_icon() -> QIcon:
+    def draw(p):
+        p.save()
+        p.translate(11, 11)
+        p.rotate(45)
+        p.drawRoundedRect(QRectF(-2, -9, 4, 14), 1, 1)
+        p.setBrush(QColor(_COLOR))
+        p.drawPolygon(QPolygonF([QPointF(-2, 5), QPointF(2, 5), QPointF(0, 9)]))
+        p.restore()
+
+    return _build(draw)
+
+
+def build_layers_icon() -> QIcon:
+    def draw(p):
+        p.drawPolygon(
+            QPolygonF([QPointF(11, 3), QPointF(19, 7.5), QPointF(11, 12), QPointF(3, 7.5)])
+        )
+        p.drawPolygon(
+            QPolygonF([QPointF(11, 9.5), QPointF(19, 14), QPointF(11, 18.5), QPointF(3, 14)])
+        )
+
+    return _build(draw)
+
+
+def build_attachments_icon() -> QIcon:
+    def draw(p):
+        p.drawLine(QPointF(14, 4), QPointF(14, 14))
+        p.drawArc(QRectF(9, 3, 10, 8), 0, 180 * 16)
+        p.drawLine(QPointF(9, 7), QPointF(9, 15))
+        p.drawArc(QRectF(6, 11, 6, 8), 180 * 16, 180 * 16)
+
+    return _build(draw)
+
+
+def build_measure_icon() -> QIcon:
+    def draw(p):
+        p.drawLine(QPointF(5, 17), QPointF(17, 5))
+        for step in range(1, 5):
+            t = step / 5
+            x = 5 + (17 - 5) * t
+            y = 17 + (5 - 17) * t
+            p.drawLine(QPointF(x - 0.9, y - 0.9), QPointF(x + 0.9, y + 0.9))
+        p.setBrush(QColor(_COLOR))
+        p.drawEllipse(QPointF(5, 17), 1.3, 1.3)
+        p.drawEllipse(QPointF(17, 5), 1.3, 1.3)
+
+    return _build(draw)
+
+
+def build_accessibility_icon() -> QIcon:
+    def draw(p):
+        p.drawEllipse(QPointF(11, 6), 2.2, 2.2)
+        p.drawLine(QPointF(11, 9), QPointF(11, 15))
+        p.drawLine(QPointF(5, 11), QPointF(17, 11))
+        p.drawLine(QPointF(11, 15), QPointF(6, 20))
+        p.drawLine(QPointF(11, 15), QPointF(16, 20))
+
+    return _build(draw)
+
+
+def build_compare_icon() -> QIcon:
+    def draw(p):
+        p.drawRoundedRect(QRectF(2, 4, 7, 14), 1.2, 1.2)
+        p.drawRoundedRect(QRectF(13, 4, 7, 14), 1.2, 1.2)
+        p.drawLine(QPointF(10, 8), QPointF(12, 8))
+        p.drawLine(QPointF(10, 11), QPointF(12, 11))
+        p.drawLine(QPointF(10, 14), QPointF(12, 14))
+
+    return _build(draw)
+
+
+def build_pdfa_icon() -> QIcon:
+    def draw(p):
+        p.drawRoundedRect(QRectF(4, 3, 12, 16), 1.5, 1.5)
+        p.drawLine(QPointF(6.5, 7), QPointF(12.5, 7))
+        p.drawLine(QPointF(6.5, 10), QPointF(12.5, 10))
+        p.drawEllipse(QRectF(11, 11, 8, 8))
+        p.drawLine(QPointF(13.3, 17.5), QPointF(15, 12.5))
+        p.drawLine(QPointF(15, 12.5), QPointF(16.7, 17.5))
+        p.drawLine(QPointF(13.9, 15.8), QPointF(16.1, 15.8))
+
+    return _build(draw)
+
+
 def build_annotations_icon() -> QIcon:
     def draw(p):
         p.save()

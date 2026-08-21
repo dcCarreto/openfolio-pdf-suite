@@ -1,4 +1,4 @@
-"""Aba de manipulação de páginas: rotação, reordenação e remoção."""
+"""Aba de manipulação de páginas: rotação, reordenação, remoção, inserção e substituição."""
 
 from PySide6.QtWidgets import (
     QComboBox,
@@ -12,12 +12,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.pages import RemovePages, ReorderPages, RotatePages
+from core.pages import InsertPages, RemovePages, ReorderPages, ReplacePages, RotatePages
 from ui.i18n import tr
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
-_OPERATIONS = ["Rotacionar", "Reordenar", "Remover"]
+_OPERATIONS = ["Rotacionar", "Reordenar", "Remover", "Inserir", "Substituir"]
 
 
 def _parse_page_list(text: str) -> list[int]:
@@ -54,12 +54,25 @@ class PagesPage(QWidget):
         self.remove_edit = QLineEdit()
         self.remove_edit.setPlaceholderText(tr("Páginas a remover, ex: 1,3"))
 
+        self.insert_source_picker = FilePicker(mode="open")
+        self.insert_at_spin = QSpinBox()
+        self.insert_at_spin.setRange(0, 99999)
+
+        self.replace_source_picker = FilePicker(mode="open")
+        self.replace_start_spin = QSpinBox()
+        self.replace_start_spin.setRange(0, 99999)
+        self.replace_end_spin = QSpinBox()
+        self.replace_end_spin.setRange(1, 100000)
+        self.replace_end_spin.setValue(1)
+
         self.params_stack = QStackedWidget()
         self.params_stack.addWidget(self._build_rotate_widget())
         self.params_stack.addWidget(self._build_simple_widget(tr("Nova ordem:"), self.reorder_edit))
         self.params_stack.addWidget(
             self._build_simple_widget(tr("Páginas a remover:"), self.remove_edit)
         )
+        self.params_stack.addWidget(self._build_insert_widget())
+        self.params_stack.addWidget(self._build_replace_widget())
 
         apply_button = QPushButton(tr("Aplicar"))
         apply_button.clicked.connect(self._apply)
@@ -92,6 +105,28 @@ class PagesPage(QWidget):
         layout.addWidget(field)
         return widget
 
+    def _build_insert_widget(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(QLabel(tr("PDF com as páginas a inserir:")))
+        layout.addWidget(self.insert_source_picker)
+        layout.addWidget(QLabel(tr("Inserir na posição (0 = antes da primeira página):")))
+        layout.addWidget(self.insert_at_spin)
+        return widget
+
+    def _build_replace_widget(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(QLabel(tr("PDF com as páginas substitutas:")))
+        layout.addWidget(self.replace_source_picker)
+        layout.addWidget(QLabel(tr("Página inicial (inclusive):")))
+        layout.addWidget(self.replace_start_spin)
+        layout.addWidget(QLabel(tr("Página final (exclusive):")))
+        layout.addWidget(self.replace_end_spin)
+        return widget
+
     def _on_operation_changed(self, index: int):
         self.params_stack.setCurrentIndex(index)
 
@@ -107,6 +142,39 @@ class PagesPage(QWidget):
             return
 
         operation = _OPERATIONS[self.operation_combo.currentIndex()]
+
+        if operation in ("Inserir", "Substituir"):
+            source_picker = (
+                self.insert_source_picker if operation == "Inserir" else self.replace_source_picker
+            )
+            source_path = source_picker.path()
+            if not source_path:
+                QMessageBox.warning(self, tr("Páginas"), tr("Escolha o PDF de origem das páginas."))
+                return
+
+            try:
+                if operation == "Inserir":
+                    InsertPages().run(
+                        input_path, output_path, source_path, at_index=self.insert_at_spin.value()
+                    )
+                else:
+                    ReplacePages().run(
+                        input_path,
+                        output_path,
+                        source_path,
+                        start_index=self.replace_start_spin.value(),
+                        end_index=self.replace_end_spin.value(),
+                    )
+            except Exception as exc:
+                QMessageBox.critical(
+                    self, tr("Páginas"), tr("Falha ao processar: {error}").format(error=exc)
+                )
+                return
+
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Páginas"), tr("Operação concluída com sucesso."))
+            return
+
         field_by_operation = {
             "Rotacionar": self.rotate_pages_edit,
             "Reordenar": self.reorder_edit,

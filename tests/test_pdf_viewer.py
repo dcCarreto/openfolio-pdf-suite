@@ -14,6 +14,7 @@ from core.annotations import AddAnnotations, AnnotationSpec
 from core.protect import ProtectPDF
 from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
+from ui.measure_state import MeasureState
 from ui.redaction_state import RedactionState
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.viewer.render import render_page
@@ -283,6 +284,70 @@ def test_pending_redaction_changes_the_rendered_pixmap(tmp_path):
 
     after = viewer._page_labels[0].pixmap()
     assert before.toImage() != after.toImage()
+
+
+def test_viewer_measure_drag_sets_result(tmp_path):
+    _app()
+    path = tmp_path / "doc.pdf"
+    _make_pdf_with_text(path, ["conteúdo qualquer"])
+
+    session = DocumentSession()
+    measure_state = MeasureState()
+    viewer = PdfViewer(session, AnnotationState(), RedactionState(), measure_state)
+    session.open(str(path))
+    measure_state.set_page_active(True)
+
+    scale = viewer._scale
+    viewer._on_canvas_pressed(0, 0)
+    viewer._on_canvas_released(72 * scale, 0)
+
+    segment = measure_state.last_segment()
+    assert segment is not None
+    assert segment[0] == 0
+    assert measure_state.last_distance_pt() == pytest.approx(72.0, abs=0.5)
+
+
+def test_viewer_ignores_canvas_clicks_when_measure_page_not_active(tmp_path):
+    _app()
+    path = tmp_path / "doc.pdf"
+    _make_pdf_with_text(path, ["conteúdo qualquer"])
+
+    session = DocumentSession()
+    measure_state = MeasureState()
+    viewer = PdfViewer(session, AnnotationState(), RedactionState(), measure_state)
+    session.open(str(path))
+    # set_page_active nunca foi chamado com True: equivale a estar em outra aba da sidebar.
+
+    viewer._on_canvas_pressed(20, 20)
+    viewer._on_canvas_released(120, 80)
+
+    assert measure_state.last_segment() is None
+
+
+def test_pending_measurement_changes_the_rendered_pixmap(tmp_path):
+    _app()
+    path = tmp_path / "doc.pdf"
+    _make_pdf_with_text(path, ["conteúdo qualquer"])
+
+    session = DocumentSession()
+    measure_state = MeasureState()
+    viewer = PdfViewer(session, AnnotationState(), RedactionState(), measure_state)
+    session.open(str(path))
+
+    before = QPixmap(viewer._page_labels[0].pixmap())
+
+    measure_state.set_page_active(True)
+    viewer._on_canvas_pressed(20, 20)
+    viewer._on_canvas_released(120, 80)
+
+    after = viewer._page_labels[0].pixmap()
+    assert before.toImage() != after.toImage()
+
+
+def test_viewer_defaults_to_its_own_measure_state_when_none_given():
+    _app()
+    viewer = PdfViewer(DocumentSession(), AnnotationState(), RedactionState())
+    assert isinstance(viewer.measure_state, MeasureState)
 
 
 def test_saved_annotation_changes_the_rendered_pixmap(tmp_path):

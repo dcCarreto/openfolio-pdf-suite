@@ -59,3 +59,61 @@ class RemovePages(PDFOperation):
                 writer.add_page(page)
         with open(output_path, "wb") as f:
             writer.write(f)
+
+
+class InsertPages(PDFOperation):
+    """Insere todas as páginas de outro PDF numa posição do documento."""
+
+    def run(self, input_path: str, output_path: str, insert_path: str, at_index: int) -> None:
+        reader = open_reader(input_path)
+        insert_reader = open_reader(insert_path)
+        total_pages = len(reader.pages)
+        if not 0 <= at_index <= total_pages:
+            raise ValueError(
+                f"Posição de inserção inválida: {at_index} (o documento tem {total_pages} "
+                f"página(s), posições válidas vão de 0 a {total_pages})."
+            )
+
+        writer = PdfWriter()
+        for index in range(at_index):
+            writer.add_page(reader.pages[index])
+        for page in insert_reader.pages:
+            writer.add_page(page)
+        for index in range(at_index, total_pages):
+            writer.add_page(reader.pages[index])
+
+        with open(output_path, "wb") as f:
+            writer.write(f)
+
+
+class ReplacePages(PDFOperation):
+    """Substitui um intervalo de páginas do documento pelas páginas de outro PDF."""
+
+    def run(
+        self,
+        input_path: str,
+        output_path: str,
+        replacement_path: str,
+        start_index: int,
+        end_index: int,
+    ) -> None:
+        reader = open_reader(input_path)
+        replacement_reader = open_reader(replacement_path)
+        total_pages = len(reader.pages)
+        require_valid_page_index(total_pages, start_index, label="Página inicial")
+        if not start_index < end_index <= total_pages:
+            raise ValueError(
+                f"Intervalo inválido: end_index ({end_index}) deve ser maior que start_index "
+                f"({start_index}) e no máximo {total_pages}."
+            )
+
+        writer = PdfWriter()
+        for index in range(start_index):
+            writer.add_page(reader.pages[index])
+        for page in replacement_reader.pages:
+            writer.add_page(page)
+        for index in range(end_index, total_pages):
+            writer.add_page(reader.pages[index])
+
+        with open(output_path, "wb") as f:
+            writer.write(f)

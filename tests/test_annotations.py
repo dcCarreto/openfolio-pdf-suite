@@ -4,7 +4,7 @@ import pytest
 from reportlab.pdfgen import canvas as rl_canvas
 from pypdf import PdfReader
 
-from core.annotations import AddAnnotations, AnnotationSpec, spec_rect
+from core.annotations import AddAnnotations, AnnotationSpec, ExportAnnotationsCSV, spec_rect
 from core.base import EncryptedPDFError
 
 
@@ -136,3 +136,62 @@ def test_add_annotations_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
             str(path_out),
             [AnnotationSpec(page_index=0, kind="highlight", quads=[(40, 330, 100, 350)])],
         )
+
+
+def test_export_annotations_csv(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    path_annotated = tmp_path / "annotated.pdf"
+    _make_pdf(path_in, "texto de exemplo")
+
+    AddAnnotations().run(
+        str(path_in),
+        str(path_annotated),
+        [
+            AnnotationSpec(page_index=0, kind="highlight", color="ffeb3b", quads=[(40, 330, 100, 350)]),
+            AnnotationSpec(page_index=0, kind="note", position=(40, 200), text="Revisar este trecho"),
+        ],
+    )
+
+    csv_path = tmp_path / "comentarios.csv"
+    count = ExportAnnotationsCSV().run(str(path_annotated), str(csv_path))
+
+    assert count == 2
+    content = csv_path.read_text(encoding="utf-8")
+    assert "Highlight" in content
+    assert "Revisar este trecho" in content
+    assert "ffeb3b" in content
+
+
+def test_export_annotations_csv_excludes_links(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    _make_pdf(path_in, "texto de exemplo")
+    path_with_link = tmp_path / "with_link.pdf"
+
+    from core.links import AddLink
+
+    AddLink().run(
+        str(path_in), str(path_with_link), page_number=0, left=10, bottom=10, right=50, top=30,
+        url="https://example.com",
+    )
+
+    csv_path = tmp_path / "comentarios.csv"
+    count = ExportAnnotationsCSV().run(str(path_with_link), str(csv_path))
+
+    assert count == 0
+
+
+def test_export_annotations_csv_returns_zero_without_annotations(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    _make_pdf(path_in, "texto de exemplo")
+
+    csv_path = tmp_path / "comentarios.csv"
+    count = ExportAnnotationsCSV().run(str(path_in), str(csv_path))
+
+    assert count == 0
+
+
+def test_export_annotations_csv_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
+    encrypted_path = make_encrypted_pdf("protected.pdf", [(400, 400)])
+
+    with pytest.raises(EncryptedPDFError):
+        ExportAnnotationsCSV().run(str(encrypted_path), str(tmp_path / "out.csv"))

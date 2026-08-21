@@ -22,6 +22,7 @@ porque o usuário pode querer preservá-los.
 """
 
 import io
+import re
 from dataclasses import dataclass
 
 import pypdfium2 as pdfium
@@ -33,6 +34,20 @@ from .base import PDFOperation, open_reader
 
 _REDACT_SCALE = 300 / 72  # mesma resolução usada em core/ocr.py
 
+# Padrões comuns de dado sensível para sugestão automática de redação. Todos priorizam
+# não deixar passar ocorrência real (a redação em si é sempre revisável/removível da lista
+# de pendentes antes de aplicar, então um falso positivo custa pouco; um falso negativo
+# custaria o dado vazando).
+_PATTERNS: dict[str, re.Pattern] = {
+    "cpf": re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b"),
+    "cnpj": re.compile(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b"),
+    "email": re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b"),
+    "phone": re.compile(r"\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}\b"),
+    "credit_card": re.compile(r"\b(?:\d[ -]?){13,19}\b"),
+}
+
+PATTERN_KINDS = tuple(_PATTERNS.keys())
+
 
 @dataclass
 class RedactionRect:
@@ -43,6 +58,66 @@ class RedactionRect:
     bottom: float
     right: float
     top: float
+
+
+class FindSensitiveData(PDFOperation):
+    """Busca padrões de dado sensível (CPF, CNPJ, e-mail, telefone, cartão de crédito, ou
+    uma expressão regular à parte) no texto do PDF e devolve um `RedactionRect` por
+    ocorrência — para revisão do usuário antes de virar redação de verdade.
+
+    Usa `pypdfium2` (já uma dependência do projeto, mesma biblioteca usada para renderizar
+    a página que a redação depois rasteriza) para mapear cada caractere encontrado de volta
+    a uma caixa em coordenadas PDF, do mesmo jeito que `ui/viewer/search.py` já faz para a
+    busca de texto simples do visualizador — só que aqui a ocorrência vem de regex, não de
+    string literal, então não dá pra usar a busca nativa do pdfium (que não suporta regex).
+    Uma ocorrência que atravessa quebra de linha vira uma única caixa cobrindo as duas
+    linhas: isso apenas redige uma área um pouco maior do que o necessário, nunca menor, o
+    que é o lado seguro do erro para uma ferramenta de redação.
+    """
+
+    def run(
+        self,
+        input_path: str,
+        kinds: list[str] | None = None,
+        custom_pattern: str | None = None,
+    ) -> list[RedactionRect]:
+        open_reader(input_path)  # recusa PDF protegido por senha, mesma checagem das outras operações
+
+        patterns = [_PATTERNS[kind] for kind in (kinds or []) if kind in _PATTERNS]
+        if custom_pattern:
+            try:
+                patterns.append(re.compile(custom_pattern))
+            except re.error as exc:
+                raise ValueError(f"Expressão regular inválida: {exc}") from exc
+        if not patterns:
+            return []
+
+        rects: list[RedactionRect] = []
+        pdfium_doc = pdfium.PdfDocument(input_path)
+        try:
+            for page_index in range(len(pdfium_doc)):
+                page = pdfium_doc[page_index]
+                textpage = page.get_textpage()
+                try:
+                    text = textpage.get_text_range()
+                    char_count = textpage.count_chars()
+                    for pattern in patterns:
+                        for match in pattern.finditer(text):
+                            start, end = match.start(), min(match.end(), char_count)
+                            if start >= end:
+                                continue
+                            boxes = [textpage.get_charbox(i) for i in range(start, end)]
+                            left = min(box[0] for box in boxes)
+                            bottom = min(box[1] for box in boxes)
+                            right = max(box[2] for box in boxes)
+                            top = max(box[3] for box in boxes)
+                            rects.append(RedactionRect(page_index, left, bottom, right, top))
+                finally:
+                    textpage.close()
+        finally:
+            pdfium_doc.close()
+
+        return rects
 
 
 class RedactDocument(PDFOperation):

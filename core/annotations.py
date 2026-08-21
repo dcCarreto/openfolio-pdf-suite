@@ -7,6 +7,7 @@ nesta sessão que o pdfium não desenha nada sem um /AP, então ambos ganham uma
 stream (Form XObject) construída à mão.
 """
 
+import csv
 from dataclasses import dataclass, field
 
 from pypdf import PdfWriter
@@ -230,3 +231,65 @@ class AddAnnotations(PDFOperation):
             writer.add_annotation(page_number=spec.page_index, annotation=_build_annotation(writer, spec))
         with open(output_path, "wb") as f:
             writer.write(f)
+
+
+@dataclass
+class AnnotationInfo:
+    """Descrição resumida de uma anotação/comentário já existente num PDF."""
+
+    page_index: int
+    kind: str
+    author: str
+    content: str
+    color: str
+
+
+_NON_COMMENT_SUBTYPES = {"/Link", "/Widget", "/Popup"}
+
+
+def _describe_annotation_color(color_array) -> str:
+    if not color_array:
+        return ""
+    values = [float(v) for v in color_array]
+    if len(values) == 1:
+        gray = round(values[0] * 255)
+        return f"{gray:02x}{gray:02x}{gray:02x}"
+    if len(values) == 3:
+        return "".join(f"{round(v * 255):02x}" for v in values)
+    if len(values) == 4:
+        return ",".join(f"{v:.2f}" for v in values)  # CMYK: sem conversão exata para hex RGB
+    return ""
+
+
+class ExportAnnotationsCSV(PDFOperation):
+    """Exporta os comentários/anotações já existentes num PDF para um CSV: página, tipo,
+    autor, texto e cor. Ignora links, widgets de formulário e popups de anotação (não são
+    "comentários" no sentido de revisão de documento)."""
+
+    def run(self, input_path: str, output_path: str) -> int:
+        reader = open_reader(input_path)
+        rows: list[AnnotationInfo] = []
+
+        for page_index, page in enumerate(reader.pages):
+            for annotation_ref in page.get("/Annots", []):
+                annotation = annotation_ref.get_object()
+                subtype = str(annotation.get("/Subtype", ""))
+                if subtype in _NON_COMMENT_SUBTYPES:
+                    continue
+                rows.append(
+                    AnnotationInfo(
+                        page_index=page_index,
+                        kind=subtype.lstrip("/"),
+                        author=str(annotation.get("/T", "") or ""),
+                        content=str(annotation.get("/Contents", "") or ""),
+                        color=_describe_annotation_color(annotation.get("/C")),
+                    )
+                )
+
+        with open(output_path, "w", newline="", encoding="utf-8") as f:
+            csv_writer = csv.writer(f)
+            csv_writer.writerow(["pagina", "tipo", "autor", "texto", "cor"])
+            for row in rows:
+                csv_writer.writerow([row.page_index, row.kind, row.author, row.content, row.color])
+
+        return len(rows)

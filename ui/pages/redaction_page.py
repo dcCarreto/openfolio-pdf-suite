@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QStackedWidget,
@@ -11,10 +12,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.redaction import RedactDocument, SanitizeDocument
+from core.redaction import FindSensitiveData, RedactDocument, SanitizeDocument
 from ui.i18n import tr
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+
+_PATTERN_CHECKBOX_LABELS = [
+    ("cpf", "CPF"),
+    ("cnpj", "CNPJ"),
+    ("email", "E-mail"),
+    ("phone", "Telefone"),
+    ("credit_card", "Cartão de crédito"),
+]
 
 
 class RedactionPage(QWidget):
@@ -58,6 +67,22 @@ class RedactionPage(QWidget):
         )
         instructions.setWordWrap(True)
 
+        detect_label = QLabel(
+            tr("Ou detecte automaticamente padrões de dado sensível no texto do PDF:")
+        )
+        detect_label.setWordWrap(True)
+
+        self.pattern_checkboxes: dict[str, QCheckBox] = {}
+        for kind, label in _PATTERN_CHECKBOX_LABELS:
+            checkbox = QCheckBox(tr(label))
+            self.pattern_checkboxes[kind] = checkbox
+
+        self.custom_pattern_edit = QLineEdit()
+        self.custom_pattern_edit.setPlaceholderText(tr("Expressão regular personalizada (opcional)"))
+
+        detect_button = QPushButton(tr("Detectar e marcar"))
+        detect_button.clicked.connect(self._detect_patterns)
+
         self.pending_label = QLabel()
         self.redaction_state.pending_changed.connect(self._update_pending_label)
         self._update_pending_label()
@@ -72,6 +97,11 @@ class RedactionPage(QWidget):
         redact_button.clicked.connect(self._apply_redaction)
 
         layout.addWidget(instructions)
+        layout.addWidget(detect_label)
+        for checkbox in self.pattern_checkboxes.values():
+            layout.addWidget(checkbox)
+        layout.addWidget(self.custom_pattern_edit)
+        layout.addWidget(detect_button)
         layout.addWidget(self.pending_label)
         layout.addWidget(clear_button)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
@@ -112,6 +142,41 @@ class RedactionPage(QWidget):
     def _update_pending_label(self):
         count = len(self.redaction_state.pending())
         self.pending_label.setText(tr("{count} área(s) marcada(s) para redação").format(count=count))
+
+    def _detect_patterns(self):
+        input_path = self.session.path()
+        if not input_path:
+            QMessageBox.warning(self, tr("Redigir"), tr("Abra um PDF para começar."))
+            return
+
+        kinds = [kind for kind, checkbox in self.pattern_checkboxes.items() if checkbox.isChecked()]
+        custom_pattern = self.custom_pattern_edit.text().strip()
+        if not kinds and not custom_pattern:
+            QMessageBox.warning(
+                self,
+                tr("Redigir"),
+                tr("Marque ao menos um padrão ou digite uma expressão regular."),
+            )
+            return
+
+        try:
+            rects = FindSensitiveData().run(input_path, kinds=kinds, custom_pattern=custom_pattern or None)
+        except Exception as exc:
+            QMessageBox.critical(
+                self, tr("Redigir"), tr("Falha ao detectar padrões: {error}").format(error=exc)
+            )
+            return
+
+        for rect in rects:
+            self.redaction_state.add_pending(rect)
+
+        QMessageBox.information(
+            self,
+            tr("Redigir"),
+            tr("{count} ocorrência(s) encontrada(s) e marcada(s) para redação.").format(
+                count=len(rects)
+            ),
+        )
 
     def _apply_redaction(self):
         input_path = self.session.path()
