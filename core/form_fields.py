@@ -9,13 +9,15 @@ em qualquer leitor de PDF.
 import csv
 import io
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, BooleanObject, DictionaryObject, NameObject
 from reportlab.pdfgen import canvas
 
-from .base import PDFOperation, open_reader, require_valid_page_index
+from .base import READ, PDFOperation, atomic_output, open_reader, require_valid_page_index, write_pdf
+from .document import remove_widgets_from_form
 
 _VALID_FIELD_TYPES = ("text", "checkbox", "date", "dropdown", "listbox")
 _CHOICE_FIELD_TYPES = ("dropdown", "listbox")
@@ -48,10 +50,11 @@ class AddFormField(PDFOperation):
         if field_type in _CHOICE_FIELD_TYPES and not options:
             raise ValueError(f"Informe ao menos uma opção (options) para o tipo {field_type}.")
 
-        reader = open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
+        reader = open_reader(input_path)
         require_valid_page_index(len(reader.pages), page_number)
+        _require_new_field_name(reader, field_name)
 
-        writer = PdfWriter(clone_from=input_path)
+        writer = PdfWriter(clone_from=reader)
         target_page = writer.pages[page_number]
         page_width = float(target_page.mediabox.width)
         page_height = float(target_page.mediabox.height)
@@ -125,19 +128,38 @@ class AddFormField(PDFOperation):
                 fields.append(annot)
             acroform_obj[NameObject("/Fields")] = fields
 
-            overlay_fonts = overlay_acroform.get_object().get("/DR", {}).get("/Font", {})
-            default_resources = acroform_obj.get("/DR")
-            if default_resources is not None and overlay_fonts:
-                fonts = default_resources.get_object().get("/Font")
-                if fonts is not None:
-                    for font_name, font_ref in overlay_fonts.items():
-                        if font_name not in fonts:
-                            fonts[NameObject(font_name)] = font_ref
+            _merge_default_fonts(writer, acroform_obj, overlay_acroform)
 
         acroform_obj[NameObject("/NeedAppearances")] = BooleanObject(True)
+        write_pdf(writer, output_path)
 
-        with open(output_path, "wb") as f:
-            writer.write(f)
+
+def _require_new_field_name(reader: PdfReader, field_name: str) -> None:
+    """Dois campos raiz com o mesmo nome deixam o formulário ambíguo: cada leitor decide de
+    um jeito qual valor vale. Por isso o nome precisa ser novo."""
+    if field_name in (reader.get_fields() or {}):
+        raise ValueError(f'Já existe um campo chamado "{field_name}" neste PDF. Escolha outro nome.')
+
+
+def _merge_default_fonts(writer: PdfWriter, acroform_obj: DictionaryObject, overlay_acroform) -> None:
+    """Registra no `/DR` do formulário as fontes que o campo novo usa (`/DA`). Sem isso, num
+    formulário que ainda não tinha `/DR`, o leitor não acha a fonte para desenhar o valor."""
+    overlay_fonts = overlay_acroform.get_object().get("/DR", {}).get("/Font", {})
+    if not overlay_fonts:
+        return
+    resources = acroform_obj.get("/DR")
+    if resources is None:
+        resources = DictionaryObject()
+        acroform_obj[NameObject("/DR")] = resources
+    resources = resources.get_object()
+    fonts = resources.get("/Font")
+    if fonts is None:
+        fonts = DictionaryObject()
+        resources[NameObject("/Font")] = fonts
+    fonts = fonts.get_object()
+    for font_name, font_ref in overlay_fonts.items():
+        if font_name not in fonts:
+            fonts[NameObject(font_name)] = font_ref.clone(writer)
 
 
 @dataclass
@@ -184,11 +206,12 @@ class AddRadioGroup(PDFOperation):
         if selected_value is not None and selected_value not in values:
             raise ValueError("selected_value deve ser um dos valores das opções.")
 
-        reader = open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
+        reader = open_reader(input_path)
         for opt in options:
             require_valid_page_index(len(reader.pages), opt.page_number, label="Página em options")
+        _require_new_field_name(reader, field_name)
 
-        writer = PdfWriter(clone_from=input_path)
+        writer = PdfWriter(clone_from=reader)
 
         options_by_page: dict[int, list[RadioOption]] = {}
         for opt in options:
@@ -249,19 +272,10 @@ class AddRadioGroup(PDFOperation):
             fields.append(parent_ref)
             acroform_obj[NameObject("/Fields")] = fields
 
-            overlay_fonts = overlay_acroform.get_object().get("/DR", {}).get("/Font", {})
-            default_resources = acroform_obj.get("/DR")
-            if default_resources is not None and overlay_fonts:
-                fonts = default_resources.get_object().get("/Font")
-                if fonts is not None:
-                    for font_name, font_ref in overlay_fonts.items():
-                        if font_name not in fonts:
-                            fonts[NameObject(font_name)] = font_ref
+            _merge_default_fonts(writer, acroform_obj, overlay_acroform)
 
         acroform_obj[NameObject("/NeedAppearances")] = BooleanObject(True)
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)
 
 
 @dataclass
@@ -298,10 +312,12 @@ def _describe_field_type(field) -> str:
 
 
 class ListFormFields(PDFOperation):
-    """Lista os campos de formulário já existentes num PDF: nome, tipo e valor atual."""
+    """Lista os campos de formulário já existentes num PDF: nome, tipo e valor atual.
+    Campos que só agrupam outros (nomes hierárquicos como "cliente" em "cliente.nome") não
+    são campos preenchíveis e ficam de fora."""
 
     def run(self, input_path: str) -> list[FormFieldInfo]:
-        reader = open_reader(input_path)
+        reader = open_reader(input_path, purpose=READ)
         fields = reader.get_fields() or {}
         return [
             FormFieldInfo(
@@ -310,20 +326,80 @@ class ListFormFields(PDFOperation):
                 value="" if field.value is None else str(field.value),
             )
             for name, field in fields.items()
+            if field.field_type is not None
         ]
 
 
 class ExportFormDataCSV(PDFOperation):
-    """Exporta nome, tipo e valor atual de cada campo de um PDF para um arquivo CSV."""
+    """Exporta nome, tipo e valor atual de cada campo de um PDF para um arquivo CSV.
+
+    O arquivo sai em UTF-8 com BOM: sem o BOM, o Excel em português abre os acentos
+    quebrados."""
 
     def run(self, input_path: str, output_path: str) -> int:
         fields = ListFormFields().run(input_path)
-        with open(output_path, "w", newline="", encoding="utf-8") as f:
-            csv_writer = csv.writer(f)
-            csv_writer.writerow(["campo", "tipo", "valor"])
-            for field in fields:
-                csv_writer.writerow([field.name, field.field_type, field.value])
+        with atomic_output(output_path) as temp_path:
+            with open(temp_path, "w", newline="", encoding="utf-8-sig") as f:
+                csv_writer = csv.writer(f)
+                csv_writer.writerow(["campo", "tipo", "valor"])
+                for info in fields:
+                    csv_writer.writerow([info.name, info.field_type, info.value])
         return len(fields)
+
+
+@dataclass
+class FormImportResult:
+    """Resultado de uma importação de dados: quantos campos foram preenchidos e quais nomes
+    do arquivo de dados não existem no PDF."""
+
+    filled: int
+    not_found: list[str] = field(default_factory=list)
+
+
+def _read_csv_text(csv_path: str) -> str:
+    raw = Path(csv_path).read_bytes()
+    for encoding in ("utf-8-sig", "cp1252"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("latin-1")
+
+
+def _read_csv_values(csv_path: str) -> dict[str, str]:
+    """Lê "campo"/"valor" (ou "name"/"value") de um CSV, aceitando o que o Excel grava em
+    português: UTF-8 com BOM ou Windows-1252, separado por vírgula ou ponto e vírgula."""
+    text = _read_csv_text(csv_path)
+    try:
+        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t")
+    except csv.Error:
+        dialect = csv.excel
+    values: dict[str, str] = {}
+    for row in csv.DictReader(io.StringIO(text), dialect=dialect):
+        normalized = {str(key).strip().lower(): (value or "") for key, value in row.items() if key is not None}
+        name = (normalized.get("campo") or normalized.get("name") or "").strip()
+        if not name:
+            continue
+        values[name] = normalized.get("valor") or normalized.get("value") or ""
+    return values
+
+
+def _fill_fields(reader: PdfReader, output_path: str, values: dict[str, str]) -> FormImportResult:
+    """Preenche os campos que existem no PDF e informa os que não existem. Se nenhum nome
+    do arquivo de dados existir, é erro: relatar "preenchido" sem ter preenchido nada
+    esconderia um arquivo de dados trocado ou com cabeçalho errado."""
+    fields = reader.get_fields() or {}
+    known = set(fields) | {name.rsplit(".", 1)[-1] for name in fields}
+    matched = {name: value for name, value in values.items() if name in known}
+    not_found = sorted(name for name in values if name not in known)
+    if not matched:
+        raise ValueError(
+            "Nenhum dos campos do arquivo de dados existe neste PDF: " + ", ".join(not_found[:10])
+        )
+    writer = PdfWriter(clone_from=reader)
+    writer.update_page_form_field_values(list(writer.pages), matched, auto_regenerate=False)
+    write_pdf(writer, output_path)
+    return FormImportResult(filled=len(matched), not_found=not_found)
 
 
 class ImportFormDataCSV(PDFOperation):
@@ -333,25 +409,12 @@ class ImportFormDataCSV(PDFOperation):
     opção) — não um rótulo amigável — porque é esse o mesmo formato que `ExportFormDataCSV`
     grava, então uma volta completa exportar → editar → importar sempre é consistente."""
 
-    def run(self, input_path: str, output_path: str, csv_path: str) -> int:
-        open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
-        writer = PdfWriter(clone_from=input_path)
-
-        values: dict[str, str] = {}
-        with open(csv_path, newline="", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                name = row.get("campo") or row.get("name")
-                if not name:
-                    continue
-                values[name] = row.get("valor") or row.get("value") or ""
-
+    def run(self, input_path: str, output_path: str, csv_path: str) -> FormImportResult:
+        reader = open_reader(input_path)
+        values = _read_csv_values(csv_path)
         if not values:
             raise ValueError("Nenhum campo com nome válido encontrado no CSV.")
-
-        writer.update_page_form_field_values(list(writer.pages), values, auto_regenerate=False)
-        with open(output_path, "wb") as f:
-            writer.write(f)
-        return len(values)
+        return _fill_fields(reader, output_path, values)
 
 
 def _fdf_hex_string(value: str) -> str:
@@ -375,8 +438,9 @@ class ExportFormDataFDF(PDFOperation):
             lines.append(f"/V {_fdf_hex_string(field.value)}")
             lines.append(">>")
         lines.extend(["]", ">>", ">>", "endobj", "trailer", "<<", "/Root 1 0 R", ">>", "%%EOF"])
-        with open(output_path, "wb") as f:
-            f.write("\n".join(lines).encode("ascii"))
+        with atomic_output(output_path) as temp_path:
+            with open(temp_path, "wb") as f:
+                f.write("\n".join(lines).encode("ascii"))
         return len(fields)
 
 
@@ -408,9 +472,8 @@ class ImportFormDataFDF(PDFOperation):
     isso, o formato CSV é mais direto de qualquer forma.
     """
 
-    def run(self, input_path: str, output_path: str, fdf_path: str) -> int:
-        open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
-        writer = PdfWriter(clone_from=input_path)
+    def run(self, input_path: str, output_path: str, fdf_path: str) -> FormImportResult:
+        reader = open_reader(input_path)
 
         with open(fdf_path, "rb") as f:
             text = f.read().decode("latin-1")
@@ -431,51 +494,21 @@ class ImportFormDataFDF(PDFOperation):
 
         if not values:
             raise ValueError("Nenhum campo encontrado no arquivo FDF.")
-
-        writer.update_page_form_field_values(list(writer.pages), values, auto_regenerate=False)
-        with open(output_path, "wb") as f:
-            writer.write(f)
-        return len(values)
+        return _fill_fields(reader, output_path, values)
 
 
-def _remove_flattened_fields(writer: PdfWriter, field_names: set[str]) -> None:
-    """Remove do documento os widgets de campos já achatados.
-
-    `PdfWriter.update_page_form_field_values(..., flatten=True)` só cola a aparência do
-    campo no conteúdo da página — a própria docstring do pypdf avisa que "this option does
-    not remove the annotation itself" — então sem este passo o campo continuaria interativo
-    por cima do texto já desenhado (duplicado visualmente e ainda editável). Como todo campo
-    criado por `AddFormField`/`AddRadioGroup` neste projeto é sempre de nível raiz (nunca
-    aninhado sob outro campo pai), remover pelo `/T` do topo de `/AcroForm/Fields` — e os
-    widgets correspondentes (o próprio campo, ou seus `/Kids` num grupo radio) de `/Annots`
-    — é suficiente; não precisa da generalidade de nomes de campo hierárquicos.
-    """
-    acroform = writer.root_object.get("/AcroForm")
-    if acroform is None:
-        return
-    acroform_obj = acroform.get_object()
-    top_fields = acroform_obj.get("/Fields")
-    if not top_fields:
-        return
-
-    remaining_fields = ArrayObject()
-    removed_widget_ids: set[int] = set()
-    for field_ref in top_fields:
-        field_obj = field_ref.get_object()
-        if field_obj.get("/T") in field_names:
-            widgets = field_obj.get("/Kids") or [field_ref]
-            removed_widget_ids.update(id(widget_ref.get_object()) for widget_ref in widgets)
-        else:
-            remaining_fields.append(field_ref)
-    acroform_obj[NameObject("/Fields")] = remaining_fields
-
-    for page in writer.pages:
-        annots = page.get("/Annots")
-        if not annots:
-            continue
-        kept = ArrayObject(a for a in annots if id(a.get_object()) not in removed_widget_ids)
-        if len(kept) != len(annots):
-            page[NameObject("/Annots")] = kept
+def _qualified_name(widget) -> str:
+    """Nome completo do campo de um widget ("cliente.nome"), subindo pelos `/Parent`."""
+    parts: list[str] = []
+    node = widget.get_object()
+    visited: set[int] = set()
+    while node is not None and id(node) not in visited:
+        visited.add(id(node))
+        if "/T" in node:
+            parts.insert(0, str(node["/T"]))
+        parent = node.get("/Parent")
+        node = parent.get_object() if parent is not None else None
+    return ".".join(parts)
 
 
 class FlattenFormFields(PDFOperation):
@@ -483,20 +516,46 @@ class FlattenFormFields(PDFOperation):
     preenchido como conteúdo estático da página e remove o widget interativo — um "Fill &
     Sign" simplificado, para garantir que os valores não sejam alterados depois de
     preenchidos. Campos sem valor definido são deixados como estão (não há o que achatar
-    num campo em branco)."""
+    num campo em branco).
+
+    Vale para qualquer formulário, inclusive os com nomes hierárquicos ("cliente.nome",
+    comuns em formulários do Acrobat): o widget é identificado pelo nome completo do campo,
+    e os campos que ficam sem widget saem da árvore do formulário.
+    """
 
     def run(self, input_path: str, output_path: str) -> int:
-        open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
-        writer = PdfWriter(clone_from=input_path)
+        reader = open_reader(input_path)
+        writer = PdfWriter(clone_from=reader)
 
         fields = writer.get_fields() or {}
-        values = {name: field.value for name, field in fields.items() if field.value is not None}
+        values = {
+            name: info.value
+            for name, info in fields.items()
+            if info.value is not None and info.field_type is not None
+        }
         if values:
             writer.update_page_form_field_values(
                 list(writer.pages), values, auto_regenerate=False, flatten=True
             )
-            _remove_flattened_fields(writer, set(values.keys()))
+            flattened_widgets = []
+            for page in writer.pages:
+                if "/Annots" not in page:
+                    continue
+                kept = ArrayObject()
+                for ref in page["/Annots"]:
+                    annotation = ref.get_object()
+                    if annotation.get("/Subtype") == "/Widget" and _qualified_name(annotation) in values:
+                        flattened_widgets.append(ref)
+                    else:
+                        kept.append(ref)
+                if kept:
+                    page[NameObject("/Annots")] = kept
+                else:
+                    del page["/Annots"]
+            remove_widgets_from_form(writer, flattened_widgets)
+            acroform = writer.root_object.get("/AcroForm")
+            if acroform is not None and not acroform.get_object().get("/Fields"):
+                del writer.root_object["/AcroForm"]
 
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)
         return len(values)

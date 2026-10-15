@@ -1,12 +1,22 @@
-"""Manipulação de páginas: rotação, reordenação e remoção."""
+"""Manipulação de páginas: rotação, reordenação, remoção, inserção e substituição.
+
+Os índices recebidos aqui contam a partir de 0; a interface mostra e recebe páginas
+contadas a partir de 1 e converte na passagem. As mensagens de erro falam em páginas
+contadas a partir de 1, como o usuário as vê.
+"""
 
 from pypdf import PdfWriter
 
-from .base import PDFOperation, open_reader, require_valid_page_index
+from .base import PDFOperation, open_reader, require_valid_page_index, write_pdf
+from .document import pages_writer
+
+
+def _page_list(pages: list[int]) -> str:
+    return ", ".join(str(page + 1) for page in sorted(pages))
 
 
 class RotatePages(PDFOperation):
-    """Rotaciona páginas de um PDF."""
+    """Rotaciona páginas de um PDF (no sentido horário, em múltiplos de 90 graus)."""
 
     def run(
         self,
@@ -15,50 +25,58 @@ class RotatePages(PDFOperation):
         angle: int = 90,
         pages: list[int] | None = None,
     ) -> None:
+        if angle % 90 != 0:
+            raise ValueError("O ângulo de rotação precisa ser múltiplo de 90 graus.")
         reader = open_reader(input_path)
-        writer = PdfWriter()
-        target_pages = set(pages) if pages is not None else None
-        for index, page in enumerate(reader.pages):
-            if target_pages is None or index in target_pages:
-                page.rotate(angle)
-            writer.add_page(page)
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        total_pages = len(reader.pages)
+        if pages is not None:
+            for index in pages:
+                require_valid_page_index(total_pages, index)
+
+        writer = PdfWriter(clone_from=reader)
+        targets = set(pages) if pages is not None else set(range(total_pages))
+        for index in sorted(targets):
+            writer.pages[index].rotate(angle)
+        write_pdf(writer, output_path)
 
 
 class ReorderPages(PDFOperation):
-    """Reordena páginas de um PDF."""
+    """Reordena as páginas de um PDF. `order` precisa citar cada página exatamente uma vez:
+    uma lista incompleta descartaria páginas sem aviso."""
 
     def run(self, input_path: str, output_path: str, order: list[int]) -> None:
         reader = open_reader(input_path)
         total_pages = len(reader.pages)
         for index in order:
-            require_valid_page_index(total_pages, index, label="Página em order")
+            require_valid_page_index(total_pages, index)
+        duplicated = {index for index in order if order.count(index) > 1}
+        if duplicated:
+            raise ValueError(f"Página(s) repetida(s) na nova ordem: {_page_list(duplicated)}.")
+        missing = set(range(total_pages)) - set(order)
+        if missing:
+            raise ValueError(
+                f"A nova ordem precisa incluir todas as {total_pages} páginas; faltam: "
+                f"{_page_list(missing)}. Para tirar páginas, use Remover."
+            )
 
-        writer = PdfWriter()
-        for index in order:
-            writer.add_page(reader.pages[index])
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(pages_writer([(reader, order)]), output_path)
 
 
 class RemovePages(PDFOperation):
-    """Remove páginas de um PDF."""
+    """Remove páginas de um PDF. Marcadores, links e campos de formulário que apontavam
+    para as páginas removidas saem junto, e o conteúdo delas não fica no arquivo."""
 
     def run(self, input_path: str, output_path: str, pages: list[int]) -> None:
         reader = open_reader(input_path)
         total_pages = len(reader.pages)
-        pages_to_remove = set(pages)
-        remaining = total_pages - len(pages_to_remove.intersection(range(total_pages)))
-        if remaining < 1:
+        for index in pages:
+            require_valid_page_index(total_pages, index)
+        to_remove = set(pages)
+        kept = [index for index in range(total_pages) if index not in to_remove]
+        if not kept:
             raise ValueError("A remoção resultaria em um PDF sem nenhuma página.")
 
-        writer = PdfWriter()
-        for index, page in enumerate(reader.pages):
-            if index not in pages_to_remove:
-                writer.add_page(page)
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(pages_writer([(reader, kept)]), output_path)
 
 
 class InsertPages(PDFOperation):
@@ -70,24 +88,21 @@ class InsertPages(PDFOperation):
         total_pages = len(reader.pages)
         if not 0 <= at_index <= total_pages:
             raise ValueError(
-                f"Posição de inserção inválida: {at_index} (o documento tem {total_pages} "
-                f"página(s), posições válidas vão de 0 a {total_pages})."
+                f"Posição de inserção inválida: o documento tem {total_pages} página(s); dá "
+                f"para inserir antes da página 1 até depois da página {total_pages}."
             )
 
-        writer = PdfWriter()
-        for index in range(at_index):
-            writer.add_page(reader.pages[index])
-        for page in insert_reader.pages:
-            writer.add_page(page)
-        for index in range(at_index, total_pages):
-            writer.add_page(reader.pages[index])
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        parts = [
+            (reader, list(range(at_index))),
+            (insert_reader, list(range(len(insert_reader.pages)))),
+            (reader, list(range(at_index, total_pages))),
+        ]
+        write_pdf(pages_writer(parts, properties_from=reader), output_path)
 
 
 class ReplacePages(PDFOperation):
-    """Substitui um intervalo de páginas do documento pelas páginas de outro PDF."""
+    """Substitui um intervalo de páginas do documento pelas páginas de outro PDF.
+    `start_index` é inclusivo e `end_index`, exclusivo."""
 
     def run(
         self,
@@ -103,17 +118,13 @@ class ReplacePages(PDFOperation):
         require_valid_page_index(total_pages, start_index, label="Página inicial")
         if not start_index < end_index <= total_pages:
             raise ValueError(
-                f"Intervalo inválido: end_index ({end_index}) deve ser maior que start_index "
-                f"({start_index}) e no máximo {total_pages}."
+                f"Intervalo inválido: a página final precisa vir depois da inicial "
+                f"({start_index + 1}) e o documento tem {total_pages} página(s)."
             )
 
-        writer = PdfWriter()
-        for index in range(start_index):
-            writer.add_page(reader.pages[index])
-        for page in replacement_reader.pages:
-            writer.add_page(page)
-        for index in range(end_index, total_pages):
-            writer.add_page(reader.pages[index])
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        parts = [
+            (reader, list(range(start_index))),
+            (replacement_reader, list(range(len(replacement_reader.pages)))),
+            (reader, list(range(end_index, total_pages))),
+        ]
+        write_pdf(pages_writer(parts, properties_from=reader), output_path)

@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.annotations import AnnotationSpec, spec_rect
+from core.base import remember_password
 from core.geometry import PageGeometry
 from core.redaction import RedactionRect
 from ui.annotation_state import AnnotationState
@@ -313,6 +314,10 @@ class PdfViewer(QWidget):
                 # aparecem no render: draw_annots=True sozinho não é suficiente para
                 # widgets de formulário.
                 document.init_forms()
+                if password:
+                    # As ferramentas (pypdf) passam a abrir o arquivo com a mesma senha,
+                    # sem pedir de novo; a senha só fica na memória desta sessão.
+                    remember_password(path, password)
                 return document
             except pdfium.PdfiumError as exc:
                 if exc.err_code != pdfium.raw.FPDF_ERR_PASSWORD:
@@ -912,6 +917,7 @@ class PdfViewer(QWidget):
                     color=self.annotation_state.active_color(),
                     position=pdf_point,
                     text=text.strip(),
+                    rotation=self._geometry(page_index).rotation,
                 )
             )
 
@@ -923,6 +929,7 @@ class PdfViewer(QWidget):
                 color=self.annotation_state.active_color(),
                 position=pdf_point,
                 text=self.annotation_state.stamp_text(),
+                rotation=self._geometry(page_index).rotation,
             )
         )
 

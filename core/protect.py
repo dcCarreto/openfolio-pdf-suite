@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pypdf import PdfReader, PdfWriter
 from pypdf.constants import UserAccessPermissions as _Perm
 
-from .base import PDFOperation, open_reader
+from .base import PDFOperation, open_reader, write_pdf
 
 
 @dataclass
@@ -63,9 +63,7 @@ class ProtectPDF(PDFOperation):
         permissions: PDFPermissions | None = None,
     ) -> None:
         reader = open_reader(input_path)
-        writer = PdfWriter()
-        for page in reader.pages:
-            writer.add_page(page)
+        writer = PdfWriter(clone_from=reader)
 
         encrypt_kwargs = {"user_password": password, "algorithm": "AES-256"}
         if owner_password:
@@ -73,13 +71,13 @@ class ProtectPDF(PDFOperation):
         if permissions is not None:
             encrypt_kwargs["permissions_flag"] = permissions.as_flag()
         writer.encrypt(**encrypt_kwargs)
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)
 
 
 class UnlockPDF(PDFOperation):
-    """Remove a senha de um PDF protegido."""
+    """Remove a senha de um PDF protegido — tanto a de abertura quanto as restrições de
+    uso: num PDF que abre sem senha mas restringe alterações, informe a senha de
+    permissões (proprietário)."""
 
     def run(self, input_path: str, output_path: str, password: str) -> None:
         reader = PdfReader(input_path)
@@ -87,9 +85,5 @@ class UnlockPDF(PDFOperation):
             if not reader.decrypt(password):
                 raise ValueError("Senha incorreta.")
 
-        writer = PdfWriter()
-        for page in reader.pages:
-            writer.add_page(page)
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        writer = PdfWriter(clone_from=reader)
+        write_pdf(writer, output_path)

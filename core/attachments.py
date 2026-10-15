@@ -6,10 +6,11 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from pypdf import PdfWriter
-from pypdf.generic import ArrayObject, NameObject
+from pypdf import PdfReader, PdfWriter
+from pypdf.generic import DictionaryObject, NameObject
 
-from .base import PDFOperation, open_reader
+from .base import READ, PDFOperation, atomic_output, open_reader, write_pdf
+from .document import build_name_tree, iter_name_tree, unique_name
 
 
 @dataclass
@@ -22,7 +23,7 @@ class ListAttachments(PDFOperation):
     """Lista os anexos embutidos num PDF, com nome e tamanho em bytes."""
 
     def run(self, input_path: str) -> list[AttachmentInfo]:
-        reader = open_reader(input_path)
+        reader = open_reader(input_path, purpose=READ)
         return [
             AttachmentInfo(name=name, size=len(contents[0]))
             for name, contents in reader.attachments.items()
@@ -30,16 +31,18 @@ class ListAttachments(PDFOperation):
 
 
 class AddAttachment(PDFOperation):
-    """Embute um arquivo local num PDF."""
+    """Embute um arquivo local num PDF. Se já houver um anexo com o mesmo nome, o novo
+    ganha um sufixo (" (2)"...) — nomes repetidos deixariam a árvore de anexos ambígua.
+    Devolve o nome com que o arquivo foi anexado."""
 
-    def run(self, input_path: str, output_path: str, attachment_path: str) -> None:
-        open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
-        writer = PdfWriter(clone_from=input_path)
-        data = Path(attachment_path).read_bytes()
-        writer.add_attachment(Path(attachment_path).name, data)
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+    def run(self, input_path: str, output_path: str, attachment_path: str) -> str:
+        reader = open_reader(input_path)
+        writer = PdfWriter(clone_from=reader)
+        used = {str(key) for key, _value in _embedded_file_entries(writer)}
+        name = unique_name(Path(attachment_path).name, used)
+        writer.add_attachment(name, Path(attachment_path).read_bytes())
+        write_pdf(writer, output_path)
+        return name
 
 
 _WINDOWS_RESERVED_NAMES = {
@@ -95,7 +98,7 @@ class ExtractAttachments(PDFOperation):
     """
 
     def run(self, input_path: str, output_dir: str) -> list[str]:
-        reader = open_reader(input_path)
+        reader = open_reader(input_path, purpose=READ)
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(parents=True, exist_ok=True)
         resolved_dir = output_dir_path.resolve()
@@ -112,38 +115,47 @@ class ExtractAttachments(PDFOperation):
         return output_paths
 
 
+def _embedded_file_entries(document) -> list[tuple[object, object]]:
+    names = document.root_object.get("/Names")
+    names = names.get_object() if names is not None else None
+    if not isinstance(names, DictionaryObject) or "/EmbeddedFiles" not in names:
+        return []
+    return list(iter_name_tree(names.raw_get("/EmbeddedFiles")))
+
+
+def _filespec_names(filespec) -> set[str]:
+    spec = filespec.get_object()
+    return {str(spec[key]) for key in ("/UF", "/F") if isinstance(spec, DictionaryObject) and key in spec}
+
+
 class RemoveAttachment(PDFOperation):
-    """Remove um anexo embutido de um PDF pelo nome (ver `ListAttachments`)."""
+    """Remove um anexo embutido de um PDF pelo nome (ver `ListAttachments`).
+
+    A árvore de anexos pode ter vários níveis (`/Kids`), comum em PDFs com muitos anexos;
+    ela é percorrida inteira e regravada sem o anexo. O nome pode ser a chave da árvore ou
+    o nome de arquivo do anexo (`/UF`/`/F`), que é o que a listagem mostra quando os dois
+    diferem. Depois de gravar, confere que o anexo realmente saiu.
+    """
 
     def run(self, input_path: str, output_path: str, name: str) -> None:
         reader = open_reader(input_path)
-        if name not in reader.attachments:
+        writer = PdfWriter(clone_from=reader)
+        entries = _embedded_file_entries(writer)
+        remaining = [
+            (str(key), filespec)
+            for key, filespec in entries
+            if str(key) != name and name not in _filespec_names(filespec)
+        ]
+        if len(remaining) == len(entries):
             raise ValueError(f'Nenhum anexo chamado "{name}" foi encontrado neste PDF.')
 
-        writer = PdfWriter(clone_from=input_path)
-        catalog = writer.root_object
-        names_dict_ref = catalog.get("/Names")
-        if names_dict_ref is None:
-            raise ValueError(f'Nenhum anexo chamado "{name}" foi encontrado neste PDF.')
-        names_dict = names_dict_ref.get_object()
-        embedded_files_ref = names_dict.get("/EmbeddedFiles")
-        if embedded_files_ref is None:
-            raise ValueError(f'Nenhum anexo chamado "{name}" foi encontrado neste PDF.')
-        embedded_files = embedded_files_ref.get_object()
-        names_array = embedded_files.get("/Names") or []
-
-        remaining = ArrayObject()
-        skip_next = False
-        for entry in names_array:
-            if skip_next:
-                skip_next = False
-                continue
-            entry_obj = entry.get_object() if hasattr(entry, "get_object") else entry
-            if isinstance(entry_obj, str) and entry_obj == name:
-                skip_next = True
-                continue
-            remaining.append(entry)
-        embedded_files[NameObject("/Names")] = remaining
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        names = writer.root_object["/Names"].get_object()
+        if remaining:
+            names[NameObject("/EmbeddedFiles")] = build_name_tree(remaining)
+        else:
+            del names["/EmbeddedFiles"]
+        with atomic_output(output_path) as temp_path:
+            with open(temp_path, "wb") as f:
+                writer.write(f)
+            if name in PdfReader(temp_path).attachments:
+                raise RuntimeError(f'O anexo "{name}" continuaria no arquivo; nada foi salvo.')

@@ -19,7 +19,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from .base import PDFOperation
+from .base import PDFOperation, atomic_output
 
 _LIBREOFFICE_CANDIDATES = [
     "soffice",
@@ -51,10 +51,11 @@ class ConvertOfficeToPDF(PDFOperation):
             raise ValueError(f"Formato não suportado: {suffix}")
 
         libreoffice_path = find_libreoffice()
-        if libreoffice_path:
-            self._convert_with_libreoffice(libreoffice_path, input_path, output_path)
-        else:
-            self._convert_with_fallback(input_path, output_path, suffix)
+        with atomic_output(output_path) as temp_path:
+            if libreoffice_path:
+                self._convert_with_libreoffice(libreoffice_path, input_path, temp_path)
+            else:
+                self._convert_with_fallback(input_path, temp_path, suffix)
 
     def _convert_with_libreoffice(self, libreoffice_path: str, input_path: str, output_path: str) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import DecodedStreamObject, NameObject
 
-from .base import PDFOperation, open_reader
+from .base import PDFOperation, open_reader, write_pdf
 from .redaction import _is_javascript_action, _strip_annotation_javascript
 
 _VALID_PARTS = (1, 2, 3)
@@ -56,8 +56,8 @@ class ConvertToPDFA(PDFOperation):
         if conformance.upper() not in _VALID_CONFORMANCE:
             raise ValueError(f"conformance inválido: {conformance} (use A, B ou U).")
 
-        open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
-        writer = PdfWriter(clone_from=input_path)
+        reader = open_reader(input_path)
+        writer = PdfWriter(clone_from=reader)
         catalog = writer.root_object
 
         names = catalog.get("/Names")
@@ -84,8 +84,7 @@ class ConvertToPDFA(PDFOperation):
         xmp_stream[NameObject("/Subtype")] = NameObject("/XML")
         catalog[NameObject("/Metadata")] = writer._add_object(xmp_stream)
 
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)
 
 
 @dataclass

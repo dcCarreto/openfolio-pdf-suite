@@ -2,20 +2,19 @@
 
 from pypdf import PdfWriter
 
-from .base import PDFOperation, open_reader
+from .base import PDFOperation, open_reader, write_pdf
 
 
 class CompressPDF(PDFOperation):
-    """Reduz o tamanho de um arquivo PDF recomprimindo conteúdo e removendo objetos duplicados."""
+    """Reduz o tamanho de um arquivo PDF recomprimindo conteúdo e removendo objetos
+    duplicados ou sem uso. Trabalha sobre uma cópia completa do documento: marcadores,
+    formulário, anexos e metadados continuam lá. Ainda não recomprime imagens."""
 
     def run(self, input_path: str, output_path: str) -> None:
         reader = open_reader(input_path)
-        writer = PdfWriter()
-        for page in reader.pages:
-            added_page = writer.add_page(page)
-            added_page.compress_content_streams()
+        writer = PdfWriter(clone_from=reader)
+        for page in writer.pages:
+            page.compress_content_streams()
 
         writer.compress_identical_objects(remove_duplicates=True, remove_unreferenced=True)
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)

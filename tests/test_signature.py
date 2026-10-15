@@ -239,3 +239,45 @@ def test_tampered_bytes_are_reported_as_invalid(tmp_path):
     (info,) = DescribeSignatures().run(str(tampered))
 
     assert info.verdict == VERDICT_INVALID
+
+
+def test_a_signed_document_can_be_signed_again_without_covering_the_first_stamp(tmp_path):
+    # O nome de campo fixo impedia a segunda assinatura (contratante e contratado).
+    signed = _signed_with_test_certificate(tmp_path)
+    twice = tmp_path / "assinado_duas_vezes.pdf"
+
+    SignDocument().run(
+        str(signed),
+        str(twice),
+        signer_name="Ciclano",
+        test_common_name="Ciclano",
+        test_email="c@example.com",
+    )
+
+    first, second = DescribeSignatures().run(str(twice))
+    assert first.field_name != second.field_name
+    assert second.verdict == VERDICT_WARNING and second.coverage == "entire_file"
+    # A primeira assinatura continua válida: a segunda só acrescentou uma revisão de assinatura.
+    assert first.intact and first.modification in ("none", "lta_updates", "form_filling")
+
+    widgets = [ref.get_object() for ref in PdfReader(str(twice)).pages[0]["/Annots"]]
+    rects = [[float(v) for v in widget["/Rect"]] for widget in widgets]
+    (a, b) = rects
+    assert a[3] <= b[1] or b[3] <= a[1]  # empilhados, sem sobreposição
+
+
+def test_stamp_goes_to_the_visual_corner_on_rotated_pages(make_text_pdf, tmp_path):
+    from core.geometry import PageGeometry
+
+    path_in = make_text_pdf("rot.pdf", [(80, 650, "contrato")], rotate=90)
+    path_out = tmp_path / "assinado.pdf"
+    SignDocument().run(
+        str(path_in), str(path_out), signer_name="Fulano", test_common_name="Fulano",
+        test_email="f@example.com", position="bottom-right",
+    )
+
+    page = PdfReader(str(path_out)).pages[0]
+    widget = page["/Annots"][0].get_object()
+    geometry = PageGeometry.from_pypdf_page(page)
+    left, bottom, right, top = geometry.user_rect_to_visual(tuple(float(v) for v in widget["/Rect"]))
+    assert right > geometry.width - 30 and bottom < 30  # canto inferior direito da tela

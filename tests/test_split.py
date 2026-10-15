@@ -109,3 +109,25 @@ def test_split_by_bookmarks_rejects_encrypted_input(make_encrypted_pdf, tmp_path
 
     with pytest.raises(EncryptedPDFError):
         SplitByBookmarks().run(str(encrypted_path), str(output_dir))
+
+
+def test_split_by_bookmarks_keeps_pages_before_the_first_bookmark(make_pdf, tmp_path):
+    # Capa e sumário (antes do primeiro marcador) sumiam da saída.
+    pdf_path = make_pdf("doc.pdf", [(200, 200)] * 6)
+    with_bookmarks = tmp_path / "with_bookmarks.pdf"
+    AddBookmarks().run(str(pdf_path), str(with_bookmarks), bookmarks=[("Cap 1", 2), ("Cap 2", 4)])
+
+    output_paths = SplitByBookmarks().run(str(with_bookmarks), str(tmp_path / "out"))
+
+    assert [len(PdfReader(path).pages) for path in output_paths] == [2, 2, 2]
+    assert Path(output_paths[0]).name == "with_bookmarks_00_inicio.pdf"
+
+
+def test_split_names_sort_in_document_order(make_pdf, tmp_path):
+    pdf_path = make_pdf("doc.pdf", [(200, 200)] * 11)
+
+    output_paths = SplitPDF().run(str(pdf_path), str(tmp_path / "out"))
+
+    names = [Path(path).name for path in output_paths]
+    assert names[0] == "doc_part01.pdf" and names[-1] == "doc_part11.pdf"
+    assert sorted(names) == names

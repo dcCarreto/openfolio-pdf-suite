@@ -32,7 +32,7 @@ class LayersPage(QWidget):
         self.layers_list = QListWidget()
 
         self.layer_index_spin = QSpinBox()
-        self.layer_index_spin.setRange(0, 9999)
+        self.layer_index_spin.setRange(1, 9999)
         self.visibility_combo = QComboBox()
         self.visibility_combo.addItems([tr("Visível"), tr("Oculta")])
 
@@ -47,7 +47,7 @@ class LayersPage(QWidget):
         layout.addWidget(self.source_bar)
         layout.addWidget(list_button)
         layout.addWidget(self.layers_list)
-        layout.addWidget(QLabel(tr("Índice da camada:")))
+        layout.addWidget(QLabel(tr("Número da camada:")))
         layout.addWidget(self.layer_index_spin)
         layout.addWidget(QLabel(tr("Nova visibilidade:")))
         layout.addWidget(self.visibility_combo)
@@ -75,7 +75,7 @@ class LayersPage(QWidget):
             return
         for layer in layers:
             status = tr("visível") if layer.visible else tr("oculta")
-            self.layers_list.addItem(f"#{layer.index} — {layer.name} — {status}")
+            self.layers_list.addItem(f"#{layer.index + 1} — {layer.name} — {status}")
 
     def _apply_visibility(self):
         input_path = self.session.path()
@@ -92,7 +92,7 @@ class LayersPage(QWidget):
 
         try:
             SetLayerVisibility().run(
-                input_path, output_path, layer_index=self.layer_index_spin.value(), visible=visible
+                input_path, output_path, layer_index=self.layer_index_spin.value() - 1, visible=visible
             )
         except Exception as exc:
             QMessageBox.critical(

@@ -34,7 +34,8 @@ from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.validation import validate_pdf_signature
 from pyhanko.sign.validation.status import SignatureCoverageLevel
 
-from .base import PDFOperation, open_reader, require_valid_page_index
+from .base import PDFOperation, atomic_output, open_reader, require_valid_page_index
+from .geometry import PageGeometry, intersect_rects
 
 _STAMP_WIDTH = 175
 _STAMP_HEIGHT = 50
@@ -51,6 +52,39 @@ _POSITIONS = {
     ),
     "top-left": lambda w, h: (_MARGIN, h - _MARGIN - _STAMP_HEIGHT, _MARGIN + _STAMP_WIDTH, h - _MARGIN),
 }
+_FIELD_NAME = "OpenFolioSignature"
+_STAMP_GAP = 6
+
+
+def _unique_field_name(reader) -> str:
+    """Nome de campo ainda não usado: num documento já assinado pelo app, a segunda
+    assinatura (o contratado depois do contratante, por exemplo) ganha um campo próprio."""
+    existing = set(reader.get_fields() or {})
+    name, counter = _FIELD_NAME, 2
+    while name in existing:
+        name = f"{_FIELD_NAME}{counter}"
+        counter += 1
+    return name
+
+
+def _stamp_box(page, position: str) -> tuple[float, float, float, float]:
+    """Retângulo do selo no espaço do usuário: no canto pedido da página como ela aparece
+    na tela e, se já houver selos de assinatura ali, empilhado ao lado deles (para cima
+    nas posições de baixo, para baixo nas de cima) em vez de por cima."""
+    geometry = PageGeometry.from_pypdf_page(page)
+    occupied = []
+    for ref in page.get("/Annots", []):
+        annotation = ref.get_object()
+        if annotation.get("/FT") == "/Sig" or annotation.get("/Parent", {}).get("/FT") == "/Sig":
+            occupied.append(geometry.user_rect_to_visual(tuple(float(v) for v in annotation["/Rect"])))
+
+    left, bottom, right, top = _POSITIONS[position](geometry.width, geometry.height)
+    step = (_STAMP_HEIGHT + _STAMP_GAP) * (1 if position.startswith("bottom") else -1)
+    for _attempt in range(int(geometry.height // (_STAMP_HEIGHT + _STAMP_GAP)) + 1):
+        if not any(intersect_rects((left, bottom, right, top), other) for other in occupied):
+            break
+        bottom, top = bottom + step, top + step
+    return geometry.visual_rect_to_user((left, bottom, right, top))
 
 
 def generate_test_certificate(common_name: str, email: str) -> tuple[bytes, bytes]:
@@ -105,7 +139,11 @@ def _load_test_signer(common_name: str, email: str, tmp_dir: str):
 
 
 class SignDocument(PDFOperation):
-    """Assina um PDF: selo visível + assinatura criptográfica (CMS/PKCS#7)."""
+    """Assina um PDF: selo visível + assinatura criptográfica (CMS/PKCS#7).
+
+    O arquivo assinado é gravado como atualização incremental do original (o que preserva
+    assinaturas anteriores) e só ocupa o lugar do destino quando a assinatura terminou.
+    """
 
     def run(
         self,
@@ -135,11 +173,8 @@ class SignDocument(PDFOperation):
 
             reader = open_reader(input_path)
             require_valid_page_index(len(reader.pages), page_index)
-            page = reader.pages[page_index]
-            width, height = float(page.mediabox.width), float(page.mediabox.height)
-            box = _POSITIONS[position](width, height)
-
-            field_name = "OpenFolioSignature"
+            box = _stamp_box(reader.pages[page_index], position)
+            field_name = _unique_field_name(reader)
             stamp_style = stamp.TextStampStyle(
                 stamp_text="Assinado digitalmente por %(signer)s\n%(ts)s"
             )
@@ -149,9 +184,9 @@ class SignDocument(PDFOperation):
                 meta, signer=signer, stamp_style=stamp_style, new_field_spec=field_spec
             )
 
-            with open(input_path, "rb") as inf:
+            with open(input_path, "rb") as inf, atomic_output(output_path) as temp_path:
                 writer = IncrementalPdfFileWriter(inf)
-                with open(output_path, "wb") as outf:
+                with open(temp_path, "wb") as outf:
                     pdf_signer.sign_pdf(
                         writer, output=outf, appearance_text_params={"signer": signer_name}
                     )

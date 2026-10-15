@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pypdf import PdfWriter
 from pypdf.generic import BooleanObject, DictionaryObject, NameObject, TextStringObject
 
-from .base import PDFOperation, open_reader
+from .base import READ, PDFOperation, open_reader, write_pdf
 
 
 @dataclass
@@ -52,7 +52,7 @@ class CheckAccessibility(PDFOperation):
     cabeçalho de tabela, rótulo de campo de formulário nem contraste de cor."""
 
     def run(self, input_path: str) -> AccessibilityReport:
-        reader = open_reader(input_path)
+        reader = open_reader(input_path, purpose=READ)
         issues: list[str] = []
         catalog = reader.trailer["/Root"]
 
@@ -94,7 +94,7 @@ class FixBasicAccessibilityIssues(PDFOperation):
             raise ValueError("Informe um título para o documento.")
 
         reader = open_reader(input_path)
-        writer = PdfWriter(clone_from=input_path)
+        writer = PdfWriter(clone_from=reader)
 
         writer.root_object[NameObject("/Lang")] = TextStringObject(language)
 
@@ -116,5 +116,4 @@ class FixBasicAccessibilityIssues(PDFOperation):
             viewer_prefs = viewer_prefs.get_object()
         viewer_prefs[NameObject("/DisplayDocTitle")] = BooleanObject(True)
 
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)

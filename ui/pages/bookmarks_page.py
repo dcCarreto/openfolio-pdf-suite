@@ -37,7 +37,7 @@ class BookmarksPage(QWidget):
         self.title_edit = QLineEdit()
         self.title_edit.setPlaceholderText(tr("Título do marcador"))
         self.page_spin = QSpinBox()
-        self.page_spin.setRange(0, 9999)
+        self.page_spin.setRange(1, 9999)
 
         add_button = QPushButton(tr("Adicionar"))
         add_button.clicked.connect(self._add_bookmark)
@@ -45,7 +45,7 @@ class BookmarksPage(QWidget):
         remove_button.clicked.connect(self._remove_selected)
 
         page_row = QHBoxLayout()
-        page_row.addWidget(QLabel(tr("Página (0 = primeira):")))
+        page_row.addWidget(QLabel(tr("Página:")))
         page_row.addWidget(self.page_spin)
         page_row.addWidget(add_button)
 
@@ -75,7 +75,7 @@ class BookmarksPage(QWidget):
 
         page_number = self.page_spin.value()
         item = QListWidgetItem(tr("{title} — página {page}").format(title=title, page=page_number))
-        item.setData(Qt.ItemDataRole.UserRole, (title, page_number))
+        item.setData(Qt.ItemDataRole.UserRole, (title, page_number - 1))  # o core conta a partir de 0
         self.bookmark_list.addItem(item)
         self.title_edit.clear()
 

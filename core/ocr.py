@@ -11,18 +11,16 @@ setTextRenderMode(3)) posicionado exatamente sobre cada palavra reconhecida — 
 escaneada original nunca é alterada, só ganha uma camada de texto pesquisável por cima.
 """
 
-import io
 import shutil
 from pathlib import Path
 
 import pypdfium2 as pdfium
 import pytesseract
-from pypdf import PdfReader, PdfWriter
-from pypdf.generic import RectangleObject
-from reportlab.pdfgen import canvas as rl_canvas
+from pypdf import PdfWriter
 
-from .base import PDFOperation, atomic_output, open_reader
+from .base import PDFOperation, open_reader, write_pdf
 from .geometry import PageGeometry
+from .overlay import materialize_inherited_attributes, visual_overlay
 
 _TESSERACT_CANDIDATES = [
     "tesseract",
@@ -85,14 +83,14 @@ class OCRDocument(PDFOperation):
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
 
         reader = open_reader(input_path)
-        writer = PdfWriter()
+        writer = PdfWriter(clone_from=reader)
+        materialize_inherited_attributes(writer)
         pages_ocred = 0
 
         pdfium_doc = pdfium.PdfDocument(input_path)
         try:
             for index, page in enumerate(reader.pages):
                 if skip_pages_with_text and (page.extract_text() or "").strip():
-                    writer.add_page(page)
                     continue
 
                 pdfium_page = pdfium_doc[index]
@@ -101,69 +99,54 @@ class OCRDocument(PDFOperation):
                 data = _run_tesseract(image, language)
 
                 overlay_page = self._build_overlay(data, geometry, image.size, min_confidence)
-                added_page = writer.add_page(page)
                 if overlay_page is not None:
-                    added_page.merge_page(overlay_page)
+                    writer.pages[index].merge_page(overlay_page)
                     pages_ocred += 1
         finally:
             pdfium_doc.close()
 
-        with atomic_output(output_path) as temp_path:
-            with open(temp_path, "wb") as f:
-                writer.write(f)
+        write_pdf(writer, output_path)
         return pages_ocred
 
     def _build_overlay(
         self, data: dict, geometry: PageGeometry, image_size: tuple[int, int], min_confidence: int
     ):
-        """Monta a página com o texto invisível.
+        """Monta a página com o texto invisível, ou None se nenhuma palavra passou no filtro
+        de confiança.
 
         As caixas do Tesseract estão em pixels da imagem renderizada, ou seja, no espaço
-        visual (a página como aparece na tela). A matriz da geometria leva esse espaço ao do
-        usuário: o texto cai sobre a palavra e corre na direção em que ela aparece, mesmo em
+        visual (a página como aparece na tela); `visual_overlay` leva esse espaço ao do
+        usuário. O texto cai sobre a palavra e corre na direção em que ela aparece, mesmo em
         páginas com `/Rotate` ou CropBox deslocada.
         """
         image_width, image_height = image_size
         scale_x = image_width / geometry.width
         scale_y = image_height / geometry.height
 
-        buffer = io.BytesIO()
-        c = rl_canvas.Canvas(buffer, pagesize=(geometry.width, geometry.height))
-        c.transform(*geometry.visual_to_user_matrix())
-        wrote_any = False
+        def draw(canvas, _width: float, height: float) -> bool:
+            wrote_any = False
+            for i in range(len(data["text"])):
+                text = data["text"][i].strip()
+                if not text:
+                    continue
+                try:
+                    confidence = float(data["conf"][i])
+                except (TypeError, ValueError):
+                    continue
+                if confidence < min_confidence:
+                    continue
 
-        for i in range(len(data["text"])):
-            text = data["text"][i].strip()
-            if not text:
-                continue
-            try:
-                confidence = float(data["conf"][i])
-            except (TypeError, ValueError):
-                continue
-            if confidence < min_confidence:
-                continue
+                x = data["left"][i] / scale_x
+                box_height = data["height"][i] / scale_y
+                y_top = height - data["top"][i] / scale_y
+                y = y_top - box_height  # baseline aproximada, na base da caixa reconhecida
 
-            x = data["left"][i] / scale_x
-            box_height = data["height"][i] / scale_y
-            y_top = geometry.height - data["top"][i] / scale_y
-            y = y_top - box_height  # baseline aproximada, na base da caixa reconhecida
+                text_obj = canvas.beginText(x, y)
+                text_obj.setTextRenderMode(3)  # invisível: não desenha nada, mas fica pesquisável
+                text_obj.setFont("Helvetica", max(1.0, box_height * 0.9))
+                text_obj.textOut(text)
+                canvas.drawText(text_obj)
+                wrote_any = True
+            return wrote_any
 
-            text_obj = c.beginText(x, y)
-            text_obj.setTextRenderMode(3)  # invisível: não desenha nada, mas fica pesquisável
-            text_obj.setFont("Helvetica", max(1.0, box_height * 0.9))
-            text_obj.textOut(text)
-            c.drawText(text_obj)
-            wrote_any = True
-
-        if not wrote_any:
-            return None
-
-        c.showPage()
-        c.save()
-        buffer.seek(0)
-        overlay = PdfReader(buffer).pages[0]
-        # `merge_page` recorta o conteúdo mesclado pela CropBox da página sobreposta. Com a
-        # mesma área visível da página original, nenhuma palavra é cortada fora de lugar.
-        overlay.mediabox = RectangleObject(geometry.box)
-        overlay.cropbox = RectangleObject(geometry.box)
-        return overlay
+        return visual_overlay(geometry, draw)

@@ -195,3 +195,31 @@ def test_export_annotations_csv_rejects_encrypted_input(make_encrypted_pdf, tmp_
 
     with pytest.raises(EncryptedPDFError):
         ExportAnnotationsCSV().run(str(encrypted_path), str(tmp_path / "out.csv"))
+
+
+def test_stamp_on_rotated_page_occupies_a_box_upright_on_screen():
+    # Na tela, o carimbo cresce para a direita e para cima a partir do clique, com o
+    # tamanho de sempre — em qualquer /Rotate.
+    from core.geometry import PageGeometry
+
+    for rotation in (0, 90, 180, 270):
+        geometry = PageGeometry.from_boxes((0, 0, 612, 792), rotation=rotation)
+        anchor_visual = (100.0, 200.0)
+        anchor_user = geometry.visual_to_user(*anchor_visual)
+        spec = AnnotationSpec(page_index=0, kind="stamp", position=anchor_user, text="OK", rotation=rotation)
+        left, bottom, right, top = geometry.user_rect_to_visual(spec_rect(spec))
+        assert (round(left), round(bottom)) == anchor_visual
+        assert (round(right - left), round(top - bottom)) == (160, 40)
+
+
+def test_stamp_appearance_is_rotated_with_the_page(tmp_path, make_text_pdf):
+    path_in = make_text_pdf("rot.pdf", [(80, 650, "texto")], rotate=90)
+    path_out = tmp_path / "out.pdf"
+    spec = AnnotationSpec(page_index=0, kind="stamp", position=(300, 300), text="APROVADO", rotation=90)
+
+    AddAnnotations().run(str(path_in), str(path_out), [spec])
+
+    annotation = _annotations_by_subtype(path_out)["/FreeText"]
+    appearance = annotation["/AP"]["/N"].get_object()
+    assert [float(v) for v in appearance["/Matrix"]] == [0, 1, -1, 0, 0, 0]
+    assert [float(v) for v in appearance["/BBox"]] == [0, 0, 160, 40]

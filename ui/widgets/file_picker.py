@@ -22,7 +22,18 @@ _TOOLTIPS = {
 
 
 class FilePicker(QWidget):
-    """Linha com campo de caminho somente-leitura e botão de busca."""
+    """Linha com campo de caminho somente-leitura e botão de busca.
+
+    No modo "save" com `suggested_source`, o destino nunca fica "grudado" num arquivo de
+    entrada antigo:
+
+    - Sem escolha manual, o destino é um nome sugerido a partir da entrada atual
+      (`contrato.pdf` -> `contrato_mesclado.pdf`), sempre de um arquivo que ainda não
+      existe — nada é sobrescrito sem o usuário pedir.
+    - Um caminho escolhido no diálogo (que já confirma a sobrescrita) vale para a entrada
+      de quando foi escolhido. Se a entrada mudar, a escolha cai e a sugestão volta;
+      antes, processar outro documento gravava por cima do resultado anterior sem aviso.
+    """
 
     path_changed = Signal(str)
 
@@ -40,8 +51,7 @@ class FilePicker(QWidget):
         self._mode = mode
         self._file_filter = file_filter
         self._path = ""
-        # Usado só no modo "save": sugere um nome de saída baseado no arquivo de entrada
-        # (ex.: contrato.pdf -> contrato_mesclado.pdf) em vez de deixar o campo vazio.
+        self._path_source: Optional[str] = None  # entrada para a qual `_path` foi escolhido
         self._suggested_source = suggested_source
         self._suggested_suffix = suggested_suffix
 
@@ -57,6 +67,14 @@ class FilePicker(QWidget):
         layout.addWidget(self.path_edit)
         layout.addWidget(browse_button)
 
+        # Se a sugestão vem da sessão do documento aberto, acompanha a troca de documento
+        # na hora (com a página visível); nos demais casos, `showEvent` atualiza.
+        owner = getattr(suggested_source, "__self__", None)
+        session_signal = getattr(owner, "path_changed", None)
+        if session_signal is not None and hasattr(session_signal, "connect"):
+            session_signal.connect(self._refresh_display)
+        self._refresh_display()
+
     def _browse(self):
         if self._mode == "open":
             path, _ = QFileDialog.getOpenFileName(
@@ -71,22 +89,50 @@ class FilePicker(QWidget):
 
         if path:
             self._path = path
-            self.path_edit.setText(path)
+            self._path_source = self._current_source()
+            self._refresh_display()
             self.path_changed.emit(path)
+
+    def _current_source(self) -> Optional[str]:
+        if self._suggested_source is None:
+            return None
+        try:
+            return self._suggested_source() or None
+        except Exception:
+            return None
+
+    def _suggestion(self, source: Optional[str]) -> str:
+        if not source:
+            return ""
+        source_path = Path(source)
+        extension = source_path.suffix or ".pdf"
+        base = f"{source_path.stem}_{self._suggested_suffix}"
+        candidate = source_path.with_name(f"{base}{extension}")
+        counter = 2
+        while candidate.exists():
+            candidate = source_path.with_name(f"{base} ({counter}){extension}")
+            counter += 1
+        return str(candidate)
 
     def _suggested_start_path(self) -> str:
         if self._path:
             return self._path
-        if self._suggested_source is None:
-            return ""
-        try:
-            source_path = self._suggested_source()
-        except Exception:
-            return ""
-        if not source_path:
-            return ""
-        source = Path(source_path)
-        return str(source.with_name(f"{source.stem}_{self._suggested_suffix}{source.suffix or '.pdf'}"))
+        return self._suggestion(self._current_source())
 
     def path(self) -> str:
-        return self._path
+        if self._mode != "save" or self._suggested_source is None:
+            return self._path
+        source = self._current_source()
+        if self._path and self._path_source is not None and self._path_source != source:
+            self._path = ""  # escolhido para outro arquivo de entrada: não vale mais
+            self._path_source = None
+        return self._path or self._suggestion(source)
+
+    def _refresh_display(self):
+        current = self.path()
+        self.path_edit.setText(current)
+        self.path_edit.setToolTip(current)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._refresh_display()

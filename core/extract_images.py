@@ -6,14 +6,14 @@ from pathlib import Path
 from PIL import Image
 from pypdf import PdfWriter
 
-from .base import PDFOperation, open_reader, require_valid_page_index
+from .base import EXTRACT, READ, PDFOperation, open_reader, require_valid_page_index, write_pdf
 
 
 class ExtractImages(PDFOperation):
     """Extrai as imagens embutidas nas páginas de um PDF."""
 
     def run(self, input_path: str, output_dir: str) -> list[str]:
-        reader = open_reader(input_path)
+        reader = open_reader(input_path, purpose=EXTRACT)
         stem = Path(input_path).stem
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(parents=True, exist_ok=True)
@@ -48,7 +48,7 @@ class ListEmbeddedImages(PDFOperation):
     `ReplaceEmbeddedImage` para identificar qual delas substituir."""
 
     def run(self, input_path: str) -> list[EmbeddedImageInfo]:
-        reader = open_reader(input_path)
+        reader = open_reader(input_path, purpose=READ)
         result = []
         for page_index, page in enumerate(reader.pages):
             for image_index, image_file in enumerate(page.images):
@@ -81,7 +81,7 @@ class ReplaceEmbeddedImage(PDFOperation):
         reader = open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
         require_valid_page_index(len(reader.pages), page_number)
 
-        writer = PdfWriter(clone_from=input_path)
+        writer = PdfWriter(clone_from=reader)
         images = writer.pages[page_number].images
         if not 0 <= image_index < len(images):
             raise ValueError(
@@ -93,5 +93,4 @@ class ReplaceEmbeddedImage(PDFOperation):
             new_image.load()
             images[image_index].replace(new_image)
 
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)

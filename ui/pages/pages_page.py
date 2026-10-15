@@ -1,4 +1,8 @@
-"""Aba de manipulação de páginas: rotação, reordenação, remoção, inserção e substituição."""
+"""Aba de manipulação de páginas: rotação, reordenação, remoção, inserção e substituição.
+
+As páginas são contadas a partir de 1, como no visualizador; a conversão para os índices
+de `core/pages.py` acontece em `ui/page_ranges.py`.
+"""
 
 from PySide6.QtWidgets import (
     QComboBox,
@@ -12,23 +16,28 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.base import READ, open_reader
 from core.pages import InsertPages, RemovePages, ReorderPages, ReplacePages, RotatePages
 from ui.i18n import tr
+from ui.page_ranges import parse_page_ranges
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 _OPERATIONS = ["Rotacionar", "Reordenar", "Remover", "Inserir", "Substituir"]
+_ROTATIONS = [("90° no sentido horário", 90), ("180°", 180), ("90° no sentido anti-horário", 270)]
 
 
-def _parse_page_list(text: str) -> list[int]:
-    text = text.strip()
-    if not text:
-        return []
-    return [int(part.strip()) for part in text.split(",")]
+def _page_count(path: str | None) -> int | None:
+    if not path:
+        return None
+    try:
+        return len(open_reader(path, purpose=READ).pages)
+    except Exception:
+        return None
 
 
 class PagesPage(QWidget):
-    """Permite rotacionar, reordenar ou remover páginas de um PDF."""
+    """Permite rotacionar, reordenar, remover, inserir ou substituir páginas de um PDF."""
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
@@ -41,29 +50,26 @@ class PagesPage(QWidget):
         self.operation_combo.addItems([tr(op) for op in _OPERATIONS])
         self.operation_combo.currentIndexChanged.connect(self._on_operation_changed)
 
-        self.rotate_angle_spin = QSpinBox()
-        self.rotate_angle_spin.setRange(0, 359)
-        self.rotate_angle_spin.setSingleStep(90)
-        self.rotate_angle_spin.setValue(90)
+        self.rotate_angle_combo = QComboBox()
+        self.rotate_angle_combo.addItems([tr(label) for label, _angle in _ROTATIONS])
         self.rotate_pages_edit = QLineEdit()
-        self.rotate_pages_edit.setPlaceholderText(tr("Páginas (vazio = todas), ex: 0,2"))
+        self.rotate_pages_edit.setPlaceholderText(tr("Páginas (vazio = todas), ex: 1, 3-5"))
 
         self.reorder_edit = QLineEdit()
-        self.reorder_edit.setPlaceholderText(tr("Nova ordem das páginas, ex: 2,0,1"))
+        self.reorder_edit.setPlaceholderText(tr("Todas as páginas na nova ordem, ex: 3, 1, 2 ou 4-1"))
 
         self.remove_edit = QLineEdit()
-        self.remove_edit.setPlaceholderText(tr("Páginas a remover, ex: 1,3"))
+        self.remove_edit.setPlaceholderText(tr("Páginas a remover, ex: 2, 5-7"))
 
         self.insert_source_picker = FilePicker(mode="open")
         self.insert_at_spin = QSpinBox()
-        self.insert_at_spin.setRange(0, 99999)
+        self.insert_at_spin.setRange(1, 100000)
 
         self.replace_source_picker = FilePicker(mode="open")
         self.replace_start_spin = QSpinBox()
-        self.replace_start_spin.setRange(0, 99999)
+        self.replace_start_spin.setRange(1, 100000)
         self.replace_end_spin = QSpinBox()
         self.replace_end_spin.setRange(1, 100000)
-        self.replace_end_spin.setValue(1)
 
         self.params_stack = QStackedWidget()
         self.params_stack.addWidget(self._build_rotate_widget())
@@ -92,7 +98,7 @@ class PagesPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(QLabel(tr("Ângulo:")))
-        layout.addWidget(self.rotate_angle_spin)
+        layout.addWidget(self.rotate_angle_combo)
         layout.addWidget(QLabel(tr("Páginas a rotacionar:")))
         layout.addWidget(self.rotate_pages_edit)
         return widget
@@ -111,7 +117,7 @@ class PagesPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(QLabel(tr("PDF com as páginas a inserir:")))
         layout.addWidget(self.insert_source_picker)
-        layout.addWidget(QLabel(tr("Inserir na posição (0 = antes da primeira página):")))
+        layout.addWidget(QLabel(tr("Inserir antes da página (total + 1 = no fim):")))
         layout.addWidget(self.insert_at_spin)
         return widget
 
@@ -121,9 +127,9 @@ class PagesPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(QLabel(tr("PDF com as páginas substitutas:")))
         layout.addWidget(self.replace_source_picker)
-        layout.addWidget(QLabel(tr("Página inicial (inclusive):")))
+        layout.addWidget(QLabel(tr("Substituir da página:")))
         layout.addWidget(self.replace_start_spin)
-        layout.addWidget(QLabel(tr("Página final (exclusive):")))
+        layout.addWidget(QLabel(tr("Até a página (inclusive):")))
         layout.addWidget(self.replace_end_spin)
         return widget
 
@@ -142,76 +148,49 @@ class PagesPage(QWidget):
             return
 
         operation = _OPERATIONS[self.operation_combo.currentIndex()]
-
-        if operation in ("Inserir", "Substituir"):
-            source_picker = (
-                self.insert_source_picker if operation == "Inserir" else self.replace_source_picker
-            )
-            source_path = source_picker.path()
-            if not source_path:
-                QMessageBox.warning(self, tr("Páginas"), tr("Escolha o PDF de origem das páginas."))
-                return
-
-            try:
-                if operation == "Inserir":
-                    InsertPages().run(
-                        input_path, output_path, source_path, at_index=self.insert_at_spin.value()
-                    )
-                else:
-                    ReplacePages().run(
-                        input_path,
-                        output_path,
-                        source_path,
-                        start_index=self.replace_start_spin.value(),
-                        end_index=self.replace_end_spin.value(),
-                    )
-            except Exception as exc:
-                QMessageBox.critical(
-                    self, tr("Páginas"), tr("Falha ao processar: {error}").format(error=exc)
-                )
-                return
-
-            self.session.open(output_path)
-            QMessageBox.information(self, tr("Páginas"), tr("Operação concluída com sucesso."))
-            return
-
-        field_by_operation = {
-            "Rotacionar": self.rotate_pages_edit,
-            "Reordenar": self.reorder_edit,
-            "Remover": self.remove_edit,
-        }
-
-        try:
-            pages = _parse_page_list(field_by_operation[operation].text())
-        except ValueError:
-            QMessageBox.warning(
-                self,
-                tr("Páginas"),
-                tr("Lista de páginas inválida. Use números separados por vírgula, ex: 0,2."),
-            )
-            return
-
-        if operation == "Reordenar" and not pages:
-            QMessageBox.warning(self, tr("Páginas"), tr("Informe a nova ordem das páginas."))
-            return
-        if operation == "Remover" and not pages:
-            QMessageBox.warning(self, tr("Páginas"), tr("Informe quais páginas remover."))
-            return
+        total_pages = _page_count(input_path)
 
         try:
             if operation == "Rotacionar":
-                RotatePages().run(
-                    input_path, output_path, angle=self.rotate_angle_spin.value(), pages=pages or None
-                )
+                text = self.rotate_pages_edit.text()
+                pages = sorted(set(parse_page_ranges(text, total_pages))) if text.strip() else None
+                angle = _ROTATIONS[self.rotate_angle_combo.currentIndex()][1]
+                action = lambda: RotatePages().run(input_path, output_path, angle=angle, pages=pages)  # noqa: E731
             elif operation == "Reordenar":
-                ReorderPages().run(input_path, output_path, order=pages)
+                order = parse_page_ranges(self.reorder_edit.text(), total_pages)
+                if not order:
+                    QMessageBox.warning(self, tr("Páginas"), tr("Informe a nova ordem das páginas."))
+                    return
+                action = lambda: ReorderPages().run(input_path, output_path, order=order)  # noqa: E731
+            elif operation == "Remover":
+                pages = sorted(set(parse_page_ranges(self.remove_edit.text(), total_pages)))
+                if not pages:
+                    QMessageBox.warning(self, tr("Páginas"), tr("Informe quais páginas remover."))
+                    return
+                action = lambda: RemovePages().run(input_path, output_path, pages=pages)  # noqa: E731
             else:
-                RemovePages().run(input_path, output_path, pages=pages)
-        except IndexError:
-            QMessageBox.warning(
-                self, tr("Páginas"), tr("Uma das páginas informadas não existe neste PDF.")
-            )
+                source_picker = (
+                    self.insert_source_picker if operation == "Inserir" else self.replace_source_picker
+                )
+                source_path = source_picker.path()
+                if not source_path:
+                    QMessageBox.warning(self, tr("Páginas"), tr("Escolha o PDF de origem das páginas."))
+                    return
+                if operation == "Inserir":
+                    at_index = self.insert_at_spin.value() - 1
+                    action = lambda: InsertPages().run(input_path, output_path, source_path, at_index=at_index)  # noqa: E731
+                else:
+                    start_index = self.replace_start_spin.value() - 1
+                    end_index = self.replace_end_spin.value()  # "até" inclusivo = fim exclusivo
+                    action = lambda: ReplacePages().run(  # noqa: E731
+                        input_path, output_path, source_path, start_index=start_index, end_index=end_index
+                    )
+        except ValueError as exc:
+            QMessageBox.warning(self, tr("Páginas"), str(exc))
             return
+
+        try:
+            action()
         except Exception as exc:
             QMessageBox.critical(self, tr("Páginas"), tr("Falha ao processar: {error}").format(error=exc))
             return

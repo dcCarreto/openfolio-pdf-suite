@@ -1,11 +1,40 @@
-"""Numeração de páginas em arquivos PDF."""
+"""Numeração de páginas em arquivos PDF.
 
-import io
+As posições ("rodapé ao centro", "canto superior direito"...) valem para a página como ela
+aparece na tela, também em páginas com `/Rotate` (ver `core/overlay.py`).
+"""
 
-from pypdf import PdfReader, PdfWriter
-from reportlab.pdfgen import canvas
+from pypdf import PdfWriter
 
-from .base import PDFOperation, open_reader
+from .base import PDFOperation, open_reader, write_pdf
+from .geometry import PageGeometry
+from .overlay import materialize_inherited_attributes, visual_overlay
+
+
+def _stamp_text(input_path: str, output_path: str, label_for_page, position_for_page, font_size: float) -> None:
+    """Escreve um texto por página: `label_for_page(índice, total)` diz o texto e
+    `position_for_page(largura, altura)` devolve (x, y, alinhamento) no espaço visual."""
+    reader = open_reader(input_path)
+    writer = PdfWriter(clone_from=reader)
+    materialize_inherited_attributes(writer)
+    total_pages = len(reader.pages)
+
+    for index, (source_page, page) in enumerate(zip(reader.pages, writer.pages)):
+        text = label_for_page(index, total_pages)
+
+        def draw(canvas, width: float, height: float, text=text) -> None:
+            x, y, align = position_for_page(width, height)
+            canvas.setFont("Helvetica", font_size)
+            if align == "left":
+                canvas.drawString(x, y, text)
+            elif align == "right":
+                canvas.drawRightString(x, y, text)
+            else:
+                canvas.drawCentredString(x, y, text)
+
+        page.merge_page(visual_overlay(PageGeometry.from_pypdf_page(source_page), draw))
+
+    write_pdf(writer, output_path)
 
 
 class AddPageNumbers(PDFOperation):
@@ -19,27 +48,13 @@ class AddPageNumbers(PDFOperation):
         font_size: int = 10,
         margin: float = 24,
     ) -> None:
-        reader = open_reader(input_path)
-        writer = PdfWriter()
-
-        for index, page in enumerate(reader.pages):
-            width = float(page.mediabox.width)
-            height = float(page.mediabox.height)
-            page_number = start_at + index
-
-            buffer = io.BytesIO()
-            c = canvas.Canvas(buffer, pagesize=(width, height))
-            c.setFont("Helvetica", font_size)
-            c.drawCentredString(width / 2, margin, str(page_number))
-            c.save()
-            buffer.seek(0)
-
-            numbered_page = PdfReader(buffer).pages[0]
-            added_page = writer.add_page(page)
-            added_page.merge_page(numbered_page)
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        _stamp_text(
+            input_path,
+            output_path,
+            lambda index, _total: str(start_at + index),
+            lambda width, _height: (width / 2, margin, "center"),
+            font_size,
+        )
 
 
 _BATES_POSITIONS = {
@@ -73,31 +88,14 @@ class AddBatesNumbers(PDFOperation):
         if digits < 1:
             raise ValueError("digits deve ser pelo menos 1.")
 
-        reader = open_reader(input_path)
-        writer = PdfWriter()
-
-        for index, page in enumerate(reader.pages):
-            width = float(page.mediabox.width)
-            height = float(page.mediabox.height)
-            label = f"{prefix}{start_at + index:0{digits}d}"
-            x, y, align = _BATES_POSITIONS[position](width, height, margin)
-
-            buffer = io.BytesIO()
-            c = canvas.Canvas(buffer, pagesize=(width, height))
-            c.setFont("Helvetica", font_size)
-            if align == "right":
-                c.drawRightString(x, y, label)
-            else:
-                c.drawString(x, y, label)
-            c.save()
-            buffer.seek(0)
-
-            stamped_page = PdfReader(buffer).pages[0]
-            added_page = writer.add_page(page)
-            added_page.merge_page(stamped_page)
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        place = _BATES_POSITIONS[position]
+        _stamp_text(
+            input_path,
+            output_path,
+            lambda index, _total: f"{prefix}{start_at + index:0{digits}d}",
+            lambda width, height: place(width, height, margin),
+            font_size,
+        )
 
 
 _HF_POSITIONS = {
@@ -115,6 +113,7 @@ class AddHeaderFooter(PDFOperation):
 
     Suporta os placeholders `{page}` (número da página) e `{pages}` (total de páginas) no
     texto — ex.: `"Página {page} de {pages}"` — resolvidos por página com `str.format()`.
+    Para escrever uma chave literal, use `{{` e `}}`.
     """
 
     def run(
@@ -128,35 +127,19 @@ class AddHeaderFooter(PDFOperation):
     ) -> None:
         if position not in _HF_POSITIONS:
             raise ValueError(f"Posição inválida: {position}")
+        try:
+            text.format(page=1, pages=1)
+        except (KeyError, IndexError, ValueError) as exc:
+            raise ValueError(
+                f"Texto inválido ({exc}). Use {{page}} e {{pages}} como marcadores; para uma "
+                "chave literal, escreva {{ ou }}."
+            ) from exc
 
-        reader = open_reader(input_path)
-        writer = PdfWriter()
-        total_pages = len(reader.pages)
-
-        for index, page in enumerate(reader.pages):
-            width = float(page.mediabox.width)
-            height = float(page.mediabox.height)
-            try:
-                rendered = text.format(page=index + 1, pages=total_pages)
-            except (KeyError, IndexError) as exc:
-                raise ValueError(f"Placeholder inválido no texto: {exc}") from exc
-            x, y, align = _HF_POSITIONS[position](width, height, margin)
-
-            buffer = io.BytesIO()
-            c = canvas.Canvas(buffer, pagesize=(width, height))
-            c.setFont("Helvetica", font_size)
-            if align == "left":
-                c.drawString(x, y, rendered)
-            elif align == "right":
-                c.drawRightString(x, y, rendered)
-            else:
-                c.drawCentredString(x, y, rendered)
-            c.save()
-            buffer.seek(0)
-
-            stamped_page = PdfReader(buffer).pages[0]
-            added_page = writer.add_page(page)
-            added_page.merge_page(stamped_page)
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        place = _HF_POSITIONS[position]
+        _stamp_text(
+            input_path,
+            output_path,
+            lambda index, total: text.format(page=index + 1, pages=total),
+            lambda width, height: place(width, height, margin),
+            font_size,
+        )

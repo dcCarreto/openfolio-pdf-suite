@@ -107,7 +107,7 @@ class FormFieldsPage(QWidget):
         self.type_combo.addItems([tr(label) for label in _FIELD_TYPE_LABELS])
 
         self.page_spin = QSpinBox()
-        self.page_spin.setRange(0, 9999)
+        self.page_spin.setRange(1, 9999)
 
         self.x_spin = QDoubleSpinBox()
         self.x_spin.setRange(0, 20000)
@@ -130,7 +130,7 @@ class FormFieldsPage(QWidget):
         )
 
         position_layout = QFormLayout()
-        position_layout.addRow(tr("Página (0 = primeira):"), self.page_spin)
+        position_layout.addRow(tr("Página:"), self.page_spin)
         position_layout.addRow("X:", self.x_spin)
         position_layout.addRow("Y:", self.y_spin)
 
@@ -183,7 +183,7 @@ class FormFieldsPage(QWidget):
                 input_path,
                 output_path,
                 field_name=field_name,
-                page_number=self.page_spin.value(),
+                page_number=self.page_spin.value() - 1,
                 x=self.x_spin.value(),
                 y=self.y_spin.value(),
                 width=self.width_spin.value(),
@@ -259,7 +259,7 @@ class FormFieldsPage(QWidget):
         row = self.radio_table.rowCount()
         self.radio_table.insertRow(row)
         self.radio_table.setItem(row, 0, QTableWidgetItem(""))
-        self.radio_table.setItem(row, 1, QTableWidgetItem("0"))
+        self.radio_table.setItem(row, 1, QTableWidgetItem("1"))
         self.radio_table.setItem(row, 2, QTableWidgetItem("0"))
         self.radio_table.setItem(row, 3, QTableWidgetItem("0"))
 
@@ -289,7 +289,7 @@ class FormFieldsPage(QWidget):
                 value = self.radio_table.item(row, 0).text().strip()
                 if not value:
                     continue
-                page_number = int(self.radio_table.item(row, 1).text())
+                page_number = int(self.radio_table.item(row, 1).text()) - 1
                 x = float(self.radio_table.item(row, 2).text())
                 y = float(self.radio_table.item(row, 3).text())
                 options.append(RadioOption(value=value, page_number=page_number, x=x, y=y))
@@ -444,7 +444,7 @@ class FormFieldsPage(QWidget):
 
         operation = ImportFormDataCSV() if fmt == "csv" else ImportFormDataFDF()
         try:
-            count = operation.run(input_path, output_path, data_path)
+            result = operation.run(input_path, output_path, data_path)
         except Exception as exc:
             QMessageBox.critical(
                 self, tr("Importar dados"), tr("Falha ao importar dados: {error}").format(error=exc)
@@ -452,9 +452,12 @@ class FormFieldsPage(QWidget):
             return
 
         self.session.open(output_path)
-        QMessageBox.information(
-            self, tr("Importar dados"), tr("{count} campo(s) preenchido(s) com sucesso.").format(count=count)
-        )
+        message = tr("{count} campo(s) preenchido(s) com sucesso.").format(count=result.filled)
+        if result.not_found:
+            message += "\n\n" + tr("Sem campo correspondente no PDF (ignorados): {names}").format(
+                names=", ".join(result.not_found)
+            )
+        QMessageBox.information(self, tr("Importar dados"), message)
 
     # ---- Achatar formulário --------------------------------------------------
 

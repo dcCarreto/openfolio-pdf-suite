@@ -2,7 +2,7 @@
 
 from pypdf import PdfWriter
 
-from .base import PDFOperation
+from .base import PDFOperation, write_pdf
 
 
 class CreateBlankPDF(PDFOperation):
@@ -17,5 +17,4 @@ class CreateBlankPDF(PDFOperation):
         for _ in range(page_count):
             writer.add_blank_page(width=width, height=height)
 
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)

@@ -5,7 +5,7 @@ import xml.dom.minidom
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-from .base import PDFOperation
+from .base import PDFOperation, atomic_output
 
 
 class ConvertXMLToPDF(PDFOperation):
@@ -32,16 +32,17 @@ class ConvertXMLToPDF(PDFOperation):
         margin = 36
         line_height = font_size + 2
 
-        c = canvas.Canvas(output_path, pagesize=A4)
-        c.setFont("Courier", font_size)
-        y = height - margin
+        with atomic_output(output_path) as temp_path:
+            c = canvas.Canvas(temp_path, pagesize=A4)
+            c.setFont("Courier", font_size)
+            y = height - margin
 
-        for line in lines:
-            if y < margin:
-                c.showPage()
-                c.setFont("Courier", font_size)
-                y = height - margin
-            c.drawString(margin, y, line[:150])
-            y -= line_height
+            for line in lines:
+                if y < margin:
+                    c.showPage()
+                    c.setFont("Courier", font_size)
+                    y = height - margin
+                c.drawString(margin, y, line[:150])
+                y -= line_height
 
-        c.save()
+            c.save()

@@ -172,7 +172,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Largura:": "Width:",
     "Altura:": "Height:",
     "Salvar": "Save",
-    "Página (0 = primeira):": "Page (0 = first):",
     "Carta (Letter)": "Letter",
     "Ofício (Legal)": "Legal",
     "Personalizado": "Custom",
@@ -203,27 +202,26 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Inserir": "Insert",
     "Substituir": "Replace",
     "PDF com as páginas a inserir:": "PDF with the pages to insert:",
-    "Inserir na posição (0 = antes da primeira página):": "Insert at position (0 = before the first page):",
+    "Inserir antes da página (total + 1 = no fim):": "Insert before page (total + 1 = at the end):",
     "PDF com as páginas substitutas:": "PDF with the replacement pages:",
-    "Página inicial (inclusive):": "Start page (inclusive):",
-    "Página final (exclusive):": "End page (exclusive):",
+    "Substituir da página:": "Replace from page:",
+    "Até a página (inclusive):": "To page (inclusive):",
     "Escolha o PDF de origem das páginas.": "Choose the source PDF for the pages.",
     "Ângulo:": "Angle:",
     "Páginas a rotacionar:": "Pages to rotate:",
-    "Páginas (vazio = todas), ex: 0,2": "Pages (empty = all), e.g.: 0,2",
+    "Páginas (vazio = todas), ex: 1, 3-5": "Pages (empty = all), e.g.: 1, 3-5",
+    "90° no sentido horário": "90° clockwise",
+    "180°": "180°",
+    "90° no sentido anti-horário": "90° counterclockwise",
     "Nova ordem:": "New order:",
-    "Nova ordem das páginas, ex: 2,0,1": "New page order, e.g.: 2,0,1",
-    "Páginas a remover:": "Pages to remove:",
-    "Páginas a remover, ex: 1,3": "Pages to remove, e.g.: 1,3",
-    "Aplicar": "Apply",
-    "Lista de páginas inválida. Use números separados por vírgula, ex: 0,2.": (
-        "Invalid page list. Use numbers separated by commas, e.g.: 0,2."
+    "Todas as páginas na nova ordem, ex: 3, 1, 2 ou 4-1": (
+        "Every page in the new order, e.g.: 3, 1, 2 or 4-1"
     ),
+    "Páginas a remover:": "Pages to remove:",
+    "Páginas a remover, ex: 2, 5-7": "Pages to remove, e.g.: 2, 5-7",
+    "Aplicar": "Apply",
     "Informe a nova ordem das páginas.": "Enter the new page order.",
     "Informe quais páginas remover.": "Enter which pages to remove.",
-    "Uma das páginas informadas não existe neste PDF.": (
-        "One of the given pages doesn't exist in this PDF."
-    ),
     "Falha ao processar: {error}": "Processing failed: {error}",
     "Operação concluída com sucesso.": "Operation completed successfully.",
     # Compress
@@ -780,7 +778,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Listar imagens": "List images",
     "Nenhuma imagem embutida encontrada.": "No embedded images found.",
     "Falha ao listar imagens: {error}": "Failed to list images: {error}",
-    "Índice da imagem na página:": "Image index on the page:",
+    "Número da imagem na página:": "Image number on the page:",
     "Nova imagem:": "New image:",
     "Escolha a nova imagem.": "Choose the new image.",
     "Falha ao substituir imagem: {error}": "Failed to replace image: {error}",
@@ -813,10 +811,10 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Link adicionado com sucesso.": "Link added successfully.",
     "Falha ao listar links: {error}": "Failed to list links: {error}",
     "Nenhum link encontrado.": "No links found.",
-    'Use "Listar links" para descobrir a página e o índice do link a remover.': (
-        'Use "List links" to find the page and index of the link to remove.'
+    'Use "Listar links" para descobrir a página e o número do link a remover.': (
+        'Use "List links" to find the page and number of the link to remove.'
     ),
-    "Índice do link na página:": "Link index on the page:",
+    "Número do link na página:": "Link number on the page:",
     "Falha ao remover link: {error}": "Failed to remove link: {error}",
     "Link removido com sucesso.": "Link removed successfully.",
     # Annotations: export comments
@@ -872,7 +870,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     "visível": "visible",
     "oculta": "hidden",
-    "Índice da camada:": "Layer index:",
+    "Número da camada:": "Layer number:",
     "Nova visibilidade:": "New visibility:",
     "Visível": "Visible",
     "Oculta": "Hidden",
@@ -888,7 +886,15 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Arquivo a anexar:": "File to attach:",
     "Escolha o arquivo a anexar.": "Choose the file to attach.",
     "Falha ao adicionar anexo: {error}": "Failed to add attachment: {error}",
-    "Anexo adicionado com sucesso.": "Attachment added successfully.",
+    'Anexo "{name}" adicionado com sucesso.': 'Attachment "{name}" added successfully.',
+    "Use a senha de abertura ou, num PDF com restrições (que abre sem senha), "
+    "a senha de permissões.": (
+        "Use the open password or, for a restricted PDF (which opens without a "
+        "password), the permissions password."
+    ),
+    "Sem campo correspondente no PDF (ignorados): {names}": (
+        "No matching field in the PDF (ignored): {names}"
+    ),
     'Use "Listar" para descobrir o nome exato do anexo a remover.': (
         'Use "List" to find the exact name of the attachment to remove.'
     ),

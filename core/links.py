@@ -6,7 +6,7 @@ from pypdf import PdfWriter
 from pypdf.annotations import Link
 from pypdf.generic import ArrayObject, NameObject
 
-from .base import PDFOperation, open_reader, require_valid_page_index
+from .base import READ, PDFOperation, open_reader, require_valid_page_index, write_pdf
 
 
 class AddLink(PDFOperation):
@@ -33,15 +33,14 @@ class AddLink(PDFOperation):
         if target_page is not None:
             require_valid_page_index(len(reader.pages), target_page, label="Página de destino")
 
-        writer = PdfWriter(clone_from=input_path)
+        writer = PdfWriter(clone_from=reader)
         if url:
             annotation = Link(rect=(left, bottom, right, top), url=url)
         else:
             annotation = Link(rect=(left, bottom, right, top), target_page_index=target_page)
         writer.add_annotation(page_number=page_number, annotation=annotation)
 
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)
 
 
 @dataclass
@@ -71,7 +70,7 @@ class ListLinks(PDFOperation):
     para identificar qual delas remover."""
 
     def run(self, input_path: str) -> list[LinkInfo]:
-        reader = open_reader(input_path)
+        reader = open_reader(input_path, purpose=READ)
         result = []
         for page_index, page in enumerate(reader.pages):
             link_index = 0
@@ -100,7 +99,7 @@ class RemoveLink(PDFOperation):
         reader = open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
         require_valid_page_index(len(reader.pages), page_number)
 
-        writer = PdfWriter(clone_from=input_path)
+        writer = PdfWriter(clone_from=reader)
         page = writer.pages[page_number]
         annots = page.get("/Annots")
         if not annots:
@@ -116,5 +115,4 @@ class RemoveLink(PDFOperation):
         remaining = ArrayObject(a for a in annots if a != target_ref)
         page[NameObject("/Annots")] = remaining
 
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)

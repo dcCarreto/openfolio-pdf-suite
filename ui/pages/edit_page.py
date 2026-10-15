@@ -71,9 +71,9 @@ class EditPage(QWidget):
         self.images_list = QListWidget()
 
         self.image_page_spin = QSpinBox()
-        self.image_page_spin.setRange(0, 9999)
+        self.image_page_spin.setRange(1, 9999)
         self.image_index_spin = QSpinBox()
-        self.image_index_spin.setRange(0, 9999)
+        self.image_index_spin.setRange(1, 9999)
 
         self.new_image_picker = FilePicker(
             mode="open", file_filter="Imagens (*.png *.jpg *.jpeg *.bmp *.tiff)"
@@ -86,9 +86,9 @@ class EditPage(QWidget):
 
         layout.addWidget(list_button)
         layout.addWidget(self.images_list)
-        layout.addWidget(QLabel(tr("Página (0 = primeira):")))
+        layout.addWidget(QLabel(tr("Página:")))
         layout.addWidget(self.image_page_spin)
-        layout.addWidget(QLabel(tr("Índice da imagem na página:")))
+        layout.addWidget(QLabel(tr("Número da imagem na página:")))
         layout.addWidget(self.image_index_spin)
         layout.addWidget(QLabel(tr("Nova imagem:")))
         layout.addWidget(self.new_image_picker)
@@ -117,7 +117,7 @@ class EditPage(QWidget):
             return
         for image in images:
             self.images_list.addItem(
-                f"{tr('Página')} {image.page_index} — #{image.image_index} — "
+                f"{tr('Página')} {image.page_index + 1} — #{image.image_index + 1} — "
                 f"{image.name} ({image.width}x{image.height})"
             )
 
@@ -140,8 +140,8 @@ class EditPage(QWidget):
             ReplaceEmbeddedImage().run(
                 input_path,
                 output_path,
-                page_number=self.image_page_spin.value(),
-                image_index=self.image_index_spin.value(),
+                page_number=self.image_page_spin.value() - 1,
+                image_index=self.image_index_spin.value() - 1,
                 new_image_path=new_image_path,
             )
         except Exception as exc:
@@ -208,7 +208,7 @@ class EditPage(QWidget):
     def _add_edit_text_row(self):
         row = self.edit_text_table.rowCount()
         self.edit_text_table.insertRow(row)
-        for column, default in enumerate(["0", "0", "0", "100", "20", ""]):
+        for column, default in enumerate(["1", "0", "0", "100", "20", ""]):
             self.edit_text_table.setItem(row, column, QTableWidgetItem(default))
 
     def _remove_edit_text_row(self):
@@ -233,7 +233,7 @@ class EditPage(QWidget):
                 new_text = self.edit_text_table.item(row, 5).text()
                 if not new_text:
                     continue
-                page_index = int(self.edit_text_table.item(row, 0).text())
+                page_index = int(self.edit_text_table.item(row, 0).text()) - 1
                 left = float(self.edit_text_table.item(row, 1).text())
                 bottom = float(self.edit_text_table.item(row, 2).text())
                 right = float(self.edit_text_table.item(row, 3).text())
@@ -284,7 +284,7 @@ class EditPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.link_page_spin = QSpinBox()
-        self.link_page_spin.setRange(0, 9999)
+        self.link_page_spin.setRange(1, 9999)
 
         self.link_left_spin = QDoubleSpinBox()
         self.link_left_spin.setRange(0, 20000)
@@ -305,7 +305,7 @@ class EditPage(QWidget):
         self.link_url_edit = QLineEdit()
         self.link_url_edit.setPlaceholderText(tr("https://exemplo.com"))
         self.link_target_page_spin = QSpinBox()
-        self.link_target_page_spin.setRange(0, 9999)
+        self.link_target_page_spin.setRange(1, 9999)
         self.link_target_stack.addWidget(self.link_url_edit)
         self.link_target_stack.addWidget(self.link_target_page_spin)
 
@@ -315,7 +315,7 @@ class EditPage(QWidget):
         add_button = QPushButton(tr("Adicionar link"))
         add_button.clicked.connect(self._add_link)
 
-        layout.addWidget(QLabel(tr("Página (0 = primeira):")))
+        layout.addWidget(QLabel(tr("Página:")))
         layout.addWidget(self.link_page_spin)
         layout.addWidget(QLabel("Left / Bottom / Right / Top:"))
         for spin in (self.link_left_spin, self.link_bottom_spin, self.link_right_spin, self.link_top_spin):
@@ -344,7 +344,7 @@ class EditPage(QWidget):
 
         is_url = self.link_target_combo.currentIndex() == 0
         url = self.link_url_edit.text().strip() or None if is_url else None
-        target_page = None if is_url else self.link_target_page_spin.value()
+        target_page = None if is_url else self.link_target_page_spin.value() - 1
         if is_url and not url:
             QMessageBox.warning(self, tr("Adicionar link"), tr("Digite a URL de destino."))
             return
@@ -353,7 +353,7 @@ class EditPage(QWidget):
             AddLink().run(
                 input_path,
                 output_path,
-                page_number=self.link_page_spin.value(),
+                page_number=self.link_page_spin.value() - 1,
                 left=self.link_left_spin.value(),
                 bottom=self.link_bottom_spin.value(),
                 right=self.link_right_spin.value(),
@@ -405,7 +405,7 @@ class EditPage(QWidget):
             return
         for link in links:
             self.links_list.addItem(
-                f"{tr('Página')} {link.page_index} — #{link.link_index} — {link.target}"
+                f"{tr('Página')} {link.page_index + 1} — #{link.link_index + 1} — {link.target}"
             )
 
     # ---- Remover link -------------------------------------------------------------
@@ -415,13 +415,13 @@ class EditPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        note = QLabel(tr('Use "Listar links" para descobrir a página e o índice do link a remover.'))
+        note = QLabel(tr('Use "Listar links" para descobrir a página e o número do link a remover.'))
         note.setWordWrap(True)
 
         self.remove_link_page_spin = QSpinBox()
-        self.remove_link_page_spin.setRange(0, 9999)
+        self.remove_link_page_spin.setRange(1, 9999)
         self.remove_link_index_spin = QSpinBox()
-        self.remove_link_index_spin.setRange(0, 9999)
+        self.remove_link_index_spin.setRange(1, 9999)
 
         self.remove_link_output_picker = FilePicker(
             mode="save", suggested_source=self.session.path, suggested_suffix="sem_link"
@@ -430,9 +430,9 @@ class EditPage(QWidget):
         remove_button.clicked.connect(self._remove_link)
 
         layout.addWidget(note)
-        layout.addWidget(QLabel(tr("Página (0 = primeira):")))
+        layout.addWidget(QLabel(tr("Página:")))
         layout.addWidget(self.remove_link_page_spin)
-        layout.addWidget(QLabel(tr("Índice do link na página:")))
+        layout.addWidget(QLabel(tr("Número do link na página:")))
         layout.addWidget(self.remove_link_index_spin)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.remove_link_output_picker)
@@ -454,8 +454,8 @@ class EditPage(QWidget):
             RemoveLink().run(
                 input_path,
                 output_path,
-                page_number=self.remove_link_page_spin.value(),
-                link_index=self.remove_link_index_spin.value(),
+                page_number=self.remove_link_page_spin.value() - 1,
+                link_index=self.remove_link_index_spin.value() - 1,
             )
         except Exception as exc:
             QMessageBox.critical(

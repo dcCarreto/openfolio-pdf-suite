@@ -162,7 +162,7 @@ class AttachmentsPage(QWidget):
             return
 
         try:
-            AddAttachment().run(input_path, output_path, attachment_path)
+            name = AddAttachment().run(input_path, output_path, attachment_path)
         except Exception as exc:
             QMessageBox.critical(
                 self, tr("Anexos"), tr("Falha ao adicionar anexo: {error}").format(error=exc)
@@ -170,7 +170,9 @@ class AttachmentsPage(QWidget):
             return
 
         self.session.open(output_path)
-        QMessageBox.information(self, tr("Anexos"), tr("Anexo adicionado com sucesso."))
+        QMessageBox.information(
+            self, tr("Anexos"), tr('Anexo "{name}" adicionado com sucesso.').format(name=name)
+        )
 
     def _remove_attachment(self):
         input_path = self.session.path()

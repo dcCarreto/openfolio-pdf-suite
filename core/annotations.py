@@ -21,7 +21,7 @@ from pypdf.generic import (
     NumberObject,
 )
 
-from .base import PDFOperation, open_reader, require_valid_page_index
+from .base import READ, PDFOperation, atomic_output, open_reader, require_valid_page_index, write_pdf
 
 _NOTE_SIZE = 24
 _STAMP_SIZE = (160, 40)
@@ -40,6 +40,9 @@ class AnnotationSpec:
     points: list[tuple[float, float]] = field(default_factory=list)
     position: tuple[float, float] | None = None
     text: str = ""
+    # /Rotate da página: nota e carimbo crescem para a direita e para cima *na tela* a
+    # partir de `position`, e o texto do carimbo fica de pé também em páginas giradas.
+    rotation: int = 0
 
 
 def _hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
@@ -73,6 +76,24 @@ def _points_bounding_rect(points: list[tuple[float, float]]) -> tuple[float, flo
     return (min(xs) - pad, min(ys) - pad, max(xs) + pad, max(ys) + pad)
 
 
+# Direção, no espaço do usuário, dos eixos x e y da tela para cada /Rotate.
+_VISUAL_AXES = {
+    0: ((1, 0), (0, 1)),
+    90: ((0, 1), (-1, 0)),
+    180: ((-1, 0), (0, -1)),
+    270: ((0, -1), (1, 0)),
+}
+
+
+def _visual_box(x: float, y: float, width: float, height: float, rotation: int) -> tuple[float, float, float, float]:
+    """Retângulo do espaço do usuário ocupado por uma caixa `width` x `height` que, na tela,
+    começa em (x, y) e cresce para a direita e para cima."""
+    (ux, uy), (vx, vy) = _VISUAL_AXES.get(rotation % 360, _VISUAL_AXES[0])
+    corners = [(x + a * ux + b * vx, y + a * uy + b * vy) for a in (0, width) for b in (0, height)]
+    xs, ys = [c[0] for c in corners], [c[1] for c in corners]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
 def spec_rect(spec: AnnotationSpec) -> tuple[float, float, float, float]:
     """Retângulo (left, bottom, right, top) ocupado por uma anotação pendente.
 
@@ -85,16 +106,17 @@ def spec_rect(spec: AnnotationSpec) -> tuple[float, float, float, float]:
         return _points_bounding_rect(spec.points)
     if spec.kind == "note":
         x, y = spec.position
-        return (x, y, x + _NOTE_SIZE, y + _NOTE_SIZE)
+        return _visual_box(x, y, _NOTE_SIZE, _NOTE_SIZE, spec.rotation)
     if spec.kind == "stamp":
         x, y = spec.position
         width, height = _STAMP_SIZE
-        return (x, y, x + width, y + height)
+        return _visual_box(x, y, width, height, spec.rotation)
     raise ValueError(f"Tipo de anotação desconhecido: {spec.kind}")
 
 
-def _make_appearance_stream(writer: PdfWriter, rect, content: str, needs_font: bool = False):
-    """Registra uma appearance stream (Form XObject) no writer e retorna sua referência."""
+def _make_appearance_stream(writer: PdfWriter, rect, content: str, needs_font: bool = False, matrix=None):
+    """Registra uma appearance stream (Form XObject) no writer e retorna sua referência.
+    `rect` vira a /BBox; `matrix`, se informada, é a /Matrix do formulário."""
     stream = DecodedStreamObject()
     # A appearance stream usa uma fonte base14 (WinAnsi/Latin-1); caracteres fora
     # desse repertório (emoji, CJK, etc.) não seriam desenhados de qualquer forma,
@@ -127,6 +149,8 @@ def _make_appearance_stream(writer: PdfWriter, rect, content: str, needs_font: b
             NameObject("/Resources"): resources,
         }
     )
+    if matrix is not None:
+        stream[NameObject("/Matrix")] = ArrayObject([FloatObject(v) for v in matrix])
     return writer._add_object(stream)
 
 
@@ -199,6 +223,9 @@ def _build_annotation(writer: PdfWriter, spec: AnnotationSpec):
         return annotation
     if spec.kind == "stamp":
         rect = spec_rect(spec)
+        width, height = _STAMP_SIZE
+        rotation = spec.rotation % 360
+        (ux, uy), (vx, vy) = _VISUAL_AXES.get(rotation, _VISUAL_AXES[0])
         annotation = FreeText(
             text=spec.text,
             rect=rect,
@@ -209,9 +236,17 @@ def _build_annotation(writer: PdfWriter, spec: AnnotationSpec):
             border_color=spec.color,
             background_color="ffffff",
         )
+        # A aparência é desenhada "de pé" num quadro local (0, 0, largura, altura); a
+        # /Matrix gira esse quadro junto com os eixos da tela, e o leitor o encaixa no /Rect.
         appearance_ref = _make_appearance_stream(
-            writer, rect, _stamp_appearance_content(rect, spec.text, spec.color), needs_font=True
+            writer,
+            (0, 0, width, height),
+            _stamp_appearance_content((0, 0, width, height), spec.text, spec.color),
+            needs_font=True,
+            matrix=(ux, uy, vx, vy, 0, 0),
         )
+        if rotation:
+            annotation[NameObject("/Rotate")] = NumberObject(rotation)
         annotation[NameObject("/AP")] = DictionaryObject({NameObject("/N"): appearance_ref})
         return annotation
     raise ValueError(f"Tipo de anotação desconhecido: {spec.kind}")
@@ -221,16 +256,15 @@ class AddAnnotations(PDFOperation):
     """Grava uma lista de anotações pendentes em um PDF."""
 
     def run(self, input_path: str, output_path: str, specs: list[AnnotationSpec]) -> None:
-        reader = open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
+        reader = open_reader(input_path)
         total_pages = len(reader.pages)
         for spec in specs:
             require_valid_page_index(total_pages, spec.page_index)
 
-        writer = PdfWriter(clone_from=input_path)
+        writer = PdfWriter(clone_from=reader)
         for spec in specs:
             writer.add_annotation(page_number=spec.page_index, annotation=_build_annotation(writer, spec))
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)
 
 
 @dataclass
@@ -267,7 +301,7 @@ class ExportAnnotationsCSV(PDFOperation):
     "comentários" no sentido de revisão de documento)."""
 
     def run(self, input_path: str, output_path: str) -> int:
-        reader = open_reader(input_path)
+        reader = open_reader(input_path, purpose=READ)
         rows: list[AnnotationInfo] = []
 
         for page_index, page in enumerate(reader.pages):
@@ -286,10 +320,11 @@ class ExportAnnotationsCSV(PDFOperation):
                     )
                 )
 
-        with open(output_path, "w", newline="", encoding="utf-8") as f:
-            csv_writer = csv.writer(f)
-            csv_writer.writerow(["pagina", "tipo", "autor", "texto", "cor"])
-            for row in rows:
-                csv_writer.writerow([row.page_index, row.kind, row.author, row.content, row.color])
+        with atomic_output(output_path) as temp_path:
+            with open(temp_path, "w", newline="", encoding="utf-8") as f:
+                csv_writer = csv.writer(f)
+                csv_writer.writerow(["pagina", "tipo", "autor", "texto", "cor"])
+                for row in rows:
+                    csv_writer.writerow([row.page_index, row.kind, row.author, row.content, row.color])
 
         return len(rows)

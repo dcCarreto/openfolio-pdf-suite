@@ -2,14 +2,14 @@
 
 from pypdf import PdfWriter
 
-from .base import PDFOperation, open_reader
+from .base import READ, PDFOperation, open_reader, write_pdf
 
 
 class ReadMetadata(PDFOperation):
     """Lê os metadados de um PDF."""
 
     def run(self, input_path: str) -> dict:
-        reader = open_reader(input_path)
+        reader = open_reader(input_path, purpose=READ)
         metadata = reader.metadata or {}
         return {
             "title": metadata.get("/Title", "") or "",
@@ -24,6 +24,11 @@ class SetMetadata(PDFOperation):
 
     Campos não informados (None) preservam o valor já existente no documento;
     para apagar um campo, passe uma string vazia explicitamente.
+
+    Os metadados existem em dois lugares: no dicionário `/Info` e, em muitos PDFs, no XMP
+    (`/Metadata` do catálogo) — e leitores como o Acrobat preferem o XMP quando ele existe.
+    Atualizar só o `/Info` faria o título novo aparecer num leitor e o antigo em outro,
+    então o XMP, se existir, recebe os mesmos valores.
     """
 
     def run(
@@ -36,10 +41,7 @@ class SetMetadata(PDFOperation):
         keywords: str | None = None,
     ) -> None:
         reader = open_reader(input_path)
-        writer = PdfWriter()
-        for page in reader.pages:
-            writer.add_page(page)
-
+        writer = PdfWriter(clone_from=reader)
         existing = reader.metadata or {}
 
         def resolved(value: str | None, key: str) -> str:
@@ -53,6 +55,20 @@ class SetMetadata(PDFOperation):
                 "/Keywords": resolved(keywords, "/Keywords"),
             }
         )
+        _sync_xmp(writer, title, author, subject, keywords)
+        write_pdf(writer, output_path)
 
-        with open(output_path, "wb") as f:
-            writer.write(f)
+
+def _sync_xmp(writer: PdfWriter, title, author, subject, keywords) -> None:
+    xmp = writer.xmp_metadata
+    if xmp is None:
+        return
+    if title is not None:
+        xmp.dc_title = {"x-default": title} if title else None
+    if author is not None:
+        xmp.dc_creator = [author] if author else None
+    if subject is not None:
+        xmp.dc_description = {"x-default": subject} if subject else None
+    if keywords is not None:
+        xmp.pdf_keywords = keywords or None
+    writer.xmp_metadata = xmp

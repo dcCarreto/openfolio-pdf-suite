@@ -79,7 +79,7 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | 🆕 Criar PDF | Cria um novo PDF em branco, com uma ou mais páginas, no tamanho que você escolher |
 | 📄 Mesclar | Combina vários PDFs em um único arquivo, na ordem que você definir |
 | ✂️ Dividir | Separa um PDF em vários arquivos menores (uma ou N páginas por arquivo, ou um arquivo por marcador de nível superior do sumário) |
-| 🔃 Páginas | Rotaciona, reordena, remove, insere ou substitui páginas de um PDF (inserção/substituição usando páginas de outro PDF) |
+| 🔃 Páginas | Rotaciona, reordena, remove, insere ou substitui páginas de um PDF (inserção/substituição usando páginas de outro PDF). As páginas são contadas a partir de 1, como no visualizador, e aceitam intervalos como `1-3, 5, 8-` |
 | 🗜️ Comprimir | Reduz o tamanho de um PDF recomprimindo conteúdo e removendo objetos duplicados (as imagens ainda não são recomprimidas, então PDFs escaneados quase não diminuem) |
 | 🖼️ Converter | Converte entre PDF e imagens, Word/Excel/PowerPoint e PDF, e XML e PDF |
 | 💧 Marca d'água | Adiciona um texto de marca d'água (opacidade, tamanho e rotação configuráveis) |
@@ -270,10 +270,13 @@ escolher a ferramenta desejada na barra lateral.
 
 ```text
 core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
-  base.py          Classe base PDFOperation e validações compartilhadas (PDF protegido por
-                   senha, índice de página fora do intervalo)
+  base.py          Classe base PDFOperation, abertura de PDFs protegidos ou com restrições,
+                   gravação atômica e validações compartilhadas
+  document.py      Montagem de documentos a partir de páginas sem perder metadados, anexos,
+                   camadas e rótulos de página
   merge.py, split.py, pages.py, compress.py, convert.py, ...
   geometry.py      Conversão entre o espaço do PDF e o que aparece na tela (/Rotate, CropBox)
+  overlay.py       Desenho sobre a página na orientação da tela (marca d'água, numeração, OCR)
   rasterize.py     Achatamento de página em imagem, com áreas pintadas nos próprios pixels
   annotations.py   Anotações reais (Highlight/Underline/StrikeOut/Ink/Stamp) via pypdf
   ocr.py           Reconhecimento de texto (Tesseract) com camada de texto invisível
@@ -287,6 +290,7 @@ ui/              Interface gráfica (PySide6)
   document_session.py  Sessão compartilhada do PDF aberto no visualizador
   annotation_state.py  Estado compartilhado da ferramenta de anotações
   redaction_state.py   Estado compartilhado da ferramenta de redação
+  page_ranges.py       Leitura de listas de páginas digitadas ("1-3, 5, 8-")
   viewer/              Visualizador central: renderização, miniaturas, busca, zoom
   pages/               Uma classe de página por ferramenta (MergePage, CompressPage, ...)
   widgets/             Widgets reutilizáveis (FilePicker, FileListEditor, PageContainer)
@@ -319,7 +323,9 @@ pytest
 ```
 
 Todos os módulos de `core/` têm testes cobrindo o comportamento esperado, e há um teste de
-fumaça que garante que a janela principal monta todas as seções sem erros. A suíte também
+fumaça que garante que a janela principal monta todas as seções sem erros. Um teste de
+preservação passa cada operação por um PDF com sumário, metadados, anexo, formulário, rótulos
+de página e camadas, e confere que nada disso se perde no caminho. A suíte também
 roda automaticamente a cada push em `main` e a cada pull request, em Windows, Linux e macOS
 (veja [.github/workflows/ci.yml](.github/workflows/ci.yml)).
 

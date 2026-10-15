@@ -34,7 +34,7 @@ import pypdfium2 as pdfium
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject, StreamObject
 
-from .base import PDFOperation, atomic_output, open_reader, require_valid_page_index
+from .base import EXTRACT, PDFOperation, atomic_output, open_pdfium, open_reader, require_valid_page_index
 from .geometry import PageGeometry, Rect
 from .rasterize import RASTER_SCALE, fill_visual_rects, image_page, render_visual_page, visible_visual_rects
 
@@ -104,7 +104,7 @@ class FindSensitiveData(PDFOperation):
         kinds: list[str] | None = None,
         custom_pattern: str | None = None,
     ) -> list[RedactionRect]:
-        open_reader(input_path)  # recusa PDF protegido por senha, mesma checagem das outras operações
+        open_reader(input_path, purpose=EXTRACT)  # lê o texto: respeita a permissão de cópia
 
         patterns = [(kind, _PATTERNS[kind]) for kind in (kinds or []) if kind in _PATTERNS]
         if custom_pattern:
@@ -117,7 +117,7 @@ class FindSensitiveData(PDFOperation):
 
         rects: list[RedactionRect] = []
         seen: set[tuple] = set()
-        pdfium_doc = pdfium.PdfDocument(input_path)
+        pdfium_doc = open_pdfium(input_path)
         try:
             for page_index in range(len(pdfium_doc)):
                 page = pdfium_doc[page_index]
@@ -174,7 +174,15 @@ def _union_of_char_boxes(boxes) -> Rect | None:
 
 class RedactDocument(PDFOperation):
     """Remove definitivamente o conteúdo das áreas marcadas, achatando a página em imagem
-    (ver o docstring do módulo). Devolve quantas páginas foram redigidas."""
+    (ver o docstring do módulo). Devolve quantas páginas foram redigidas.
+
+    Ao contrário das outras operações, a redação monta um documento novo só com as páginas
+    e deixa de propósito para trás o que vive fora delas — marcadores, metadados, anexos,
+    formulário: são lugares onde o dado apagado costuma se repetir (um marcador com o nome
+    do cliente, o título do arquivo, o valor de um campo), e uma ferramenta de redação não
+    pode carregá-los em silêncio. A sanitização, oferecida junto na interface, cobre o que
+    sobra nas páginas não redigidas.
+    """
 
     def run(self, input_path: str, output_path: str, rects: list[RedactionRect]) -> int:
         reader = open_reader(input_path)

@@ -6,7 +6,9 @@ import shutil
 import tempfile
 from collections.abc import Iterator
 
-from pypdf import PdfReader
+import pypdfium2 as pdfium
+from pypdf import PasswordType, PdfReader, PdfWriter
+from pypdf.constants import UserAccessPermissions
 
 
 class PDFOperation:
@@ -17,23 +19,102 @@ class PDFOperation:
 
 
 class EncryptedPDFError(ValueError):
-    """Levantado ao tentar processar como entrada um PDF protegido por senha."""
+    """O PDF está protegido e não pode ser usado pela operação pedida."""
 
 
-def open_reader(input_path: str) -> PdfReader:
-    """Abre um PdfReader recusando PDFs protegidos por senha com uma mensagem clara.
+class RestrictedPDFError(EncryptedPDFError):
+    """O PDF abre, mas a proteção ou as permissões dele não permitem a operação pedida."""
+
+
+# Para que a operação precisa do PDF de entrada (ver `open_reader`).
+READ = "read"  # só lê a estrutura ou renderiza, como um leitor de PDF
+EXTRACT = "extract"  # copia conteúdo para fora do documento (texto, imagens)
+MODIFY = "modify"  # gera um PDF novo a partir deste
+
+_LOCKED_MESSAGE = (
+    "Este PDF está protegido por senha. Abra-o no visualizador (que pede a senha) para usá-lo "
+    'nas ferramentas de leitura, ou use "Remover senha" em Proteger para trabalhar sobre uma '
+    "cópia sem proteção."
+)
+_RESTRICTED_MODIFY_MESSAGE = (
+    "Este PDF abre sem senha, mas o autor restringiu alterações com uma senha de permissões. "
+    'Para alterá-lo, use "Remover senha" em Proteger informando a senha de permissões — o '
+    "resultado sai sem proteção, e você pode protegê-lo de novo depois."
+)
+_PROTECTED_MODIFY_MESSAGE = (
+    "Este PDF está protegido por senha. Alterá-lo aqui geraria uma cópia sem a proteção; use "
+    '"Remover senha" em Proteger e, se quiser, proteja o resultado de novo depois.'
+)
+_EXTRACT_DENIED_MESSAGE = (
+    "O autor deste PDF não permite copiar o conteúdo dele (texto e imagens). Para extrair, "
+    'use "Remover senha" em Proteger informando a senha de permissões.'
+)
+
+_known_passwords: dict[str, str] = {}
+
+
+def _password_key(path) -> str:
+    return os.path.normcase(os.path.abspath(str(path)))
+
+
+def remember_password(path, password: str) -> None:
+    """Guarda a senha que o usuário digitou ao abrir `path` no visualizador, para que as
+    ferramentas de leitura não precisem pedi-la de novo. Fica só na memória do processo."""
+    _known_passwords[_password_key(path)] = password
+
+
+def forget_password(path) -> None:
+    _known_passwords.pop(_password_key(path), None)
+
+
+def known_password(path) -> str | None:
+    return _known_passwords.get(_password_key(path))
+
+
+def open_reader(input_path: str, *, purpose: str = MODIFY) -> PdfReader:
+    """Abre um PdfReader tratando PDFs protegidos de acordo com o `purpose` da operação.
+
+    PDF sem proteção: abre normalmente. PDF protegido:
+
+    - Precisa ser decifrado: com a senha que o usuário digitou no visualizador (ver
+      `remember_password`) ou sem senha nenhuma, caso de PDFs que só restringem permissões.
+      Se não der, `EncryptedPDFError`.
+    - `READ` (listar, verificar, renderizar) funciona sempre que o PDF abre.
+    - `EXTRACT` respeita a permissão de cópia definida pelo autor, a menos que a senha
+      conhecida seja a de proprietário.
+    - `MODIFY` é recusado com `RestrictedPDFError`: o pypdf gravaria a saída sem a
+      proteção, e uma ferramenta de edição não deve remover proteção sem o usuário pedir.
+      A mensagem aponta o caminho certo ("Remover senha" em Proteger).
 
     Sem essa checagem, cada operação derrubaria mais tarde — ao acessar `.pages` — com um
     FileNotDecryptedError cru do pypdf. Ferramentas que lidam com PDFs protegidos de
     propósito (Proteger/Remover senha) não usam este helper; leem o PdfReader diretamente.
     """
     reader = PdfReader(input_path)
-    if reader.is_encrypted:
-        raise EncryptedPDFError(
-            'Este PDF está protegido por senha. Use a ferramenta "Remover senha" antes de '
-            "processá-lo aqui."
-        )
+    if not reader.is_encrypted:
+        return reader
+
+    password = known_password(input_path)
+    access = reader.decrypt(password) if password else PasswordType.NOT_DECRYPTED
+    if access == PasswordType.NOT_DECRYPTED:
+        access = reader.decrypt("")
+        password = None
+    if access == PasswordType.NOT_DECRYPTED:
+        raise EncryptedPDFError(_LOCKED_MESSAGE)
+
+    if purpose == MODIFY:
+        raise RestrictedPDFError(_PROTECTED_MODIFY_MESSAGE if password else _RESTRICTED_MODIFY_MESSAGE)
+    if purpose == EXTRACT and access != PasswordType.OWNER_PASSWORD:
+        permissions = reader.user_access_permissions
+        if permissions is not None and not permissions & UserAccessPermissions.EXTRACT:
+            raise RestrictedPDFError(_EXTRACT_DENIED_MESSAGE)
     return reader
+
+
+def open_pdfium(input_path: str) -> pdfium.PdfDocument:
+    """Abre o documento no pdfium usando a senha conhecida (se houver), para renderizar ou
+    ler texto de PDFs que o usuário já abriu no visualizador."""
+    return pdfium.PdfDocument(input_path, password=known_password(input_path))
 
 
 @contextlib.contextmanager
@@ -64,10 +145,17 @@ def atomic_output(output_path: str) -> Iterator[str]:
             os.remove(temp_path)
 
 
+def write_pdf(writer: PdfWriter, output_path: str) -> None:
+    """Grava o PDF de forma atômica (ver `atomic_output`)."""
+    with atomic_output(output_path) as temp_path:
+        with open(temp_path, "wb") as f:
+            writer.write(f)
+
+
 def require_valid_page_index(total_pages: int, index: int, *, label: str = "Página") -> None:
-    """Levanta um ValueError claro se `index` não for um índice de página válido."""
+    """Levanta um ValueError claro se `index` (contado a partir de 0) não for uma página do
+    documento. A mensagem fala em páginas contadas a partir de 1, como o usuário as vê."""
     if not 0 <= index < total_pages:
         raise ValueError(
-            f"{label} inválida: índice {index} (o documento tem {total_pages} "
-            f"página(s), de 0 a {total_pages - 1})."
+            f"{label} {index + 1} não existe: o documento tem {total_pages} página(s)."
         )

@@ -4,10 +4,9 @@ import difflib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import pypdfium2 as pdfium
 from PIL import Image, ImageChops, ImageStat
 
-from .base import PDFOperation, open_reader
+from .base import EXTRACT, READ, PDFOperation, open_pdfium, open_reader
 
 _DIFF_SCALE = 1.5
 _DIFF_THRESHOLD = 30  # diferença de luminância (0-255) a partir da qual um pixel conta como "mudou"
@@ -26,8 +25,8 @@ class CompareText(PDFOperation):
     mesma lógica de diff de texto da biblioteca padrão do Python, sem reinventar nada)."""
 
     def run(self, path_a: str, path_b: str) -> list[PageTextDiff]:
-        reader_a = open_reader(path_a)
-        reader_b = open_reader(path_b)
+        reader_a = open_reader(path_a, purpose=EXTRACT)
+        reader_b = open_reader(path_b, purpose=EXTRACT)
         total_pages = max(len(reader_a.pages), len(reader_b.pages))
 
         results = []
@@ -77,10 +76,17 @@ class CompareVisual(PDFOperation):
     não correspondem uma à outra."""
 
     def run(self, path_a: str, path_b: str, output_dir: str, scale: float = _DIFF_SCALE) -> list[VisualDiffResult]:
-        open_reader(path_a)  # recusa PDF protegido por senha
-        open_reader(path_b)
-        doc_a = pdfium.PdfDocument(path_a)
-        doc_b = pdfium.PdfDocument(path_b)
+        open_reader(path_a, purpose=READ)  # recusa, com mensagem clara, PDF que não abre
+        open_reader(path_b, purpose=READ)
+        doc_a = open_pdfium(path_a)
+        doc_b = open_pdfium(path_b)
+        try:
+            return self._compare(doc_a, doc_b, output_dir, scale)
+        finally:
+            doc_a.close()
+            doc_b.close()
+
+    def _compare(self, doc_a, doc_b, output_dir: str, scale: float) -> list[VisualDiffResult]:
         total_pages = max(len(doc_a), len(doc_b))
 
         output_dir_path = Path(output_dir)

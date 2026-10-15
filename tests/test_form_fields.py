@@ -1,5 +1,5 @@
 import pytest
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
 
 from core.base import EncryptedPDFError
 from core.create import CreateBlankPDF
@@ -376,7 +376,7 @@ def test_export_and_import_csv_round_trip(tmp_path):
 
     output_path = tmp_path / "preenchido.pdf"
     imported = ImportFormDataCSV().run(pdf_path, str(output_path), str(csv_path))
-    assert imported == 4
+    assert imported.filled == 4 and imported.not_found == []
 
     fields = PdfReader(str(output_path)).get_fields()
     assert fields["nome"]["/V"] == "João da Silva"
@@ -411,7 +411,7 @@ def test_export_and_import_fdf_round_trip_with_accents(tmp_path):
 
     reimported = tmp_path / "reimported.pdf"
     imported_count = ImportFormDataFDF().run(str(with_field), str(reimported), str(fdf_path))
-    assert imported_count == 1
+    assert imported_count.filled == 1
 
     fields = PdfReader(str(reimported)).get_fields()
     assert fields["nome"]["/V"] == "João Ção"
@@ -454,3 +454,135 @@ def test_flatten_form_fields_rejects_encrypted_input(make_encrypted_pdf, tmp_pat
 
     with pytest.raises(EncryptedPDFError):
         FlattenFormFields().run(str(encrypted_path), str(tmp_path / "out.pdf"))
+
+
+def _hierarchical_form(tmp_path):
+    from pypdf.generic import ArrayObject, DictionaryObject, FloatObject, NameObject, TextStringObject
+
+    pdf_path = tmp_path / "base.pdf"
+    CreateBlankPDF().run(str(pdf_path), page_count=1, width=400, height=400)
+    writer = PdfWriter(clone_from=str(pdf_path))
+    parent_ref = writer._add_object(DictionaryObject({NameObject("/T"): TextStringObject("cliente")}))
+    widget = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Annot"),
+            NameObject("/Subtype"): NameObject("/Widget"),
+            NameObject("/FT"): NameObject("/Tx"),
+            NameObject("/T"): TextStringObject("nome"),
+            NameObject("/V"): TextStringObject("Maria"),
+            NameObject("/Rect"): ArrayObject([FloatObject(v) for v in (100, 300, 300, 320)]),
+            NameObject("/Parent"): parent_ref,
+            NameObject("/DA"): TextStringObject("/Helv 12 Tf 0 g"),
+            NameObject("/P"): writer.pages[0].indirect_reference,
+        }
+    )
+    widget_ref = writer._add_object(widget)
+    parent_ref.get_object()[NameObject("/Kids")] = ArrayObject([widget_ref])
+    writer.pages[0][NameObject("/Annots")] = ArrayObject([widget_ref])
+    helv = DictionaryObject(
+        {NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"),
+         NameObject("/BaseFont"): NameObject("/Helvetica")}
+    )
+    writer.root_object[NameObject("/AcroForm")] = DictionaryObject(
+        {
+            NameObject("/Fields"): ArrayObject([parent_ref]),
+            NameObject("/DR"): DictionaryObject({NameObject("/Font"): DictionaryObject({NameObject("/Helv"): helv})}),
+        }
+    )
+    path = tmp_path / "hier.pdf"
+    with open(path, "wb") as f:
+        writer.write(f)
+    return path
+
+
+def test_list_fields_skips_grouping_parents(tmp_path):
+    fields = ListFormFields().run(str(_hierarchical_form(tmp_path)))
+
+    assert [(f.name, f.value) for f in fields] == [("cliente.nome", "Maria")]
+
+
+def test_flatten_hierarchical_fields_removes_the_widget(tmp_path):
+    # Em formulários com nomes hierárquicos, o widget continuava interativo por cima do
+    # valor estampado.
+    flattened = tmp_path / "flat.pdf"
+    count = FlattenFormFields().run(str(_hierarchical_form(tmp_path)), str(flattened))
+
+    reader = PdfReader(str(flattened))
+    assert count == 1
+    assert not reader.get_fields()
+    assert "/Annots" not in reader.pages[0]
+    assert "Maria" in reader.pages[0].extract_text()
+
+
+def _form_with_name_field(tmp_path):
+    pdf_path = tmp_path / "doc.pdf"
+    CreateBlankPDF().run(str(pdf_path), page_count=1, width=400, height=400)
+    with_field = tmp_path / "with_field.pdf"
+    AddFormField().run(str(pdf_path), str(with_field), field_name="nome", page_number=0, x=50, y=300)
+    return with_field
+
+
+@pytest.mark.parametrize(
+    ("raw", "description"),
+    [
+        ("campo,valor\nnome,José\n".encode("utf-8-sig"), "CSV UTF-8 com BOM (Excel)"),
+        ("campo;valor\nnome;José\n".encode("cp1252"), "CSV do Excel pt-BR (; e Windows-1252)"),
+        ("Campo ; Valor\nnome ; José\n".encode("utf-8"), "cabeçalho com maiúsculas e espaços"),
+    ],
+)
+def test_import_csv_accepts_what_excel_saves(tmp_path, raw, description):
+    with_field = _form_with_name_field(tmp_path)
+    csv_path = tmp_path / "dados.csv"
+    csv_path.write_bytes(raw)
+    output_path = tmp_path / "out.pdf"
+
+    result = ImportFormDataCSV().run(str(with_field), str(output_path), str(csv_path))
+
+    assert result.filled == 1, description
+    assert PdfReader(str(output_path)).get_fields()["nome"]["/V"].strip() == "José"
+
+
+def test_import_csv_reports_names_that_do_not_exist(tmp_path):
+    with_field = _form_with_name_field(tmp_path)
+    csv_path = tmp_path / "dados.csv"
+    csv_path.write_text("campo,valor\nnome,Ana\nidade,30\n", encoding="utf-8")
+
+    result = ImportFormDataCSV().run(str(with_field), str(tmp_path / "out.pdf"), str(csv_path))
+
+    assert result.filled == 1
+    assert result.not_found == ["idade"]
+
+
+def test_import_csv_fails_when_no_name_matches_instead_of_reporting_success(tmp_path):
+    with_field = _form_with_name_field(tmp_path)
+    csv_path = tmp_path / "dados.csv"
+    csv_path.write_text("campo,valor\nnao_existe,1\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="nao_existe"):
+        ImportFormDataCSV().run(str(with_field), str(tmp_path / "out.pdf"), str(csv_path))
+
+
+def test_add_field_rejects_a_name_that_already_exists(tmp_path):
+    with_field = _form_with_name_field(tmp_path)
+
+    with pytest.raises(ValueError, match="Já existe um campo"):
+        AddFormField().run(
+            str(with_field), str(tmp_path / "out.pdf"), field_name="nome", page_number=0, x=50, y=100
+        )
+
+
+def test_add_field_registers_its_font_when_the_form_has_no_default_resources(tmp_path):
+    from pypdf.generic import NameObject
+
+    with_field = _form_with_name_field(tmp_path)
+    writer = PdfWriter(clone_from=str(with_field))
+    del writer.root_object["/AcroForm"][NameObject("/DR")]
+    without_dr = tmp_path / "without_dr.pdf"
+    with open(without_dr, "wb") as f:
+        writer.write(f)
+
+    output_path = tmp_path / "out.pdf"
+    AddFormField().run(str(without_dr), str(output_path), field_name="email", page_number=0, x=50, y=100)
+
+    acroform = PdfReader(str(output_path)).trailer["/Root"]["/AcroForm"]
+    assert acroform["/DR"]["/Font"]

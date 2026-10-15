@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pypdf import PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject
 
-from .base import PDFOperation, open_reader
+from .base import READ, PDFOperation, open_reader, write_pdf
 
 
 @dataclass
@@ -21,7 +21,7 @@ class ListLayers(PDFOperation):
     camadas devolve uma lista vazia (não é um erro — a maioria dos PDFs não usa OCG)."""
 
     def run(self, input_path: str) -> list[LayerInfo]:
-        reader = open_reader(input_path)
+        reader = open_reader(input_path, purpose=READ)
         catalog = reader.trailer["/Root"]
         oc_properties_ref = catalog.get("/OCProperties")
         if oc_properties_ref is None:
@@ -50,8 +50,8 @@ class SetLayerVisibility(PDFOperation):
     arquivo. Não cria nem remove camadas, nem toca no conteúdo marcado das páginas."""
 
     def run(self, input_path: str, output_path: str, layer_index: int, visible: bool) -> None:
-        open_reader(input_path)  # recusa PDF protegido por senha antes de clonar
-        writer = PdfWriter(clone_from=input_path)
+        reader = open_reader(input_path)
+        writer = PdfWriter(clone_from=reader)
         catalog = writer.root_object
 
         oc_properties_ref = catalog.get("/OCProperties")
@@ -83,5 +83,4 @@ class SetLayerVisibility(PDFOperation):
         default_config[NameObject("/ON")] = on_refs
         default_config[NameObject("/OFF")] = off_refs
 
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)

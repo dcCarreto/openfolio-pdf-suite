@@ -66,6 +66,15 @@ class ProtectPage(QWidget):
         layout.addWidget(output_picker)
         layout.addWidget(QLabel(tr("Senha:")))
         layout.addWidget(password_edit)
+        if kind != "Proteger":
+            hint = QLabel(
+                tr(
+                    "Use a senha de abertura ou, num PDF com restrições (que abre sem senha), "
+                    "a senha de permissões."
+                )
+            )
+            hint.setWordWrap(True)
+            layout.addWidget(hint)
 
         if kind == "Proteger":
             confirm_password_edit = QLineEdit()

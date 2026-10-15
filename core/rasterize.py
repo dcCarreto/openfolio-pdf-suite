@@ -15,10 +15,12 @@ import io
 from collections.abc import Callable, Iterable
 
 from PIL import Image, ImageDraw
-from pypdf import PageObject, PdfReader
+from pypdf import PageObject, PdfReader, PdfWriter
+from pypdf.generic import DictionaryObject, NameObject
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 
+from .document import remove_widgets_from_form
 from .geometry import PageGeometry, Rect
 
 RASTER_SCALE = 300 / 72  # 300 DPI, a mesma resolução usada no OCR
@@ -73,3 +75,30 @@ def image_page(
     canvas.save()
     buffer.seek(0)
     return PdfReader(buffer).pages[0]
+
+
+# Entradas da página que deixam de fazer sentido quando ela vira só uma imagem.
+_STALE_PAGE_KEYS = (
+    "/Annots", "/Rotate", "/CropBox", "/BleedBox", "/TrimBox", "/ArtBox", "/UserUnit",
+    "/Thumb", "/PieceInfo", "/StructParents", "/Group", "/Resources",
+)
+
+
+def replace_with_image_page(writer: PdfWriter, page_index: int, new_page: PageObject) -> None:
+    """Troca o conteúdo da página `page_index` do `writer` pelo de `new_page` (uma página
+    feita por `image_page`), mantendo o mesmo objeto de página.
+
+    Trocar no lugar — em vez de remover a página e inserir outra — mantém valendo os
+    marcadores, links e destinos que apontam para ela. As anotações e os campos de
+    formulário da página já estão desenhados na imagem e saem do arquivo (e do formulário).
+    """
+    page = writer.pages[page_index]
+    widgets = [ref for ref in page.get("/Annots", []) if ref.get_object().get("/Subtype") == "/Widget"]
+    remove_widgets_from_form(writer, widgets)
+    for key in _STALE_PAGE_KEYS:
+        if key in page:
+            del page[key]
+    page[NameObject("/Resources")] = DictionaryObject()
+    page.replace_contents(None)
+    page.mediabox = new_page.mediabox
+    page.merge_page(new_page)

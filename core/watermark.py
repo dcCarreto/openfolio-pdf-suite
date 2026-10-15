@@ -1,16 +1,16 @@
 """Marca d'água em arquivos PDF."""
 
-import io
-
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfWriter
 from reportlab.lib.colors import Color
-from reportlab.pdfgen import canvas
 
-from .base import PDFOperation, open_reader
+from .base import PDFOperation, open_reader, write_pdf
+from .geometry import PageGeometry
+from .overlay import materialize_inherited_attributes, visual_overlay
 
 
 class AddWatermark(PDFOperation):
-    """Adiciona uma marca d'água de texto sobre todas as páginas de um PDF."""
+    """Adiciona uma marca d'água de texto sobre todas as páginas de um PDF, centralizada e
+    girada em relação à página como ela aparece na tela (também em páginas com `/Rotate`)."""
 
     def run(
         self,
@@ -22,27 +22,17 @@ class AddWatermark(PDFOperation):
         rotation: float = 45,
     ) -> None:
         reader = open_reader(input_path)
-        writer = PdfWriter()
+        writer = PdfWriter(clone_from=reader)
+        materialize_inherited_attributes(writer)
 
-        for page in reader.pages:
-            width = float(page.mediabox.width)
-            height = float(page.mediabox.height)
+        def draw(canvas, width: float, height: float) -> None:
+            canvas.translate(width / 2, height / 2)
+            canvas.rotate(rotation)
+            canvas.setFillColor(Color(0, 0, 0, alpha=opacity))
+            canvas.setFont("Helvetica-Bold", font_size)
+            canvas.drawCentredString(0, 0, text)
 
-            buffer = io.BytesIO()
-            c = canvas.Canvas(buffer, pagesize=(width, height))
-            c.saveState()
-            c.translate(width / 2, height / 2)
-            c.rotate(rotation)
-            c.setFillColor(Color(0, 0, 0, alpha=opacity))
-            c.setFont("Helvetica-Bold", font_size)
-            c.drawCentredString(0, 0, text)
-            c.restoreState()
-            c.save()
-            buffer.seek(0)
+        for source_page, page in zip(reader.pages, writer.pages):
+            page.merge_page(visual_overlay(PageGeometry.from_pypdf_page(source_page), draw))
 
-            watermark_page = PdfReader(buffer).pages[0]
-            added_page = writer.add_page(page)
-            added_page.merge_page(watermark_page)
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)

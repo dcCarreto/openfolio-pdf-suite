@@ -23,9 +23,15 @@ from dataclasses import dataclass
 import pypdfium2 as pdfium
 from pypdf import PdfWriter
 
-from .base import PDFOperation, atomic_output, open_reader, require_valid_page_index
+from .base import PDFOperation, open_reader, require_valid_page_index, write_pdf
 from .geometry import Rect
-from .rasterize import RASTER_SCALE, fill_visual_rects, image_page, render_visual_page
+from .rasterize import (
+    RASTER_SCALE,
+    fill_visual_rects,
+    image_page,
+    render_visual_page,
+    replace_with_image_page,
+)
 
 
 def _hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
@@ -65,17 +71,15 @@ class EditTextArea(PDFOperation):
             require_valid_page_index(len(reader.pages), edit.page_index)
             edits_by_page.setdefault(edit.page_index, []).append(edit)
 
-        writer = PdfWriter()
+        # Cópia completa do documento: só as páginas editadas mudam (ver
+        # `rasterize.replace_with_image_page`); marcadores, anexos e o resto ficam.
+        writer = PdfWriter(clone_from=reader)
         pages_edited = 0
         pdfium_doc = pdfium.PdfDocument(input_path)
         try:
             pdfium_doc.init_forms()
-            for index, page in enumerate(reader.pages):
-                page_edits = edits_by_page.get(index)
-                if not page_edits:
-                    writer.add_page(page)
-                    continue
-
+            for index in sorted(edits_by_page):
+                page_edits = edits_by_page[index]
                 image, geometry = render_visual_page(pdfium_doc[index], RASTER_SCALE)
                 placed = []
                 for edit in page_edits:
@@ -86,16 +90,13 @@ class EditTextArea(PDFOperation):
                     fill_visual_rects(image, geometry, [visual_rect], _hex_to_rgb255(edit.cover_color))
                     placed.append((edit, visual_rect))
 
-                writer.add_page(
-                    image_page(image, geometry.width, geometry.height, _text_drawer(placed))
-                )
+                new_page = image_page(image, geometry.width, geometry.height, _text_drawer(placed))
+                replace_with_image_page(writer, index, new_page)
                 pages_edited += 1
         finally:
             pdfium_doc.close()
 
-        with atomic_output(output_path) as temp_path:
-            with open(temp_path, "wb") as f:
-                writer.write(f)
+        write_pdf(writer, output_path)
         return pages_edited
 
 
