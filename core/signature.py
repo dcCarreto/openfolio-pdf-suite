@@ -30,7 +30,9 @@ from pyhanko import stamp
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers
+from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.validation import validate_pdf_signature
+from pyhanko.sign.validation.status import SignatureCoverageLevel
 
 from .base import PDFOperation, open_reader, require_valid_page_index
 
@@ -155,43 +157,125 @@ class SignDocument(PDFOperation):
                     )
 
 
+VERDICT_VALID = "valid"
+VERDICT_WARNING = "warning"
+VERDICT_INVALID = "invalid"
+
+_COVERAGE_NAMES = {
+    SignatureCoverageLevel.ENTIRE_FILE: "entire_file",
+    SignatureCoverageLevel.ENTIRE_REVISION: "entire_revision",
+    SignatureCoverageLevel.CONTIGUOUS_BLOCK_FROM_START: "partial",
+    SignatureCoverageLevel.UNCLEAR: "unclear",
+}
+_MODIFICATION_NAMES = {
+    ModificationLevel.NONE: "none",
+    ModificationLevel.LTA_UPDATES: "lta_updates",
+    ModificationLevel.FORM_FILLING: "form_filling",
+    ModificationLevel.ANNOTATIONS: "annotations",
+    ModificationLevel.OTHER: "other",
+}
+
+
 @dataclass
 class SignatureInfo:
+    """Resultado da verificação de uma assinatura.
+
+    `intact` sozinho não basta para dizer que o documento não mudou: ele só garante que o
+    trecho assinado (a revisão em que a assinatura foi feita) não foi alterado. Quem
+    acrescenta uma atualização incremental depois da assinatura muda o que o leitor mostra
+    sem tocar no trecho assinado — por isso `coverage`, `modification` e `docmdp_ok` entram
+    no veredito (`verdict`).
+    """
+
     field_name: str
     signer_name: str
     signing_time: str
     intact: bool
+    valid: bool = False  # a assinatura confere criptograficamente com o certificado
+    trusted: bool = False  # o certificado foi validado até uma autoridade confiável do sistema
+    self_signed: bool = False
+    issuer_name: str = ""
+    cert_valid_from: str = ""
+    cert_valid_until: str = ""
+    coverage: str = "unclear"  # "entire_file" | "entire_revision" | "partial" | "unclear"
+    modification: str = "unknown"  # "none" | "lta_updates" | "form_filling" | "annotations" | "other" | "unknown"
+    docmdp_ok: bool | None = None
+    revisions_after: int = 0  # revisões (atualizações incrementais) gravadas depois desta assinatura
+    error: str = ""
+
+    @property
+    def verdict(self) -> str:
+        """`VERDICT_VALID`, `VERDICT_WARNING` (válida, mas com ressalvas) ou `VERDICT_INVALID`."""
+        if self.error or not self.intact or not self.valid:
+            return VERDICT_INVALID
+        if self.coverage not in ("entire_file", "entire_revision"):
+            return VERDICT_INVALID
+        if self.modification == "other" or self.docmdp_ok is False:
+            return VERDICT_INVALID
+        if not self.trusted or self.coverage != "entire_file" or self.modification == "unknown":
+            return VERDICT_WARNING
+        return VERDICT_VALID
+
+
+def _common_name(name) -> str:
+    native = name.native
+    return str(native.get("common_name") or "") or name.human_friendly
 
 
 class DescribeSignatures(PDFOperation):
-    """Lista as assinaturas de um PDF com o resultado da verificação de integridade
-    (não valida a cadeia de confiança do certificado, só a identidade declarada e se o
-    documento foi alterado depois de assinado)."""
+    """Lista as assinaturas de um PDF com o resultado completo da verificação: integridade
+    do trecho assinado, validade criptográfica, alterações feitas depois da assinatura e
+    confiança no certificado.
+
+    A confiança é verificada contra as autoridades certificadoras do sistema operacional,
+    sem acessar a rede (o pyhanko não baixa listas de revogação por padrão). Certificados
+    autoassinados — como o de teste gerado pelo app — nunca são considerados confiáveis.
+    """
 
     def run(self, input_path: str) -> list[SignatureInfo]:
-        # A validação de cadeia de confiança (fora do escopo aqui) registra, em vários
-        # loggers internos do pyhanko, um erro esperado sempre que o certificado não tem
-        # uma autoridade confiável configurada (o nosso caso, de propósito). Silenciamos o
-        # logging inteiro durante a checagem para isso não parecer um bug no console.
+        # A validação da cadeia de confiança registra, em vários loggers internos do
+        # pyhanko, um erro esperado sempre que o certificado não chega a uma autoridade
+        # confiável (o caso do certificado de teste). Silenciamos o logging durante a
+        # checagem para isso não parecer um bug no console.
         previous_level = logging.root.manager.disable
         logging.disable(logging.CRITICAL)
         try:
             results = []
             with open(input_path, "rb") as f:
                 reader = PdfFileReader(f)
+                total_revisions = reader.xrefs.total_revisions
                 for embedded in reader.embedded_signatures:
-                    status = validate_pdf_signature(embedded)
-                    signing_time = (
-                        str(status.signer_reported_dt) if status.signer_reported_dt else ""
-                    )
-                    results.append(
-                        SignatureInfo(
-                            field_name=embedded.field_name,
-                            signer_name=status.signing_cert.subject.human_friendly,
-                            signing_time=signing_time,
-                            intact=bool(status.intact),
-                        )
-                    )
+                    results.append(_describe(embedded, total_revisions))
             return results
         finally:
             logging.disable(previous_level)
+
+
+def _describe(embedded, total_revisions: int) -> SignatureInfo:
+    field_name = str(embedded.field_name or "")
+    try:
+        status = validate_pdf_signature(embedded)
+    except Exception as exc:
+        return SignatureInfo(
+            field_name=field_name, signer_name="", signing_time="", intact=False, error=str(exc)
+        )
+
+    cert = status.signing_cert
+    validity = cert["tbs_certificate"]["validity"]
+    modification = status.modification_level
+    return SignatureInfo(
+        field_name=field_name,
+        signer_name=_common_name(cert.subject),
+        signing_time=str(status.signer_reported_dt) if status.signer_reported_dt else "",
+        intact=bool(status.intact),
+        valid=bool(status.valid),
+        trusted=bool(status.trusted),
+        self_signed=cert.self_signed != "no",
+        issuer_name=_common_name(cert.issuer),
+        cert_valid_from=validity["not_before"].native.date().isoformat(),
+        cert_valid_until=validity["not_after"].native.date().isoformat(),
+        coverage=_COVERAGE_NAMES.get(status.coverage, "unclear"),
+        modification=_MODIFICATION_NAMES.get(modification, "unknown") if modification is not None else "unknown",
+        docmdp_ok=status.docmdp_ok,
+        revisions_after=max(0, total_revisions - 1 - embedded.signed_revision),
+    )

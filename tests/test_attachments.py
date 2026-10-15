@@ -1,9 +1,17 @@
 """Testes de core/attachments.py: listar, adicionar, remover e extrair anexos embutidos."""
 
+from pathlib import Path
+
 import pytest
 from pypdf import PdfReader, PdfWriter
 
-from core.attachments import AddAttachment, ExtractAttachments, ListAttachments, RemoveAttachment
+from core.attachments import (
+    AddAttachment,
+    ExtractAttachments,
+    ListAttachments,
+    RemoveAttachment,
+    safe_attachment_filename,
+)
 from core.base import EncryptedPDFError
 
 
@@ -108,3 +116,68 @@ def test_remove_attachment_rejects_encrypted_input(make_encrypted_pdf, tmp_path)
 
     with pytest.raises(EncryptedPDFError):
         RemoveAttachment().run(str(encrypted_path), str(tmp_path / "out.pdf"), name="x.txt")
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("notas.txt", "notas.txt"),
+        ("../../fora.txt", "fora.txt"),
+        ("..\\..\\fora.txt", "fora.txt"),
+        ("C:\\Windows\\System32\\x.dll", "x.dll"),
+        ("/etc/passwd", "passwd"),
+        ("..", "anexo"),
+        ("", "anexo"),
+        ("CON.txt", "_CON.txt"),
+        ("nul", "_nul"),
+        ('a<b>c:d"e|f?g*h.txt', "a_b_c_d_e_f_g_h.txt"),
+        ("relatorio.pdf. . ", "relatorio.pdf"),
+    ],
+)
+def test_safe_attachment_filename(name, expected):
+    assert safe_attachment_filename(name) == expected
+
+
+def test_extract_attachments_never_writes_outside_the_chosen_folder(tmp_path):
+    # O nome do anexo vem de dentro do PDF: um arquivo malicioso não pode escolher onde
+    # gravar no disco de quem o abre.
+    pdf_path = tmp_path / "doc.pdf"
+    _make_plain_pdf(pdf_path)
+    writer = PdfWriter(clone_from=str(pdf_path))
+    hostile_names = ["../../fora.txt", "..\\..\\fora_windows.txt", str(tmp_path / "absoluto.txt"), "/tmp/raiz.txt"]
+    for index, name in enumerate(hostile_names):
+        writer.add_attachment(name, f"conteudo {index}".encode())
+    malicious = tmp_path / "malicious.pdf"
+    with open(malicious, "wb") as f:
+        writer.write(f)
+
+    output_dir = tmp_path / "saida" / "sub"
+    output_paths = ExtractAttachments().run(str(malicious), str(output_dir))
+
+    assert len(output_paths) == len(hostile_names)
+    resolved_dir = output_dir.resolve()
+    assert all(Path(path).resolve().parent == resolved_dir for path in output_paths)
+    assert not (tmp_path / "fora.txt").exists()
+    assert not (tmp_path / "fora_windows.txt").exists()
+    assert not (tmp_path / "absoluto.txt").exists()
+
+
+def test_extract_attachments_does_not_overwrite_duplicates_or_existing_files(tmp_path):
+    pdf_path = tmp_path / "doc.pdf"
+    _make_plain_pdf(pdf_path)
+    writer = PdfWriter(clone_from=str(pdf_path))
+    writer.add_attachment("dados.txt", b"primeiro")
+    writer.add_attachment("dados.txt", b"segundo")
+    with_attachments = tmp_path / "with.pdf"
+    with open(with_attachments, "wb") as f:
+        writer.write(f)
+
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    (output_dir / "dados.txt").write_bytes(b"ja estava aqui")
+
+    output_paths = ExtractAttachments().run(str(with_attachments), str(output_dir))
+
+    assert (output_dir / "dados.txt").read_bytes() == b"ja estava aqui"
+    assert sorted(Path(path).name for path in output_paths) == ["dados (2).txt", "dados (3).txt"]
+    assert sorted(Path(path).read_bytes() for path in output_paths) == [b"primeiro", b"segundo"]

@@ -469,6 +469,17 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Buscar": "Search",
     "Página {current} de {total}": "Page {current} of {total}",
     "Página {number}": "Page {number}",
+    # PDF viewer: opening documents
+    "Abrir PDF": "Open PDF",
+    "PDF protegido por senha": "Password-protected PDF",
+    "Este PDF está protegido por senha. Digite a senha para abri-lo:": (
+        "This PDF is password-protected. Enter the password to open it:"
+    ),
+    "Senha incorreta. Tente novamente:": "Wrong password. Try again:",
+    "Não foi possível abrir o PDF: {error}": "Could not open the PDF: {error}",
+    "Não foi possível abrir o PDF (pode estar corrompido): {error}": (
+        "Could not open the PDF (it may be corrupted): {error}"
+    ),
     # PDF viewer search bar
     "Buscar no documento...": "Search the document...",
     "Ocorrência anterior": "Previous match",
@@ -561,11 +572,13 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Sanitizar": "Sanitize",
     "Modo:": "Mode:",
     "Arraste no visualizador para marcar as áreas a apagar. Cada página marcada "
-    "vira uma imagem achatada (perde a camada de texto pesquisável inteira, não "
-    "só a área marcada) — é assim que garantimos que nada fique recuperável.": (
-        "Drag over the viewer to mark the areas to erase. Each marked page "
-        "becomes a flattened image (it loses the entire searchable text layer, not "
-        "just the marked area) — that's how we guarantee nothing stays recoverable."
+    "vira uma imagem, com as áreas pintadas de preto na própria imagem — e perde "
+    "a camada de texto pesquisável inteira, não só a área marcada. O resultado é "
+    "conferido antes de ser salvo.": (
+        "Drag over the viewer to mark the areas to erase. Each marked page becomes an "
+        "image, with the areas painted black in the image itself — and it loses the "
+        "entire searchable text layer, not just the marked area. The result is checked "
+        "before it is saved."
     ),
     "Ou detecte automaticamente padrões de dado sensível no texto do PDF:": (
         "Or automatically detect sensitive data patterns in the PDF's text:"
@@ -580,10 +593,31 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "Check at least one pattern or enter a regular expression."
     ),
     "Falha ao detectar padrões: {error}": "Failed to detect patterns: {error}",
-    "{count} ocorrência(s) encontrada(s) e marcada(s) para redação.": (
-        "{count} occurrence(s) found and marked for redaction."
+    "{count} ocorrência(s) encontrada(s), {added} nova(s) marcada(s) para redação. "
+    "Revise a lista antes de aplicar.": (
+        "{count} occurrence(s) found, {added} new one(s) marked for redaction. "
+        "Review the list before applying."
     ),
     "{count} área(s) marcada(s) para redação": "{count} area(s) marked for redaction",
+    "Expressão personalizada": "Custom expression",
+    "área marcada à mão": "area marked by hand",
+    "Selecione uma área para vê-la destacada no visualizador.": (
+        "Select an area to see it highlighted in the viewer."
+    ),
+    "Remover selecionadas": "Remove selected",
+    "Limpar todas": "Clear all",
+    "Selecione na lista as áreas a remover.": "Select the areas to remove in the list.",
+    "Também sanitizar o documento": "Also sanitize the document",
+    "O texto apagado pode aparecer também no título, nos metadados ou em anexos. "
+    "Com esta opção, o arquivo redigido também passa pela sanitização.": (
+        "The erased text may also appear in the title, the metadata, or attachments. "
+        "With this option, the redacted file also goes through sanitization."
+    ),
+    "A redação é irreversível: cada página marcada vira uma imagem achatada e "
+    "perde toda a camada de texto pesquisável, não só a área marcada. Continuar?": (
+        "Redaction is irreversible: each marked page becomes a flattened image and "
+        "loses its entire searchable text layer, not just the marked area. Continue?"
+    ),
     "Aplicar redação": "Apply redaction",
     "Marque pelo menos uma área no visualizador antes de aplicar.": (
         "Mark at least one area in the viewer before applying."
@@ -592,11 +626,28 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "{count} página(s) redigida(s) com sucesso.": "{count} page(s) redacted successfully.",
     "Remover metadados": "Remove metadata",
     "Remover anotações e comentários": "Remove annotations and comments",
-    "JavaScript e anexos embutidos são sempre removidos.": (
-        "Embedded JavaScript and attachments are always removed."
+    "JavaScript, ações que abrem arquivos ou programas ou enviam dados, e arquivos "
+    "embutidos são sempre removidos. O resultado é conferido antes de ser salvo.": (
+        "JavaScript, actions that open files or programs or send data, and embedded "
+        "files are always removed. The result is checked before it is saved."
     ),
     "Falha ao sanitizar: {error}": "Failed to sanitize: {error}",
     "PDF sanitizado com sucesso.": "PDF sanitized successfully.",
+    "Removido:": "Removed:",
+    "Nada perigoso foi encontrado no documento.": "Nothing dangerous was found in the document.",
+    "{count} script(s) ou ação(ões) de JavaScript": "{count} JavaScript script(s) or action(s)",
+    "{count} ação(ões) que abrem arquivos ou programas, enviam dados ou acessam "
+    "conteúdo externo": (
+        "{count} action(s) that open files or programs, send data, or access external content"
+    ),
+    "{count} arquivo(s) embutido(s)": "{count} embedded file(s)",
+    "{count} anotação(ões)": "{count} annotation(s)",
+    "{count} item(ns) de dados privados de aplicativos, miniaturas ou metadados "
+    "de páginas e imagens": (
+        "{count} item(s) of private application data, thumbnails, or page and image metadata"
+    ),
+    "metadados do documento (título, autor e outros)": "document metadata (title, author, and others)",
+    "formulário XFA (pode conter scripts)": "XFA form (may contain scripts)",
     # Digital signature: sidebar section
     "Assinatura digital": "Digital signature",
     "Assine um PDF com selo visível e assinatura criptográfica, ou verifique uma assinatura existente.": (
@@ -629,7 +680,9 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "E-mail": "Email",
     "Nome:": "Name:",
     "E-mail:": "Email:",
-    "Arquivo PDF a verificar:": "PDF file to verify:",
+    "Arquivo PDF a verificar (vazio = o documento aberto):": (
+        "PDF file to verify (empty = the open document):"
+    ),
     "Verificar": "Verify",
     "Abra um PDF para começar.": "Open a PDF to get started.",
     "Digite o nome do signatário.": "Enter the signer's name.",
@@ -641,10 +694,51 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Escolha o arquivo PDF a verificar.": "Choose the PDF file to verify.",
     "Falha ao verificar: {error}": "Failed to verify: {error}",
     "Nenhuma assinatura encontrada neste PDF.": "No signature found in this PDF.",
-    "íntegro (não modificado)": "intact (not modified)",
-    "MODIFICADO após a assinatura": "MODIFIED after signing",
-    "Campo: {field}\nSignatário: {signer}\nData: {date}\nStatus: {status}": (
-        "Field: {field}\nSigner: {signer}\nDate: {date}\nStatus: {status}"
+    'Assinatura {number} de {total} — campo "{field}"': 'Signature {number} of {total} — field "{field}"',
+    "Resultado: {verdict}": "Result: {verdict}",
+    "VÁLIDA": "VALID",
+    "VÁLIDA, COM RESSALVAS": "VALID, WITH CAVEATS",
+    "INVÁLIDA": "INVALID",
+    "Não foi possível verificar esta assinatura: {error}": "This signature could not be verified: {error}",
+    "{name} (certificado autoassinado)": "{name} (self-signed certificate)",
+    "Signatário (segundo o certificado): {name}": "Signer (according to the certificate): {name}",
+    "Emitido por: {issuer}": "Issued by: {issuer}",
+    "Validade do certificado: {start} a {end}": "Certificate validity: {start} to {end}",
+    "Data declarada pelo signatário: {date}": "Date declared by the signer: {date}",
+    "Conteúdo assinado: {status}": "Signed content: {status}",
+    "íntegro": "intact",
+    "ALTERADO depois da assinatura": "CHANGED after signing",
+    "Assinatura criptográfica: {status}": "Cryptographic signature: {status}",
+    "válida": "valid",
+    "Alterações depois da assinatura: {status}": "Changes after signing: {status}",
+    "nenhuma — a assinatura cobre o documento inteiro": "none — the signature covers the whole document",
+    "a assinatura não cobre o documento de forma padrão — trate como suspeito": (
+        "the signature does not cover the document in the standard way — treat it as suspicious"
+    ),
+    "{count} revisão(ões) gravada(s) depois desta assinatura": (
+        "{count} revision(s) saved after this signature"
+    ),
+    "sem mudança de conteúdo": "no content change",
+    "só manutenção de assinaturas (carimbos de tempo e dados de validação)": (
+        "signature maintenance only (timestamps and validation data)"
+    ),
+    "só preenchimento de formulário e novas assinaturas": "form filling and new signatures only",
+    "comentários e anotações": "comments and annotations",
+    "ALTERAÇÕES NO CONTEÚDO — o documento pode ter sido adulterado depois de assinado": (
+        "CONTENT CHANGES — the document may have been tampered with after signing"
+    ),
+    "não foi possível analisar o que mudou": "it was not possible to analyze what changed",
+    "Confiança no certificado: {status}": "Certificate trust: {status}",
+    "validado até uma autoridade certificadora confiável do sistema": (
+        "validated up to a certificate authority trusted by the system"
+    ),
+    "não confiável — certificado autoassinado (sem validade jurídica)": (
+        "not trusted — self-signed certificate (no legal validity)"
+    ),
+    "não confiável — não foi possível validar a cadeia até uma autoridade confiável do "
+    "sistema (para certificados ICP-Brasil, a cadeia da ICP-Brasil precisa estar instalada)": (
+        "not trusted — the chain could not be validated up to an authority trusted by the "
+        "system (for ICP-Brasil certificates, the ICP-Brasil chain must be installed)"
     ),
     # PDF/A
     "Converter para PDF/A": "Convert to PDF/A",

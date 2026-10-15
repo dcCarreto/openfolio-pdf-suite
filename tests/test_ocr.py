@@ -139,3 +139,57 @@ def test_run_preserves_page_count(monkeypatch, tmp_path):
     ocr.OCRDocument().run(str(path_in), str(path_out))
 
     assert len(PdfReader(str(path_out)).pages) == 2
+
+
+@pytest.mark.parametrize(
+    "layout",
+    [{"rotate": 90}, {"rotate": 270}, {"rotate": 180}, {"cropbox": (30, 40, 380, 290)}],
+    ids=["rot90", "rot270", "rot180", "cropbox"],
+)
+def test_invisible_text_lands_on_the_recognized_word_on_hard_pages(monkeypatch, tmp_path, layout):
+    # O Tesseract devolve caixas em pixels da página como ela aparece na tela; o texto
+    # invisível precisa cair ali — e correr na direção da leitura — mesmo em páginas giradas.
+    import pypdfium2 as pdfium
+    from pypdf import PdfWriter
+    from pypdf.generic import RectangleObject
+
+    from core.geometry import PageGeometry
+
+    path_in = tmp_path / "scanned.pdf"
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=400, height=300)
+    if "cropbox" in layout:
+        page.cropbox = RectangleObject(layout["cropbox"])
+    if layout.get("rotate"):
+        page.rotate(layout["rotate"])
+    with open(path_in, "wb") as f:
+        writer.write(f)
+
+    word_px = (200, 300, 360, 60)  # left, top, width, height na imagem renderizada
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+    monkeypatch.setattr(
+        ocr, "_run_tesseract", lambda image, language: _fake_ocr_data([("Hello", *word_px, 95)])
+    )
+
+    path_out = tmp_path / "out.pdf"
+    assert ocr.OCRDocument().run(str(path_in), str(path_out)) == 1
+
+    document = pdfium.PdfDocument(str(path_out))
+    try:
+        pdf_page = document[0]
+        geometry = PageGeometry.from_pdfium_page(pdf_page)
+        textpage = pdf_page.get_textpage()
+        assert textpage.get_text_range().strip() == "Hello"
+        boxes = [textpage.get_charbox(i) for i in range(textpage.count_chars())]
+        textpage.close()
+    finally:
+        document.close()
+
+    user_box = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+    left, bottom, right, top = geometry.user_rect_to_visual(user_box)
+    scale = ocr._OCR_SCALE
+    word_left, word_top = word_px[0] / scale, geometry.height - word_px[1] / scale
+    word_bottom = word_top - word_px[3] / scale
+    assert left == pytest.approx(word_left, abs=3)
+    assert word_bottom - 3 <= bottom and top <= word_top + 3
+    assert right - left > top - bottom  # a palavra corre na horizontal, como na tela

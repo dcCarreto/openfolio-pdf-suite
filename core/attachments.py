@@ -1,6 +1,8 @@
 """Anexos embutidos (`/Names/EmbeddedFiles`) em arquivos PDF: listar, adicionar, remover
 e extrair."""
 
+import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,19 +42,73 @@ class AddAttachment(PDFOperation):
             writer.write(f)
 
 
+_WINDOWS_RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
+_MAX_FILENAME_LENGTH = 180
+
+
+def safe_attachment_filename(name: str) -> str:
+    """Transforma o nome de um anexo (que vem de dentro do PDF, ou seja, de quem fez o
+    arquivo) num nome de arquivo simples e seguro.
+
+    Sem isto, um anexo chamado `../../algo` ou `C:\\pasta\\algo` seria gravado fora da pasta
+    escolhida — o PDF decidiria onde escrever no disco de quem o abre. Só o último
+    componente do nome é aproveitado (aceitando `/` e `\\` como separadores, qualquer que
+    seja o sistema), sem caracteres inválidos no Windows e sem nomes reservados.
+    """
+    base = re.split(r"[\\/]", str(name))[-1]
+    base = re.sub(r'[\x00-\x1f<>:"|?*]', "_", base).strip().rstrip(". ")
+    if base in ("", ".", ".."):
+        base = "anexo"
+    stem, extension = os.path.splitext(base)
+    if stem.split(".")[0].upper() in _WINDOWS_RESERVED_NAMES:
+        stem = f"_{stem}"
+    if len(stem) + len(extension) > _MAX_FILENAME_LENGTH:
+        extension = extension[:20]
+        stem = stem[: _MAX_FILENAME_LENGTH - len(extension)]
+    return stem + extension
+
+
+def _unique_path(directory: Path, filename: str, used: set[str]) -> Path:
+    stem, extension = os.path.splitext(filename)
+    candidate = filename
+    counter = 2
+    while candidate.casefold() in used or (directory / candidate).exists():
+        candidate = f"{stem} ({counter}){extension}"
+        counter += 1
+    used.add(candidate.casefold())
+    return directory / candidate
+
+
 class ExtractAttachments(PDFOperation):
-    """Extrai todos os anexos embutidos de um PDF para uma pasta local."""
+    """Extrai todos os anexos embutidos de um PDF para uma pasta local.
+
+    Os nomes passam por `safe_attachment_filename`; anexos com o mesmo nome (ou com o nome
+    de um arquivo que já existe na pasta) ganham um sufixo " (2)", " (3)"... em vez de
+    sobrescrever o que já estava lá.
+    """
 
     def run(self, input_path: str, output_dir: str) -> list[str]:
         reader = open_reader(input_path)
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(parents=True, exist_ok=True)
+        resolved_dir = output_dir_path.resolve()
 
         output_paths = []
+        used: set[str] = set()
         for name, contents in reader.attachments.items():
-            output_path = output_dir_path / name
-            output_path.write_bytes(contents[0])
-            output_paths.append(str(output_path))
+            for content in contents:
+                output_path = _unique_path(output_dir_path, safe_attachment_filename(name), used)
+                if not output_path.resolve().is_relative_to(resolved_dir):
+                    raise ValueError(f'O anexo "{name}" tentou gravar fora da pasta escolhida.')
+                output_path.write_bytes(content)
+                output_paths.append(str(output_path))
         return output_paths
 
 

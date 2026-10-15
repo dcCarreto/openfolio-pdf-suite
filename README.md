@@ -80,7 +80,7 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | 📄 Mesclar | Combina vários PDFs em um único arquivo, na ordem que você definir |
 | ✂️ Dividir | Separa um PDF em vários arquivos menores (uma ou N páginas por arquivo, ou um arquivo por marcador de nível superior do sumário) |
 | 🔃 Páginas | Rotaciona, reordena, remove, insere ou substitui páginas de um PDF (inserção/substituição usando páginas de outro PDF) |
-| 🗜️ Comprimir | Reduz o tamanho de um PDF recomprimindo conteúdo e removendo objetos duplicados |
+| 🗜️ Comprimir | Reduz o tamanho de um PDF recomprimindo conteúdo e removendo objetos duplicados (as imagens ainda não são recomprimidas, então PDFs escaneados quase não diminuem) |
 | 🖼️ Converter | Converte entre PDF e imagens, Word/Excel/PowerPoint e PDF, e XML e PDF |
 | 💧 Marca d'água | Adiciona um texto de marca d'água (opacidade, tamanho e rotação configuráveis) |
 | 🔒 Proteger | Protege um PDF com senha (AES-256), define permissões granulares (impressão, edição, cópia, formulários) com senha de proprietário separada, ou remove a senha de um PDF protegido |
@@ -93,13 +93,13 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | ✏️ Editar | Substitui uma imagem já embutida por outra (mantendo posição e tamanho), "edita" texto cobrindo a área e reescrevendo por cima (achatando a página, como na redação), e adiciona, lista ou remove links (URL externa ou página do documento) |
 | 🔖 Marcadores | Monta um sumário de navegação (outline) com título e página de destino |
 | 🗂️ Camadas | Lista as camadas (Optional Content Groups) de um PDF e alterna a visibilidade padrão de cada uma |
-| 📎 Anexos | Lista, adiciona, remove ou extrai os anexos embutidos de um PDF |
+| 📎 Anexos | Lista, adiciona, remove ou extrai os anexos embutidos de um PDF (a extração nunca grava fora da pasta escolhida, mesmo que o nome do anexo tente) |
 | 🧾 Campos de formulário | Adiciona campos de formulário **interativos** (texto, data, caixa de seleção, lista suspensa, lista de seleção ou grupo de opções) — o PDF resultante é preenchível em qualquer leitor. Também lista campos já existentes, exporta/importa dados preenchidos (CSV ou FDF) e achata o formulário (Fill & Sign simplificado) |
 | 🖍️ Anotações | Realce, sublinhe, risque, adicione notas, desenhe à mão livre ou carimbe direto sobre a página, no próprio visualizador — com uma biblioteca de carimbos customizados (nome, texto e cor) salva localmente. Também exporta os comentários já existentes no PDF para CSV |
 | 📏 Medição | Mede a distância entre dois pontos de um PDF, arrastando no visualizador central (mm, cm, polegadas ou pontos PDF) |
-| 🔍 OCR | Reconhece o texto de páginas escaneadas (via Tesseract) e gera um PDF pesquisável, com o texto invisível posicionado exatamente sobre a imagem original |
-| ⬛ Redigir/Sanitizar | Apaga áreas de um PDF de forma irreversível (rasterizando a página inteira), com detecção automática de padrões sensíveis (CPF, CNPJ, e-mail, telefone, cartão de crédito ou regex personalizada), e remove metadados, JavaScript e anexos embutidos |
-| ✒️ Assinatura digital | Assina um PDF com selo visível e assinatura criptográfica de verdade (CMS/PKCS#7), usando um certificado .pfx real ou um certificado de teste gerado na hora |
+| 🔍 OCR | Reconhece o texto de páginas escaneadas (via Tesseract) e gera um PDF pesquisável, com o texto invisível posicionado sobre cada palavra reconhecida (inclusive em páginas giradas) |
+| ⬛ Redigir/Sanitizar | Apaga áreas de um PDF de forma irreversível: a página marcada vira imagem, com as áreas pintadas de preto nos próprios pixels, e o resultado é conferido antes de ser salvo (funciona também em páginas giradas ou com área de corte). Detecta padrões sensíveis (CPF, CNPJ, e-mail, telefone, cartão de crédito ou regex personalizada), com revisão de cada área antes de aplicar. A sanitização remove metadados, JavaScript (inclusive em ações de páginas, campos e links), ações que abrem arquivos ou programas ou enviam dados, e arquivos embutidos — e mostra o que foi removido |
+| ✒️ Assinatura digital | Assina um PDF com selo visível e assinatura criptográfica de verdade (CMS/PKCS#7), usando um certificado .pfx real ou um certificado de teste gerado na hora. A verificação mostra se o conteúdo assinado está íntegro, se algo foi alterado depois da assinatura e se o certificado é confiável |
 | ♿ Acessibilidade | Verifica um subconjunto de PDF/UA (idioma, título, árvore de estrutura, texto alternativo em figuras) e corrige idioma/título — não tagueia automaticamente, pelo risco de gerar uma estrutura malformada |
 | 🆚 Comparar | Compara duas versões de um PDF: diff de texto por página, ou diff visual (imagem por página destacando em vermelho o que mudou) |
 
@@ -179,8 +179,8 @@ Tesseract, que já foi detectado automaticamente com o idioma instalado:
 ### Redigir e sanitizar
 
 Uma linha inteira contendo o CPF do contratante é marcada no visualizador; ao aplicar a
-redação, a página inteira é rasterizada — não sobra texto nem vetor recuperável por baixo do
-retângulo preto:
+redação, a página vira uma imagem com a área pintada de preto nos próprios pixels — não sobra
+texto, vetor nem pixel original recuperável, e o resultado é conferido antes de ser salvo:
 
 <p align="center">
   <img src="assets/screenshots/10-redigir-sanitizar.png" alt="Aba Redigir/Sanitizar com uma área do contrato marcada para redação" width="900">
@@ -189,8 +189,10 @@ retângulo preto:
 ### Assinatura digital
 
 Um termo de aceite foi assinado com um certificado de teste gerado na hora: o selo visível
-aparece no canto inferior direito da página, e a verificação confirma a identidade do
-signatário, a data da assinatura e que o documento continua íntegro:
+aparece no canto inferior direito da página. A verificação mostra quem assinou segundo o
+certificado, a data, se o conteúdo assinado continua íntegro, se algo foi alterado depois da
+assinatura e se o certificado é confiável (o de teste, por ser autoassinado, aparece como
+"válida, com ressalvas"):
 
 <p align="center">
   <img src="assets/screenshots/11-assinatura-digital.png" alt="Aba Assinatura digital mostrando o selo visível no documento e o resultado da verificação" width="900">
@@ -271,10 +273,12 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
   base.py          Classe base PDFOperation e validações compartilhadas (PDF protegido por
                    senha, índice de página fora do intervalo)
   merge.py, split.py, pages.py, compress.py, convert.py, ...
+  geometry.py      Conversão entre o espaço do PDF e o que aparece na tela (/Rotate, CropBox)
+  rasterize.py     Achatamento de página em imagem, com áreas pintadas nos próprios pixels
   annotations.py   Anotações reais (Highlight/Underline/StrikeOut/Ink/Stamp) via pypdf
   ocr.py           Reconhecimento de texto (Tesseract) com camada de texto invisível
-  redaction.py     Redação real (rasterização) e sanitização de PDFs
-  signature.py     Assinatura digital (pyhanko) e verificação de integridade
+  redaction.py     Redação real (rasterização + verificação) e sanitização de PDFs
+  signature.py     Assinatura digital (pyhanko) e verificação completa das assinaturas
 
 ui/              Interface gráfica (PySide6)
   main_window.py       Janela principal: monta a sidebar e as 26 seções

@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.annotations import AnnotationSpec, spec_rect
+from core.geometry import PageGeometry
 from core.redaction import RedactionRect
 from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
@@ -69,6 +70,7 @@ class PdfViewer(QWidget):
         self.redaction_state = redaction_state
         self.measure_state = measure_state or MeasureState()
         self._document = None
+        self._geometries: dict[int, PageGeometry] = {}
         self._scale = _DEFAULT_SCALE
         self._continuous = False
         self._show_thumbnails = True
@@ -95,6 +97,7 @@ class PdfViewer(QWidget):
         annotation_state.pending_changed.connect(self._refresh_current_render)
         redaction_state.active_changed.connect(self._on_markup_state_changed)
         redaction_state.pending_changed.connect(self._refresh_current_render)
+        redaction_state.selection_changed.connect(self._on_redaction_selection_changed)
         self.measure_state.active_changed.connect(self._on_markup_state_changed)
         self.measure_state.result_changed.connect(self._refresh_current_render)
         self.measure_state.unit_changed.connect(self._refresh_current_render)
@@ -259,6 +262,7 @@ class PdfViewer(QWidget):
 
     def _reload(self):
         path = self.session.path()
+        self._geometries = {}
         if self._document is not None:
             self._document.close()
             self._document = None
@@ -414,22 +418,30 @@ class PdfViewer(QWidget):
         if match.page_index != page_index:
             return pixmap
 
-        _, page_height = self._document[page_index].get_size()
         highlighted = QPixmap(pixmap)
         painter = QPainter(highlighted)
         painter.setBrush(_HIGHLIGHT_COLOR)
         painter.setPen(Qt.PenStyle.NoPen)
-        x = match.left * self._scale
-        width = (match.right - match.left) * self._scale
-        top_y = (page_height - match.top) * self._scale
-        height = (match.top - match.bottom) * self._scale
-        painter.drawRect(QRectF(x, top_y, width, height))
+        painter.drawRect(
+            self._user_rect_to_screen(page_index, (match.left, match.bottom, match.right, match.top))
+        )
         painter.end()
         return highlighted
 
-    def _page_y_to_screen(self, page_index: int, y_pdf: float) -> float:
-        _, page_height = self._document[page_index].get_size()
-        return (page_height - y_pdf) * self._scale
+    # Tudo o que o visualizador guarda (anotações, áreas de redação, medições, ocorrências da
+    # busca) fica no espaço do usuário do PDF — o mesmo do pdfium e das operações de core/.
+    # A conversão de/para pixels passa sempre pela geometria da página, que considera
+    # /Rotate e CropBox (ver core/geometry.py).
+
+    def _geometry(self, page_index: int) -> PageGeometry:
+        geometry = self._geometries.get(page_index)
+        if geometry is None:
+            geometry = PageGeometry.from_pdfium_page(self._document[page_index])
+            self._geometries[page_index] = geometry
+        return geometry
+
+    def _user_rect_to_screen(self, page_index: int, rect) -> QRectF:
+        return QRectF(*self._geometry(page_index).user_rect_to_screen(rect, self._scale))
 
     def _with_pending_annotations(self, pixmap: QPixmap, page_index: int) -> QPixmap:
         specs = [s for s in self.annotation_state.pending() if s.page_index == page_index]
@@ -446,38 +458,32 @@ class PdfViewer(QWidget):
 
     def _paint_pending_spec(self, painter: QPainter, page_index: int, spec: AnnotationSpec):
         color = QColor(f"#{spec.color}")
-        scale = self._scale
 
         if spec.kind in ("highlight", "underline", "strikeout"):
-            for left, bottom, right, top in spec.quads:
-                x = left * scale
-                width = (right - left) * scale
-                top_y = self._page_y_to_screen(page_index, top)
-                height = (top - bottom) * scale
+            for quad in spec.quads:
+                rect = self._user_rect_to_screen(page_index, quad)
                 if spec.kind == "highlight":
                     painter.setPen(Qt.PenStyle.NoPen)
                     fill = QColor(color)
                     fill.setAlpha(110)
                     painter.setBrush(fill)
-                    painter.drawRect(QRectF(x, top_y, width, height))
+                    painter.drawRect(rect)
                 elif spec.kind == "underline":
                     painter.setPen(QPen(color, 2))
-                    painter.drawLine(QRectF(x, top_y, width, height).bottomLeft(), QRectF(x, top_y, width, height).bottomRight())
+                    painter.drawLine(rect.bottomLeft(), rect.bottomRight())
                 else:  # strikeout
                     painter.setPen(QPen(color, 2))
-                    mid_y = top_y + height / 2
-                    painter.drawLine(int(x), int(mid_y), int(x + width), int(mid_y))
+                    mid_y = rect.center().y()
+                    painter.drawLine(QPointF(rect.left(), mid_y), QPointF(rect.right(), mid_y))
         elif spec.kind == "ink":
             self._paint_ink_stroke(painter, page_index, spec.points, color)
         elif spec.kind == "note":
-            left, bottom, right, top = spec_rect(spec)
-            rect = QRectF(left * scale, self._page_y_to_screen(page_index, top), (right - left) * scale, (top - bottom) * scale)
+            rect = self._user_rect_to_screen(page_index, spec_rect(spec))
             painter.setPen(QPen(QColor("#000000"), 1))
             painter.setBrush(color)
             painter.drawRect(rect)
         elif spec.kind == "stamp":
-            left, bottom, right, top = spec_rect(spec)
-            rect = QRectF(left * scale, self._page_y_to_screen(page_index, top), (right - left) * scale, (top - bottom) * scale)
+            rect = self._user_rect_to_screen(page_index, spec_rect(spec))
             painter.setPen(QPen(color, 2))
             painter.setBrush(QColor("#ffffff"))
             painter.drawRect(rect)
@@ -489,16 +495,18 @@ class PdfViewer(QWidget):
         if not rects:
             return pixmap
 
+        selected = self.redaction_state.selected()
         result = QPixmap(pixmap)
         painter = QPainter(result)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(0, 0, 0, 200))
         for rect in rects:
-            x = rect.left * self._scale
-            width = (rect.right - rect.left) * self._scale
-            top_y = self._page_y_to_screen(page_index, rect.top)
-            height = (rect.top - rect.bottom) * self._scale
-            painter.drawRect(QRectF(x, top_y, width, height))
+            screen_rect = self._user_rect_to_screen(page_index, rect.as_rect())
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(0, 0, 0, 200))
+            painter.drawRect(screen_rect)
+            if rect == selected:
+                painter.setPen(QPen(QColor("#ff5252"), 2))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRect(screen_rect.adjusted(-3, -3, 3, 3))
         painter.end()
         return result
 
@@ -542,7 +550,7 @@ class PdfViewer(QWidget):
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, label)
 
     def _pdf_point_to_widget(self, page_index: int, x_pdf: float, y_pdf: float) -> QPointF:
-        return QPointF(x_pdf * self._scale, self._page_y_to_screen(page_index, y_pdf))
+        return QPointF(*self._geometry(page_index).user_to_screen(x_pdf, y_pdf, self._scale))
 
     def _paint_ink_stroke(self, painter: QPainter, page_index: int, points, color: QColor):
         pen = QPen(color, max(1.0, 2.5 * self._scale))
@@ -739,8 +747,21 @@ class PdfViewer(QWidget):
             canvas.setCursor(Qt.CursorShape.ArrowCursor)
 
     def _widget_point_to_pdf(self, page_index: int, x: float, y: float) -> tuple[float, float]:
-        _, page_height = self._document[page_index].get_size()
-        return (x / self._scale, page_height - y / self._scale)
+        return self._geometry(page_index).screen_to_user(x, y, self._scale)
+
+    def _on_redaction_selection_changed(self):
+        """Mostra a página da área de redação escolhida na lista do painel."""
+        selected = self.redaction_state.selected()
+        if self._document is None or selected is None or not (0 <= selected.page_index < len(self._document)):
+            self._refresh_current_render()
+            return
+        if self._continuous:
+            self._scroll_to_page(selected.page_index)
+            self._refresh_current_render()
+        elif selected.page_index != self._current_page:
+            self._show_single_page(selected.page_index)
+        else:
+            self._refresh_current_render()
 
     def _on_canvas_pressed(self, x: float, y: float):
         if self.measure_state.is_page_active():

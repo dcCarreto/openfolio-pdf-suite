@@ -14,7 +14,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.signature import DescribeSignatures, SignDocument
+from core.signature import (
+    VERDICT_INVALID,
+    VERDICT_VALID,
+    VERDICT_WARNING,
+    DescribeSignatures,
+    SignatureInfo,
+    SignDocument,
+)
+from ui import i18n
 from ui.i18n import tr
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -26,6 +34,90 @@ _POSITION_VALUES = {
     "Superior direito": "top-right",
     "Superior esquerdo": "top-left",
 }
+
+_VERDICT_LABELS = {
+    VERDICT_VALID: "VÁLIDA",
+    VERDICT_WARNING: "VÁLIDA, COM RESSALVAS",
+    VERDICT_INVALID: "INVÁLIDA",
+}
+_MODIFICATION_LABELS = {
+    "none": "sem mudança de conteúdo",
+    "lta_updates": "só manutenção de assinaturas (carimbos de tempo e dados de validação)",
+    "form_filling": "só preenchimento de formulário e novas assinaturas",
+    "annotations": "comentários e anotações",
+    "other": "ALTERAÇÕES NO CONTEÚDO — o documento pode ter sido adulterado depois de assinado",
+    "unknown": "não foi possível analisar o que mudou",
+}
+
+
+def _format_date(iso_date: str) -> str:
+    if not iso_date or i18n.get_language() != i18n.PT_BR:
+        return iso_date
+    year, month, day = iso_date.split("-")
+    return f"{day}/{month}/{year}"
+
+
+def _describe_changes(info: SignatureInfo) -> str:
+    if info.coverage == "entire_file":
+        return tr("nenhuma — a assinatura cobre o documento inteiro")
+    if info.coverage != "entire_revision":
+        return tr("a assinatura não cobre o documento de forma padrão — trate como suspeito")
+    revisions = tr("{count} revisão(ões) gravada(s) depois desta assinatura").format(
+        count=info.revisions_after
+    )
+    return f"{revisions}: {tr(_MODIFICATION_LABELS[info.modification])}"
+
+
+def _describe_trust(info: SignatureInfo) -> str:
+    if info.trusted:
+        return tr("validado até uma autoridade certificadora confiável do sistema")
+    if info.self_signed:
+        return tr("não confiável — certificado autoassinado (sem validade jurídica)")
+    return tr(
+        "não confiável — não foi possível validar a cadeia até uma autoridade confiável do "
+        "sistema (para certificados ICP-Brasil, a cadeia da ICP-Brasil precisa estar instalada)"
+    )
+
+
+def format_signature_info(info: SignatureInfo, number: int, total: int) -> str:
+    """Relatório de uma assinatura, do veredito para os detalhes."""
+    lines = [
+        tr('Assinatura {number} de {total} — campo "{field}"').format(
+            number=number, total=total, field=info.field_name
+        ),
+        tr("Resultado: {verdict}").format(verdict=tr(_VERDICT_LABELS[info.verdict])),
+    ]
+    if info.error:
+        lines.append(tr("Não foi possível verificar esta assinatura: {error}").format(error=info.error))
+        return "\n".join(lines)
+
+    issuer = (
+        tr("{name} (certificado autoassinado)").format(name=info.issuer_name)
+        if info.self_signed
+        else info.issuer_name
+    )
+    lines.append(tr("Signatário (segundo o certificado): {name}").format(name=info.signer_name))
+    lines.append(tr("Emitido por: {issuer}").format(issuer=issuer))
+    lines.append(
+        tr("Validade do certificado: {start} a {end}").format(
+            start=_format_date(info.cert_valid_from), end=_format_date(info.cert_valid_until)
+        )
+    )
+    if info.signing_time:
+        lines.append(tr("Data declarada pelo signatário: {date}").format(date=info.signing_time))
+    lines.append(
+        tr("Conteúdo assinado: {status}").format(
+            status=tr("íntegro") if info.intact else tr("ALTERADO depois da assinatura")
+        )
+    )
+    lines.append(
+        tr("Assinatura criptográfica: {status}").format(
+            status=tr("válida") if info.valid else tr("INVÁLIDA")
+        )
+    )
+    lines.append(tr("Alterações depois da assinatura: {status}").format(status=_describe_changes(info)))
+    lines.append(tr("Confiança no certificado: {status}").format(status=_describe_trust(info)))
+    return "\n".join(lines)
 
 
 class SignaturePage(QWidget):
@@ -149,7 +241,7 @@ class SignaturePage(QWidget):
         self.verify_result = QTextEdit()
         self.verify_result.setReadOnly(True)
 
-        layout.addWidget(QLabel(tr("Arquivo PDF a verificar:")))
+        layout.addWidget(QLabel(tr("Arquivo PDF a verificar (vazio = o documento aberto):")))
         layout.addWidget(self.verify_input_picker)
         layout.addWidget(verify_button)
         layout.addWidget(self.verify_result)
@@ -225,7 +317,7 @@ class SignaturePage(QWidget):
         QMessageBox.information(self, tr("Assinar"), tr("PDF assinado com sucesso."))
 
     def _apply_verify(self):
-        input_path = self.verify_input_picker.path()
+        input_path = self.verify_input_picker.path() or self.session.path()
         if not input_path:
             QMessageBox.warning(self, tr("Verificar assinatura"), tr("Escolha o arquivo PDF a verificar."))
             return
@@ -242,12 +334,8 @@ class SignaturePage(QWidget):
             self.verify_result.setPlainText(tr("Nenhuma assinatura encontrada neste PDF."))
             return
 
-        lines = []
-        for info in signatures:
-            status = tr("íntegro (não modificado)") if info.intact else tr("MODIFICADO após a assinatura")
-            lines.append(
-                tr("Campo: {field}\nSignatário: {signer}\nData: {date}\nStatus: {status}").format(
-                    field=info.field_name, signer=info.signer_name, date=info.signing_time, status=status
-                )
-            )
-        self.verify_result.setPlainText("\n\n".join(lines))
+        reports = [
+            format_signature_info(info, number, len(signatures))
+            for number, info in enumerate(signatures, start=1)
+        ]
+        self.verify_result.setPlainText("\n\n".join(reports))
