@@ -281,3 +281,19 @@ def test_stamp_goes_to_the_visual_corner_on_rotated_pages(make_text_pdf, tmp_pat
     geometry = PageGeometry.from_pypdf_page(page)
     left, bottom, right, top = geometry.user_rect_to_visual(tuple(float(v) for v in widget["/Rect"]))
     assert right > geometry.width - 30 and bottom < 30  # canto inferior direito da tela
+
+
+def test_signature_check_silences_only_the_pyhanko_loggers(tmp_path, caplog):
+    # Antes, a verificação desligava o logging do processo inteiro enquanto rodava.
+    import logging
+
+    signed = _signed_with_test_certificate(tmp_path)
+    caplog.set_level(logging.DEBUG)
+
+    DescribeSignatures().run(str(signed))
+    logging.getLogger("openfolio.teste").warning("ainda registra")
+
+    assert not [r for r in caplog.records if r.name.startswith("pyhanko") and r.levelno >= logging.ERROR]
+    assert any(r.name == "openfolio.teste" for r in caplog.records)
+    assert logging.root.manager.disable == 0
+    assert logging.getLogger("pyhanko").level == logging.NOTSET

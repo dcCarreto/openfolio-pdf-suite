@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from core.ocr import OCRDocument, find_tesseract, get_available_languages
 from ui.i18n import tr
+from ui.tasks import call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -103,27 +104,33 @@ class OCRPage(QWidget):
 
         language = self.language_combo.currentData()
 
-        try:
-            pages_ocred = OCRDocument().run(
-                input_path,
-                output_path,
-                language=language,
-                skip_pages_with_text=self.skip_pages_checkbox.isChecked(),
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, tr("OCR"), tr("Falha ao reconhecer texto: {error}").format(error=exc))
-            return
+        task = call_with_progress(
+            OCRDocument().run,
+            input_path,
+            output_path,
+            language=language,
+            skip_pages_with_text=self.skip_pages_checkbox.isChecked(),
+        )
 
-        self.session.open(output_path)
-        if pages_ocred:
-            QMessageBox.information(
-                self,
-                tr("OCR"),
-                tr("Texto reconhecido em {count} página(s).").format(count=pages_ocred),
-            )
-        else:
-            QMessageBox.information(
-                self,
-                tr("OCR"),
-                tr("Nenhuma página precisou de OCR (o PDF já tinha texto)."),
-            )
+        def done(pages_ocred):
+            self.session.open(output_path)
+            if pages_ocred:
+                QMessageBox.information(
+                    self,
+                    tr("OCR"),
+                    tr("Texto reconhecido em {count} página(s).").format(count=pages_ocred),
+                )
+            else:
+                QMessageBox.information(
+                    self,
+                    tr("OCR"),
+                    tr("Nenhuma página precisou de OCR (o PDF já tinha texto)."),
+                )
+
+        run_task(
+            self,
+            tr("OCR"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao reconhecer texto: {error}"),
+        )

@@ -26,6 +26,7 @@ from core.redaction import (
     SanitizeReport,
 )
 from ui.i18n import tr
+from ui.tasks import call, call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -273,22 +274,27 @@ class RedactionPage(QWidget):
             )
             return
 
-        try:
-            rects = FindSensitiveData().run(input_path, kinds=kinds, custom_pattern=custom_pattern or None)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Redigir"), tr("Falha ao detectar padrões: {error}").format(error=exc)
-            )
-            return
+        task = call_with_progress(
+            FindSensitiveData().run, input_path, kinds=kinds, custom_pattern=custom_pattern or None
+        )
 
-        added = self.redaction_state.add_many(rects)
-        QMessageBox.information(
+        def done(rects):
+            added = self.redaction_state.add_many(rects)
+            QMessageBox.information(
+                self,
+                tr("Redigir"),
+                tr(
+                    "{count} ocorrência(s) encontrada(s), {added} nova(s) marcada(s) para redação. "
+                    "Revise a lista antes de aplicar."
+                ).format(count=len(rects), added=added),
+            )
+
+        run_task(
             self,
             tr("Redigir"),
-            tr(
-                "{count} ocorrência(s) encontrada(s), {added} nova(s) marcada(s) para redação. "
-                "Revise a lista antes de aplicar."
-            ).format(count=len(rects), added=added),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao detectar padrões: {error}"),
         )
 
     def _apply_redaction(self):
@@ -321,21 +327,26 @@ class RedactionPage(QWidget):
         if confirmation != QMessageBox.StandardButton.Yes:
             return
 
-        try:
-            pages_redacted = RedactDocument().run(input_path, output_path, rects)
-            report = None
-            if self.also_sanitize_checkbox.isChecked():
-                report = SanitizeDocument().run(output_path, output_path)
-        except Exception as exc:
-            QMessageBox.critical(self, tr("Redigir"), tr("Falha ao redigir: {error}").format(error=exc))
-            return
+        rects = list(rects)
+        also_sanitize = self.also_sanitize_checkbox.isChecked()
 
-        self.redaction_state.clear_pending()
-        self.session.open(output_path)
-        message = tr("{count} página(s) redigida(s) com sucesso.").format(count=pages_redacted)
-        if report is not None:
-            message += "\n\n" + format_sanitize_report(report)
-        QMessageBox.information(self, tr("Redigir"), message)
+        def redact(progress):
+            pages_redacted = RedactDocument().run(input_path, output_path, rects, progress=progress)
+            report = SanitizeDocument().run(output_path, output_path) if also_sanitize else None
+            return pages_redacted, report
+
+        def done(result):
+            pages_redacted, report = result
+            self.redaction_state.clear_pending()
+            self.session.open(output_path)
+            message = tr("{count} página(s) redigida(s) com sucesso.").format(count=pages_redacted)
+            if report is not None:
+                message += "\n\n" + format_sanitize_report(report)
+            QMessageBox.information(self, tr("Redigir"), message)
+
+        run_task(
+            self, tr("Redigir"), redact, on_success=done, error_message=tr("Falha ao redigir: {error}")
+        )
 
     def _apply_sanitize(self):
         input_path = self.session.path()
@@ -348,20 +359,26 @@ class RedactionPage(QWidget):
             QMessageBox.warning(self, tr("Sanitizar"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            report = SanitizeDocument().run(
-                input_path,
-                output_path,
-                remove_metadata=self.remove_metadata_checkbox.isChecked(),
-                remove_annotations=self.remove_annotations_checkbox.isChecked(),
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, tr("Sanitizar"), tr("Falha ao sanitizar: {error}").format(error=exc))
-            return
+        task = call(
+            SanitizeDocument().run,
+            input_path,
+            output_path,
+            remove_metadata=self.remove_metadata_checkbox.isChecked(),
+            remove_annotations=self.remove_annotations_checkbox.isChecked(),
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(
+        def done(report):
+            self.session.open(output_path)
+            QMessageBox.information(
+                self,
+                tr("Sanitizar"),
+                tr("PDF sanitizado com sucesso.") + "\n\n" + format_sanitize_report(report),
+            )
+
+        run_task(
             self,
             tr("Sanitizar"),
-            tr("PDF sanitizado com sucesso.") + "\n\n" + format_sanitize_report(report),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao sanitizar: {error}"),
         )

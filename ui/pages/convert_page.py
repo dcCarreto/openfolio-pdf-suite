@@ -14,6 +14,7 @@ from core.convert import ConvertFromImages, ConvertToImages
 from core.office_convert import ConvertOfficeToPDF, find_libreoffice
 from core.xml_convert import ConvertXMLToPDF
 from ui.i18n import tr
+from ui.tasks import call, call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_list_editor import FileListEditor
 from ui.widgets.file_picker import FilePicker
@@ -157,18 +158,21 @@ class ConvertPage(QWidget):
             QMessageBox.warning(self, tr("Converter"), tr("Escolha a pasta de saída."))
             return
 
-        try:
-            output_paths = ConvertToImages().run(input_path, output_dir)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Converter"), tr("Falha ao converter: {error}").format(error=exc)
-            )
-            return
+        task = call_with_progress(ConvertToImages().run, input_path, output_dir)
 
-        QMessageBox.information(
+        def done(output_paths):
+            QMessageBox.information(
+                self,
+                tr("Converter"),
+                tr("{count} imagem(ns) gerada(s) com sucesso.").format(count=len(output_paths)),
+            )
+
+        run_task(
             self,
             tr("Converter"),
-            tr("{count} imagem(ns) gerada(s) com sucesso.").format(count=len(output_paths)),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao converter: {error}"),
         )
 
     def _convert_from_images(self):
@@ -182,16 +186,19 @@ class ConvertPage(QWidget):
             QMessageBox.warning(self, tr("Converter"), tr("Escolha o arquivo PDF de saída."))
             return
 
-        try:
-            ConvertFromImages().run(input_paths, output_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Converter"), tr("Falha ao converter: {error}").format(error=exc)
-            )
-            return
+        task = call_with_progress(ConvertFromImages().run, input_paths, output_path)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Converter"), tr("PDF gerado com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Converter"), tr("PDF gerado com sucesso."))
+
+        run_task(
+            self,
+            tr("Converter"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao converter: {error}"),
+        )
 
     def _convert_office(self):
         input_path = self.office_input_picker.path()
@@ -204,16 +211,19 @@ class ConvertPage(QWidget):
             QMessageBox.warning(self, tr("Converter"), tr("Escolha o arquivo PDF de saída."))
             return
 
-        try:
-            ConvertOfficeToPDF().run(input_path, output_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Converter"), tr("Falha ao converter: {error}").format(error=exc)
-            )
-            return
+        task = call_with_progress(ConvertOfficeToPDF().run, input_path, output_path)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Converter"), tr("PDF gerado com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Converter"), tr("PDF gerado com sucesso."))
+
+        run_task(
+            self,
+            tr("Converter"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao converter: {error}"),
+        )
 
     def _convert_xml(self):
         input_path = self.xml_input_picker.path()
@@ -226,13 +236,16 @@ class ConvertPage(QWidget):
             QMessageBox.warning(self, tr("Converter"), tr("Escolha o arquivo PDF de saída."))
             return
 
-        try:
-            ConvertXMLToPDF().run(input_path, output_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Converter"), tr("Falha ao converter: {error}").format(error=exc)
-            )
-            return
+        task = call(ConvertXMLToPDF().run, input_path, output_path)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Converter"), tr("PDF gerado com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Converter"), tr("PDF gerado com sucesso."))
+
+        run_task(
+            self,
+            tr("Converter"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao converter: {error}"),
+        )

@@ -32,6 +32,7 @@ from core.form_fields import (
     RadioOption,
 )
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -178,30 +179,32 @@ class FormFieldsPage(QWidget):
             option.strip() for option in self.options_edit.text().split(",") if option.strip()
         ]
 
-        try:
-            AddFormField().run(
-                input_path,
-                output_path,
-                field_name=field_name,
-                page_number=self.page_spin.value() - 1,
-                x=self.x_spin.value(),
-                y=self.y_spin.value(),
-                width=self.width_spin.value(),
-                height=self.height_spin.value(),
-                field_type=field_type,
-                checked=self.checked_box.isChecked(),
-                options=options or None,
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Campo de formulário"),
-                tr("Falha ao adicionar campo: {error}").format(error=exc),
-            )
-            return
+        task = call(
+            AddFormField().run,
+            input_path,
+            output_path,
+            field_name=field_name,
+            page_number=self.page_spin.value() - 1,
+            x=self.x_spin.value(),
+            y=self.y_spin.value(),
+            width=self.width_spin.value(),
+            height=self.height_spin.value(),
+            field_type=field_type,
+            checked=self.checked_box.isChecked(),
+            options=options or None,
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Campo de formulário"), tr("Campo adicionado com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Campo de formulário"), tr("Campo adicionado com sucesso."))
+
+        run_task(
+            self,
+            tr("Campo de formulário"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao adicionar campo: {error}"),
+        )
 
     # ---- Adicionar grupo de opções (radio) --------------------------------
 
@@ -303,23 +306,27 @@ class FormFieldsPage(QWidget):
 
         selected_value = self.radio_selected_edit.text().strip() or None
 
-        try:
-            AddRadioGroup().run(
-                input_path,
-                output_path,
-                field_name=field_name,
-                options=options,
-                size=self.radio_size_spin.value(),
-                selected_value=selected_value,
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Grupo de opções"), tr("Falha ao criar grupo: {error}").format(error=exc)
-            )
-            return
+        task = call(
+            AddRadioGroup().run,
+            input_path,
+            output_path,
+            field_name=field_name,
+            options=options,
+            size=self.radio_size_spin.value(),
+            selected_value=selected_value,
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Grupo de opções"), tr("Grupo criado com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Grupo de opções"), tr("Grupo criado com sucesso."))
+
+        run_task(
+            self,
+            tr("Grupo de opções"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao criar grupo: {error}"),
+        )
 
     # ---- Listar campos -----------------------------------------------------
 
@@ -344,22 +351,23 @@ class FormFieldsPage(QWidget):
             QMessageBox.warning(self, tr("Campos de formulário"), tr("Abra um PDF para começar."))
             return
 
-        try:
-            fields = ListFormFields().run(input_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Campos de formulário"),
-                tr("Falha ao listar campos: {error}").format(error=exc),
-            )
-            return
+        task = call(ListFormFields().run, input_path)
 
-        if not fields:
-            self.fields_list.addItem(tr("Nenhum campo de formulário encontrado."))
-            return
+        def done(fields):
+            if not fields:
+                self.fields_list.addItem(tr("Nenhum campo de formulário encontrado."))
+                return
 
-        for field in fields:
-            self.fields_list.addItem(f"{field.name} — {field.field_type} — {field.value}")
+            for field in fields:
+                self.fields_list.addItem(f"{field.name} — {field.field_type} — {field.value}")
+
+        run_task(
+            self,
+            tr("Campos de formulário"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao listar campos: {error}"),
+        )
 
     # ---- Exportar dados -----------------------------------------------------
 
@@ -391,16 +399,18 @@ class FormFieldsPage(QWidget):
             return
 
         operation = ExportFormDataCSV() if fmt == "csv" else ExportFormDataFDF()
-        try:
-            count = operation.run(input_path, output_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Exportar dados"), tr("Falha ao exportar dados: {error}").format(error=exc)
-            )
-            return
 
-        QMessageBox.information(
-            self, tr("Exportar dados"), tr("{count} campo(s) exportado(s) com sucesso.").format(count=count)
+        def done(count):
+            QMessageBox.information(
+                self, tr("Exportar dados"), tr("{count} campo(s) exportado(s) com sucesso.").format(count=count)
+            )
+
+        run_task(
+            self,
+            tr("Exportar dados"),
+            call(operation.run, input_path, output_path),
+            on_success=done,
+            error_message=tr("Falha ao exportar dados: {error}"),
         )
 
     # ---- Importar dados -----------------------------------------------------
@@ -443,21 +453,23 @@ class FormFieldsPage(QWidget):
             return
 
         operation = ImportFormDataCSV() if fmt == "csv" else ImportFormDataFDF()
-        try:
-            result = operation.run(input_path, output_path, data_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Importar dados"), tr("Falha ao importar dados: {error}").format(error=exc)
-            )
-            return
 
-        self.session.open(output_path)
-        message = tr("{count} campo(s) preenchido(s) com sucesso.").format(count=result.filled)
-        if result.not_found:
-            message += "\n\n" + tr("Sem campo correspondente no PDF (ignorados): {names}").format(
-                names=", ".join(result.not_found)
-            )
-        QMessageBox.information(self, tr("Importar dados"), message)
+        def done(result):
+            self.session.open(output_path)
+            message = tr("{count} campo(s) preenchido(s) com sucesso.").format(count=result.filled)
+            if result.not_found:
+                message += "\n\n" + tr("Sem campo correspondente no PDF (ignorados): {names}").format(
+                    names=", ".join(result.not_found)
+                )
+            QMessageBox.information(self, tr("Importar dados"), message)
+
+        run_task(
+            self,
+            tr("Importar dados"),
+            call(operation.run, input_path, output_path, data_path),
+            on_success=done,
+            error_message=tr("Falha ao importar dados: {error}"),
+        )
 
     # ---- Achatar formulário --------------------------------------------------
 
@@ -498,19 +510,20 @@ class FormFieldsPage(QWidget):
             QMessageBox.warning(self, tr("Achatar formulário"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            count = FlattenFormFields().run(input_path, output_path)
-        except Exception as exc:
-            QMessageBox.critical(
+        task = call(FlattenFormFields().run, input_path, output_path)
+
+        def done(count):
+            self.session.open(output_path)
+            QMessageBox.information(
                 self,
                 tr("Achatar formulário"),
-                tr("Falha ao achatar formulário: {error}").format(error=exc),
+                tr("{count} campo(s) achatado(s) com sucesso.").format(count=count),
             )
-            return
 
-        self.session.open(output_path)
-        QMessageBox.information(
+        run_task(
             self,
             tr("Achatar formulário"),
-            tr("{count} campo(s) achatado(s) com sucesso.").format(count=count),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao achatar formulário: {error}"),
         )

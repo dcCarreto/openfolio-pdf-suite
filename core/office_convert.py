@@ -10,6 +10,7 @@ exata do arquivo original.
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -20,6 +21,10 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from .base import PDFOperation, atomic_output
+from .progress import OperationCancelled, Progress, ensure_progress
+
+_LIBREOFFICE_TIMEOUT = 120  # segundos
+_POLL_INTERVAL = 0.2  # segundos entre checagens de cancelamento
 
 _LIBREOFFICE_CANDIDATES = [
     "soffice",
@@ -42,50 +47,73 @@ def find_libreoffice() -> str | None:
     return None
 
 
+def _run_cancellable(command: list[str], progress: Progress, timeout: float) -> tuple[int, bytes]:
+    """Roda `command` e espera o fim checando o cancelamento; encerra o processo se o
+    usuário cancelar ou se passar do `timeout`. Devolve o código de saída e o stderr."""
+    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            try:
+                _stdout, stderr = process.communicate(timeout=_POLL_INTERVAL)
+                return process.returncode, stderr or b""
+            except subprocess.TimeoutExpired:
+                pass
+            if progress.cancelled:
+                raise OperationCancelled()
+            if time.monotonic() > deadline:
+                raise RuntimeError(
+                    f"O LibreOffice demorou demais para converter o arquivo (timeout de {timeout:.0f}s)."
+                )
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+
+
 class ConvertOfficeToPDF(PDFOperation):
     """Converte um documento do Office (.docx, .xlsx, .pptx) para PDF."""
 
-    def run(self, input_path: str, output_path: str) -> None:
+    def run(self, input_path: str, output_path: str, progress: Progress | None = None) -> None:
+        progress = ensure_progress(progress)
         suffix = Path(input_path).suffix.lower()
         if suffix not in _SUPPORTED_SUFFIXES:
             raise ValueError(f"Formato não suportado: {suffix}")
 
         libreoffice_path = find_libreoffice()
         with atomic_output(output_path) as temp_path:
+            progress.update(0, 0, "Convertendo o documento")
             if libreoffice_path:
-                self._convert_with_libreoffice(libreoffice_path, input_path, temp_path)
+                self._convert_with_libreoffice(libreoffice_path, input_path, temp_path, progress)
             else:
                 self._convert_with_fallback(input_path, temp_path, suffix)
+            progress.check()
 
-    def _convert_with_libreoffice(self, libreoffice_path: str, input_path: str, output_path: str) -> None:
+    def _convert_with_libreoffice(
+        self, libreoffice_path: str, input_path: str, output_path: str, progress: Progress
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Perfil de usuário isolado por conversão: sem isso, chamadas concorrentes/
             # rápidas ao soffice competem pelo lock do perfil padrão e podem travar até
             # o timeout em vez de converter.
             profile_dir = Path(tmp_dir) / "profile"
-            try:
-                subprocess.run(
-                    [
-                        libreoffice_path,
-                        "--headless",
-                        f"-env:UserInstallation={profile_dir.as_uri()}",
-                        "--convert-to",
-                        "pdf",
-                        "--outdir",
-                        tmp_dir,
-                        input_path,
-                    ],
-                    check=True,
-                    capture_output=True,
-                    timeout=120,
-                )
-            except subprocess.CalledProcessError as exc:
-                detail = exc.stderr.decode(errors="replace").strip() if exc.stderr else str(exc)
-                raise RuntimeError(f"O LibreOffice falhou ao converter o arquivo: {detail}") from exc
-            except subprocess.TimeoutExpired as exc:
-                raise RuntimeError(
-                    "O LibreOffice demorou demais para converter o arquivo (timeout de 120s)."
-                ) from exc
+            returncode, stderr = _run_cancellable(
+                [
+                    libreoffice_path,
+                    "--headless",
+                    f"-env:UserInstallation={profile_dir.as_uri()}",
+                    "--convert-to",
+                    "pdf",
+                    "--outdir",
+                    tmp_dir,
+                    input_path,
+                ],
+                progress,
+                timeout=_LIBREOFFICE_TIMEOUT,
+            )
+            if returncode != 0:
+                detail = stderr.decode(errors="replace").strip() or f"código de saída {returncode}"
+                raise RuntimeError(f"O LibreOffice falhou ao converter o arquivo: {detail}")
 
             generated_path = Path(tmp_dir) / f"{Path(input_path).stem}.pdf"
             if not generated_path.is_file():

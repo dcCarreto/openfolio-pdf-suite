@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWi
 
 from core.extract_images import ExtractImages
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -39,24 +40,25 @@ class ExtractImagesPage(QWidget):
             QMessageBox.warning(self, tr("Extrair imagens"), tr("Escolha a pasta de saída."))
             return
 
-        try:
-            output_paths = ExtractImages().run(input_path, output_dir)
-        except Exception as exc:
-            QMessageBox.critical(
+        task = call(ExtractImages().run, input_path, output_dir)
+
+        def done(output_paths):
+            if not output_paths:
+                QMessageBox.information(
+                    self, tr("Extrair imagens"), tr("Nenhuma imagem encontrada no PDF.")
+                )
+                return
+
+            QMessageBox.information(
                 self,
                 tr("Extrair imagens"),
-                tr("Falha ao extrair imagens: {error}").format(error=exc),
+                tr("{count} imagem(ns) extraída(s) com sucesso.").format(count=len(output_paths)),
             )
-            return
 
-        if not output_paths:
-            QMessageBox.information(
-                self, tr("Extrair imagens"), tr("Nenhuma imagem encontrada no PDF.")
-            )
-            return
-
-        QMessageBox.information(
+        run_task(
             self,
             tr("Extrair imagens"),
-            tr("{count} imagem(ns) extraída(s) com sucesso.").format(count=len(output_paths)),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao extrair imagens: {error}"),
         )

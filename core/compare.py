@@ -7,6 +7,7 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageStat
 
 from .base import EXTRACT, READ, PDFOperation, open_pdfium, open_reader
+from .progress import PDFIUM_LOCK, Progress, ensure_progress
 
 _DIFF_SCALE = 1.5
 _DIFF_THRESHOLD = 30  # diferença de luminância (0-255) a partir da qual um pixel conta como "mudou"
@@ -24,13 +25,14 @@ class CompareText(PDFOperation):
     """Compara o texto de duas versões de um PDF, página a página, usando `difflib` (a
     mesma lógica de diff de texto da biblioteca padrão do Python, sem reinventar nada)."""
 
-    def run(self, path_a: str, path_b: str) -> list[PageTextDiff]:
+    def run(self, path_a: str, path_b: str, progress: Progress | None = None) -> list[PageTextDiff]:
+        progress = ensure_progress(progress)
         reader_a = open_reader(path_a, purpose=EXTRACT)
         reader_b = open_reader(path_b, purpose=EXTRACT)
         total_pages = max(len(reader_a.pages), len(reader_b.pages))
 
         results = []
-        for index in range(total_pages):
+        for index in progress.steps(range(total_pages), total_pages, "Comparando páginas"):
             text_a = reader_a.pages[index].extract_text() if index < len(reader_a.pages) else ""
             text_b = reader_b.pages[index].extract_text() if index < len(reader_b.pages) else ""
             diff_lines = list(
@@ -75,34 +77,46 @@ class CompareVisual(PDFOperation):
     resultado, para não produzir uma comparação enganosa pixel a pixel entre páginas que
     não correspondem uma à outra."""
 
-    def run(self, path_a: str, path_b: str, output_dir: str, scale: float = _DIFF_SCALE) -> list[VisualDiffResult]:
+    def run(
+        self,
+        path_a: str,
+        path_b: str,
+        output_dir: str,
+        scale: float = _DIFF_SCALE,
+        progress: Progress | None = None,
+    ) -> list[VisualDiffResult]:
         open_reader(path_a, purpose=READ)  # recusa, com mensagem clara, PDF que não abre
         open_reader(path_b, purpose=READ)
-        doc_a = open_pdfium(path_a)
-        doc_b = open_pdfium(path_b)
+        with PDFIUM_LOCK:
+            doc_a = open_pdfium(path_a)
+            doc_b = open_pdfium(path_b)
         try:
-            return self._compare(doc_a, doc_b, output_dir, scale)
+            return self._compare(doc_a, doc_b, output_dir, scale, ensure_progress(progress))
         finally:
-            doc_a.close()
-            doc_b.close()
+            with PDFIUM_LOCK:
+                doc_a.close()
+                doc_b.close()
 
-    def _compare(self, doc_a, doc_b, output_dir: str, scale: float) -> list[VisualDiffResult]:
-        total_pages = max(len(doc_a), len(doc_b))
+    def _compare(self, doc_a, doc_b, output_dir: str, scale: float, progress: Progress) -> list[VisualDiffResult]:
+        with PDFIUM_LOCK:
+            pages_a, pages_b = len(doc_a), len(doc_b)
+        total_pages = max(pages_a, pages_b)
 
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(parents=True, exist_ok=True)
 
         results = []
-        for index in range(total_pages):
-            if index >= len(doc_a):
+        for index in progress.steps(range(total_pages), total_pages, "Comparando páginas"):
+            if index >= pages_a:
                 results.append(VisualDiffResult(page_index=index, status="only_in_b"))
                 continue
-            if index >= len(doc_b):
+            if index >= pages_b:
                 results.append(VisualDiffResult(page_index=index, status="only_in_a"))
                 continue
 
-            image_a = doc_a[index].render(scale=scale).to_pil().convert("RGB")
-            image_b = doc_b[index].render(scale=scale).to_pil().convert("RGB")
+            with PDFIUM_LOCK:
+                image_a = doc_a[index].render(scale=scale).to_pil().convert("RGB")
+                image_b = doc_b[index].render(scale=scale).to_pil().convert("RGB")
             if image_a.size != image_b.size:
                 results.append(VisualDiffResult(page_index=index, status="size_mismatch"))
                 continue

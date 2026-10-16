@@ -36,6 +36,7 @@ from pypdf.generic import ArrayObject, DictionaryObject, NameObject, StreamObjec
 
 from .base import EXTRACT, PDFOperation, atomic_output, open_pdfium, open_reader, require_valid_page_index
 from .geometry import PageGeometry, Rect
+from .progress import PDFIUM_LOCK, Progress, ensure_progress
 from .rasterize import RASTER_SCALE, fill_visual_rects, image_page, render_visual_page, visible_visual_rects
 
 _REDACT_SCALE = RASTER_SCALE
@@ -103,7 +104,9 @@ class FindSensitiveData(PDFOperation):
         input_path: str,
         kinds: list[str] | None = None,
         custom_pattern: str | None = None,
+        progress: Progress | None = None,
     ) -> list[RedactionRect]:
+        progress = ensure_progress(progress)
         open_reader(input_path, purpose=EXTRACT)  # lê o texto: respeita a permissão de cópia
 
         patterns = [(kind, _PATTERNS[kind]) for kind in (kinds or []) if kind in _PATTERNS]
@@ -117,44 +120,56 @@ class FindSensitiveData(PDFOperation):
 
         rects: list[RedactionRect] = []
         seen: set[tuple] = set()
-        pdfium_doc = open_pdfium(input_path)
+        with PDFIUM_LOCK:
+            pdfium_doc = open_pdfium(input_path)
+            total_pages = len(pdfium_doc)
         try:
-            for page_index in range(len(pdfium_doc)):
-                page = pdfium_doc[page_index]
-                textpage = page.get_textpage()
-                try:
-                    text = textpage.get_text_range()
-                    char_count = textpage.count_chars()
-                    for kind, pattern in patterns:
-                        for match in pattern.finditer(text):
-                            start, end = match.start(), min(match.end(), char_count)
-                            if start >= end:
-                                continue
-                            bounds = _union_of_char_boxes(textpage.get_charbox(i) for i in range(start, end))
-                            if bounds is None:
-                                continue
-                            left, bottom, right, top = bounds
-                            key = (page_index, round(left, 2), round(bottom, 2), round(right, 2), round(top, 2))
-                            if key in seen:  # dois padrões casando no mesmo trecho
-                                continue
-                            seen.add(key)
-                            rects.append(
-                                RedactionRect(
-                                    page_index,
-                                    left - _DETECTION_PADDING,
-                                    bottom - _DETECTION_PADDING,
-                                    right + _DETECTION_PADDING,
-                                    top + _DETECTION_PADDING,
-                                    kind=kind,
-                                    text=" ".join(match.group(0).split()),
-                                )
-                            )
-                finally:
-                    textpage.close()
+            for page_index in progress.steps(range(total_pages), total_pages, "Procurando dados sensíveis"):
+                with PDFIUM_LOCK:
+                    rects.extend(_find_on_page(pdfium_doc, page_index, patterns, seen))
         finally:
-            pdfium_doc.close()
+            with PDFIUM_LOCK:
+                pdfium_doc.close()
 
         return rects
+
+
+def _find_on_page(pdfium_doc, page_index: int, patterns, seen: set[tuple]) -> list[RedactionRect]:
+    """Ocorrências dos padrões numa página (chamar com `PDFIUM_LOCK`)."""
+    rects: list[RedactionRect] = []
+    page = pdfium_doc[page_index]
+    textpage = page.get_textpage()
+    try:
+        text = textpage.get_text_range()
+        char_count = textpage.count_chars()
+        for kind, pattern in patterns:
+            for match in pattern.finditer(text):
+                start, end = match.start(), min(match.end(), char_count)
+                if start >= end:
+                    continue
+                bounds = _union_of_char_boxes(textpage.get_charbox(i) for i in range(start, end))
+                if bounds is None:
+                    continue
+                left, bottom, right, top = bounds
+                key = (page_index, round(left, 2), round(bottom, 2), round(right, 2), round(top, 2))
+                if key in seen:  # dois padrões casando no mesmo trecho
+                    continue
+                seen.add(key)
+                rects.append(
+                    RedactionRect(
+                        page_index,
+                        left - _DETECTION_PADDING,
+                        bottom - _DETECTION_PADDING,
+                        right + _DETECTION_PADDING,
+                        top + _DETECTION_PADDING,
+                        kind=kind,
+                        text=" ".join(match.group(0).split()),
+                    )
+                )
+    finally:
+        textpage.close()
+        page.close()
+    return rects
 
 
 def _union_of_char_boxes(boxes) -> Rect | None:
@@ -184,7 +199,14 @@ class RedactDocument(PDFOperation):
     sobra nas páginas não redigidas.
     """
 
-    def run(self, input_path: str, output_path: str, rects: list[RedactionRect]) -> int:
+    def run(
+        self,
+        input_path: str,
+        output_path: str,
+        rects: list[RedactionRect],
+        progress: Progress | None = None,
+    ) -> int:
+        progress = ensure_progress(progress)
         reader = open_reader(input_path)
         total_pages = len(reader.pages)
         rects_by_page: dict[int, list[Rect]] = {}
@@ -195,28 +217,33 @@ class RedactDocument(PDFOperation):
         writer = PdfWriter()
         burned: dict[int, list[Rect]] = {}  # página -> áreas pintadas, no espaço visual
 
-        pdfium_doc = pdfium.PdfDocument(input_path)
-        try:
+        with PDFIUM_LOCK:
+            pdfium_doc = pdfium.PdfDocument(input_path)
             # Campos de formulário aparecem na imagem como aparecem no visualizador.
             pdfium_doc.init_forms()
-            for index, page in enumerate(reader.pages):
+        try:
+            for index, page in enumerate(progress.steps(reader.pages, total_pages, "Redigindo páginas")):
                 page_rects = rects_by_page.get(index)
                 if not page_rects:
                     writer.add_page(page)
                     continue
 
-                image, geometry = render_visual_page(pdfium_doc[index], _REDACT_SCALE)
+                with PDFIUM_LOCK:
+                    image, geometry = render_visual_page(pdfium_doc[index], _REDACT_SCALE)
                 visual_rects = visible_visual_rects(geometry, page_rects)
                 fill_visual_rects(image, geometry, visual_rects, _REDACTION_COLOR)
                 writer.add_page(image_page(image, geometry.width, geometry.height))
                 burned[index] = visual_rects
         finally:
-            pdfium_doc.close()
+            with PDFIUM_LOCK:
+                pdfium_doc.close()
 
         with atomic_output(output_path) as temp_path:
             with open(temp_path, "wb") as f:
                 writer.write(f)
+            progress.update(0, 0, "Verificando o resultado")
             _verify_redaction(temp_path, burned)
+            progress.check()
         return len(burned)
 
 
@@ -228,7 +255,8 @@ def _verify_redaction(path: str, burned: dict[int, list[Rect]]) -> None:
         return
 
     reader = PdfReader(path)
-    document = pdfium.PdfDocument(path)
+    with PDFIUM_LOCK:
+        document = pdfium.PdfDocument(path)
     try:
         for index, visual_rects in burned.items():
             page = reader.pages[index]
@@ -242,7 +270,8 @@ def _verify_redaction(path: str, burned: dict[int, list[Rect]]) -> None:
                 raise RedactionVerificationError(
                     f"A página {index + 1} tem conteúdo inesperado depois da redação. O arquivo não foi salvo."
                 )
-            rendered = document[index].render(scale=_VERIFY_RENDER_SCALE).to_pil().convert("RGB")
+            with PDFIUM_LOCK:
+                rendered = document[index].render(scale=_VERIFY_RENDER_SCALE).to_pil().convert("RGB")
             for candidate, max_level in ((images[0], 0), (rendered, _VERIFY_MAX_LEVEL)):
                 for rect in visual_rects:
                     if not _area_is_filled(candidate, geometry, rect, max_level):
@@ -251,7 +280,8 @@ def _verify_redaction(path: str, burned: dict[int, list[Rect]]) -> None:
                             "da redação. O arquivo não foi salvo."
                         )
     finally:
-        document.close()
+        with PDFIUM_LOCK:
+            document.close()
 
 
 def _area_is_filled(image, geometry: PageGeometry, rect: Rect, max_level: int) -> bool:

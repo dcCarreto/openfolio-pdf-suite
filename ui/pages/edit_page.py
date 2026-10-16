@@ -22,6 +22,7 @@ from core.edit_text import EditTextArea, TextEditRect
 from core.extract_images import ListEmbeddedImages, ReplaceEmbeddedImage
 from core.links import AddLink, ListLinks, RemoveLink
 from ui.i18n import tr
+from ui.tasks import call, call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -104,22 +105,25 @@ class EditPage(QWidget):
             QMessageBox.warning(self, tr("Substituir imagem"), tr("Abra um PDF para começar."))
             return
 
-        try:
-            images = ListEmbeddedImages().run(input_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Substituir imagem"), tr("Falha ao listar imagens: {error}").format(error=exc)
-            )
-            return
+        task = call(ListEmbeddedImages().run, input_path)
 
-        if not images:
-            self.images_list.addItem(tr("Nenhuma imagem embutida encontrada."))
-            return
-        for image in images:
-            self.images_list.addItem(
-                f"{tr('Página')} {image.page_index + 1} — #{image.image_index + 1} — "
-                f"{image.name} ({image.width}x{image.height})"
-            )
+        def done(images):
+            if not images:
+                self.images_list.addItem(tr("Nenhuma imagem embutida encontrada."))
+                return
+            for image in images:
+                self.images_list.addItem(
+                    f"{tr('Página')} {image.page_index + 1} — #{image.image_index + 1} — "
+                    f"{image.name} ({image.width}x{image.height})"
+                )
+
+        run_task(
+            self,
+            tr("Substituir imagem"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao listar imagens: {error}"),
+        )
 
     def _replace_image(self):
         input_path = self.session.path()
@@ -136,24 +140,26 @@ class EditPage(QWidget):
             QMessageBox.warning(self, tr("Substituir imagem"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            ReplaceEmbeddedImage().run(
-                input_path,
-                output_path,
-                page_number=self.image_page_spin.value() - 1,
-                image_index=self.image_index_spin.value() - 1,
-                new_image_path=new_image_path,
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Substituir imagem"),
-                tr("Falha ao substituir imagem: {error}").format(error=exc),
-            )
-            return
+        task = call(
+            ReplaceEmbeddedImage().run,
+            input_path,
+            output_path,
+            page_number=self.image_page_spin.value() - 1,
+            image_index=self.image_index_spin.value() - 1,
+            new_image_path=new_image_path,
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Substituir imagem"), tr("Imagem substituída com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Substituir imagem"), tr("Imagem substituída com sucesso."))
+
+        run_task(
+            self,
+            tr("Substituir imagem"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao substituir imagem: {error}"),
+        )
 
     # ---- Editar texto (cobrir e reescrever) ----------------------------------
 
@@ -261,19 +267,22 @@ class EditPage(QWidget):
             QMessageBox.warning(self, tr("Editar texto"), tr("Marque pelo menos uma área com texto novo."))
             return
 
-        try:
-            pages_edited = EditTextArea().run(input_path, output_path, edits)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Editar texto"), tr("Falha ao editar texto: {error}").format(error=exc)
-            )
-            return
+        task = call_with_progress(EditTextArea().run, input_path, output_path, edits)
 
-        self.session.open(output_path)
-        QMessageBox.information(
+        def done(pages_edited):
+            self.session.open(output_path)
+            QMessageBox.information(
+                self,
+                tr("Editar texto"),
+                tr("{count} página(s) editada(s) com sucesso.").format(count=pages_edited),
+            )
+
+        run_task(
             self,
             tr("Editar texto"),
-            tr("{count} página(s) editada(s) com sucesso.").format(count=pages_edited),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao editar texto: {error}"),
         )
 
     # ---- Adicionar link -------------------------------------------------------
@@ -349,26 +358,30 @@ class EditPage(QWidget):
             QMessageBox.warning(self, tr("Adicionar link"), tr("Digite a URL de destino."))
             return
 
-        try:
-            AddLink().run(
-                input_path,
-                output_path,
-                page_number=self.link_page_spin.value() - 1,
-                left=self.link_left_spin.value(),
-                bottom=self.link_bottom_spin.value(),
-                right=self.link_right_spin.value(),
-                top=self.link_top_spin.value(),
-                url=url,
-                target_page=target_page,
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Adicionar link"), tr("Falha ao adicionar link: {error}").format(error=exc)
-            )
-            return
+        task = call(
+            AddLink().run,
+            input_path,
+            output_path,
+            page_number=self.link_page_spin.value() - 1,
+            left=self.link_left_spin.value(),
+            bottom=self.link_bottom_spin.value(),
+            right=self.link_right_spin.value(),
+            top=self.link_top_spin.value(),
+            url=url,
+            target_page=target_page,
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Adicionar link"), tr("Link adicionado com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Adicionar link"), tr("Link adicionado com sucesso."))
+
+        run_task(
+            self,
+            tr("Adicionar link"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao adicionar link: {error}"),
+        )
 
     # ---- Listar links -----------------------------------------------------------
 
@@ -392,21 +405,24 @@ class EditPage(QWidget):
             QMessageBox.warning(self, tr("Listar links"), tr("Abra um PDF para começar."))
             return
 
-        try:
-            links = ListLinks().run(input_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Listar links"), tr("Falha ao listar links: {error}").format(error=exc)
-            )
-            return
+        task = call(ListLinks().run, input_path)
 
-        if not links:
-            self.links_list.addItem(tr("Nenhum link encontrado."))
-            return
-        for link in links:
-            self.links_list.addItem(
-                f"{tr('Página')} {link.page_index + 1} — #{link.link_index + 1} — {link.target}"
-            )
+        def done(links):
+            if not links:
+                self.links_list.addItem(tr("Nenhum link encontrado."))
+                return
+            for link in links:
+                self.links_list.addItem(
+                    f"{tr('Página')} {link.page_index + 1} — #{link.link_index + 1} — {link.target}"
+                )
+
+        run_task(
+            self,
+            tr("Listar links"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao listar links: {error}"),
+        )
 
     # ---- Remover link -------------------------------------------------------------
 
@@ -450,18 +466,22 @@ class EditPage(QWidget):
             QMessageBox.warning(self, tr("Remover link"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            RemoveLink().run(
-                input_path,
-                output_path,
-                page_number=self.remove_link_page_spin.value() - 1,
-                link_index=self.remove_link_index_spin.value() - 1,
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Remover link"), tr("Falha ao remover link: {error}").format(error=exc)
-            )
-            return
+        task = call(
+            RemoveLink().run,
+            input_path,
+            output_path,
+            page_number=self.remove_link_page_spin.value() - 1,
+            link_index=self.remove_link_index_spin.value() - 1,
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Remover link"), tr("Link removido com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Remover link"), tr("Link removido com sucesso."))
+
+        run_task(
+            self,
+            tr("Remover link"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao remover link: {error}"),
+        )

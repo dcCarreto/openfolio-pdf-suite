@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from core.crop import CropPages, ScalePages
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.page_sizes import CUSTOM_SIZE_LABEL, PAGE_SIZES
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -139,23 +140,27 @@ class CropPage(QWidget):
             QMessageBox.warning(self, tr("Cortar"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            CropPages().run(
-                input_path,
-                output_path,
-                left=self.left_spin.value(),
-                bottom=self.bottom_spin.value(),
-                right=self.right_spin.value(),
-                top=self.top_spin.value(),
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Cortar"), tr("Falha ao cortar páginas: {error}").format(error=exc)
-            )
-            return
+        task = call(
+            CropPages().run,
+            input_path,
+            output_path,
+            left=self.left_spin.value(),
+            bottom=self.bottom_spin.value(),
+            right=self.right_spin.value(),
+            top=self.top_spin.value(),
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Cortar"), tr("Páginas cortadas com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Cortar"), tr("Páginas cortadas com sucesso."))
+
+        run_task(
+            self,
+            tr("Cortar"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao cortar páginas: {error}"),
+        )
 
     def _scale(self):
         input_path = self.session.path()
@@ -168,20 +173,22 @@ class CropPage(QWidget):
             QMessageBox.warning(self, tr("Redimensionar"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            ScalePages().run(
-                input_path,
-                output_path,
-                width=self.width_spin.value(),
-                height=self.height_spin.value(),
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Redimensionar"),
-                tr("Falha ao redimensionar páginas: {error}").format(error=exc),
-            )
-            return
+        task = call(
+            ScalePages().run,
+            input_path,
+            output_path,
+            width=self.width_spin.value(),
+            height=self.height_spin.value(),
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Redimensionar"), tr("Páginas redimensionadas com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Redimensionar"), tr("Páginas redimensionadas com sucesso."))
+
+        run_task(
+            self,
+            tr("Redimensionar"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao redimensionar páginas: {error}"),
+        )

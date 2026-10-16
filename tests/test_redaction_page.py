@@ -10,6 +10,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 
 from core.redaction import RedactionRect, SanitizeReport, find_residual_risks
 from ui.document_session import DocumentSession
+from ui.tasks import wait_for_tasks
 from ui.pages.redaction_page import RedactionPage, format_sanitize_report
 from ui.redaction_state import RedactionState
 
@@ -46,6 +47,7 @@ def test_apply_redaction_aborts_when_user_declines_confirmation(monkeypatch, tmp
     monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.No)
 
     page._apply_redaction()
+    wait_for_tasks()
 
     assert not (tmp_path / "out.pdf").exists()
 
@@ -58,6 +60,7 @@ def test_apply_redaction_proceeds_when_user_confirms(monkeypatch, tmp_path):
     monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
 
     page._apply_redaction()
+    wait_for_tasks()
 
     assert (tmp_path / "out.pdf").exists()
 
@@ -71,6 +74,7 @@ def test_apply_redaction_also_sanitizes_by_default(monkeypatch, tmp_path):
     monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: messages.append(args[2]))
 
     page._apply_redaction()
+    wait_for_tasks()
 
     assert find_residual_risks(str(tmp_path / "out.pdf")) == []
     assert "1 página(s) redigida(s)" in messages[0]

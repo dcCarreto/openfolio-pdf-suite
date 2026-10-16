@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from core.compare import CompareText, CompareVisual
 from ui.i18n import tr
+from ui.tasks import call_with_progress, run_task
 from ui.widgets.file_picker import FilePicker
 
 
@@ -90,24 +91,29 @@ class ComparePage(QWidget):
             QMessageBox.warning(self, tr("Comparar"), tr("Escolha os dois arquivos PDF a comparar."))
             return
 
-        try:
-            results = CompareText().run(path_a, path_b)
-        except Exception as exc:
-            QMessageBox.critical(self, tr("Comparar"), tr("Falha ao comparar: {error}").format(error=exc))
-            return
+        task = call_with_progress(CompareText().run, path_a, path_b)
 
-        for result in results:
-            if not result.changed:
+        def done(results):
+            for result in results:
+                if not result.changed:
+                    self.text_results_list.addItem(
+                        tr("Página {page}: sem alterações").format(page=result.page_index + 1)
+                    )
+                    continue
+                preview = " | ".join(result.diff_lines[:4])
                 self.text_results_list.addItem(
-                    tr("Página {page}: sem alterações").format(page=result.page_index + 1)
+                    tr("Página {page}: {count} linha(s) diferentes — {preview}").format(
+                        page=result.page_index + 1, count=len(result.diff_lines), preview=preview
+                    )
                 )
-                continue
-            preview = " | ".join(result.diff_lines[:4])
-            self.text_results_list.addItem(
-                tr("Página {page}: {count} linha(s) diferentes — {preview}").format(
-                    page=result.page_index + 1, count=len(result.diff_lines), preview=preview
-                )
-            )
+
+        run_task(
+            self,
+            tr("Comparar"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao comparar: {error}"),
+        )
 
     def _compare_visual(self):
         path_a = self.visual_a_picker.path()
@@ -122,27 +128,32 @@ class ComparePage(QWidget):
             QMessageBox.warning(self, tr("Comparar"), tr("Escolha a pasta de saída."))
             return
 
-        try:
-            results = CompareVisual().run(path_a, path_b, output_dir)
-        except Exception as exc:
-            QMessageBox.critical(self, tr("Comparar"), tr("Falha ao comparar: {error}").format(error=exc))
-            return
+        task = call_with_progress(CompareVisual().run, path_a, path_b, output_dir)
 
-        status_labels = {
-            "compared": tr("comparada"),
-            "only_in_a": tr("só existe em A"),
-            "only_in_b": tr("só existe em B"),
-            "size_mismatch": tr("tamanhos diferentes, não comparada"),
-        }
-        for result in results:
-            label = status_labels[result.status]
-            if result.status == "compared":
-                self.visual_results_list.addItem(
-                    tr("Página {page}: {label} — {percent:.1f}% diferente").format(
-                        page=result.page_index + 1, label=label, percent=result.changed_fraction * 100
+        def done(results):
+            status_labels = {
+                "compared": tr("comparada"),
+                "only_in_a": tr("só existe em A"),
+                "only_in_b": tr("só existe em B"),
+                "size_mismatch": tr("tamanhos diferentes, não comparada"),
+            }
+            for result in results:
+                label = status_labels[result.status]
+                if result.status == "compared":
+                    self.visual_results_list.addItem(
+                        tr("Página {page}: {label} — {percent:.1f}% diferente").format(
+                            page=result.page_index + 1, label=label, percent=result.changed_fraction * 100
+                        )
                     )
-                )
-            else:
-                self.visual_results_list.addItem(
-                    tr("Página {page}: {label}").format(page=result.page_index + 1, label=label)
-                )
+                else:
+                    self.visual_results_list.addItem(
+                        tr("Página {page}: {label}").format(page=result.page_index + 1, label=label)
+                    )
+
+        run_task(
+            self,
+            tr("Comparar"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao comparar: {error}"),
+        )

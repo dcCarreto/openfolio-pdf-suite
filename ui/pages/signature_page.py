@@ -24,6 +24,7 @@ from core.signature import (
 )
 from ui import i18n
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -307,14 +308,19 @@ class SignaturePage(QWidget):
             kwargs["test_common_name"] = test_name
             kwargs["test_email"] = self.test_email_edit.text().strip()
 
-        try:
-            SignDocument().run(input_path, output_path, **kwargs)
-        except Exception as exc:
-            QMessageBox.critical(self, tr("Assinar"), tr("Falha ao assinar: {error}").format(error=exc))
-            return
+        task = call(SignDocument().run, input_path, output_path, **kwargs)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Assinar"), tr("PDF assinado com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Assinar"), tr("PDF assinado com sucesso."))
+
+        run_task(
+            self,
+            tr("Assinar"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao assinar: {error}"),
+        )
 
     def _apply_verify(self):
         input_path = self.verify_input_picker.path() or self.session.path()
@@ -322,20 +328,23 @@ class SignaturePage(QWidget):
             QMessageBox.warning(self, tr("Verificar assinatura"), tr("Escolha o arquivo PDF a verificar."))
             return
 
-        try:
-            signatures = DescribeSignatures().run(input_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Verificar assinatura"), tr("Falha ao verificar: {error}").format(error=exc)
-            )
-            return
+        task = call(DescribeSignatures().run, input_path)
 
-        if not signatures:
-            self.verify_result.setPlainText(tr("Nenhuma assinatura encontrada neste PDF."))
-            return
+        def done(signatures):
+            if not signatures:
+                self.verify_result.setPlainText(tr("Nenhuma assinatura encontrada neste PDF."))
+                return
 
-        reports = [
-            format_signature_info(info, number, len(signatures))
-            for number, info in enumerate(signatures, start=1)
-        ]
-        self.verify_result.setPlainText("\n\n".join(reports))
+            reports = [
+                format_signature_info(info, number, len(signatures))
+                for number, info in enumerate(signatures, start=1)
+            ]
+            self.verify_result.setPlainText("\n\n".join(reports))
+
+        run_task(
+            self,
+            tr("Verificar assinatura"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao verificar: {error}"),
+        )

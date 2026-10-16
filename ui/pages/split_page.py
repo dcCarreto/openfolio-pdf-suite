@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from core.split import SplitByBookmarks, SplitPDF
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -101,18 +102,24 @@ class SplitPage(QWidget):
             QMessageBox.warning(self, tr("Dividir"), tr("Escolha a pasta de saída."))
             return
 
-        try:
-            output_paths = SplitPDF().run(
-                input_path, output_dir, pages_per_file=self.pages_per_file_spin.value()
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, tr("Dividir"), tr("Falha ao dividir: {error}").format(error=exc))
-            return
+        task = call(
+            SplitPDF().run,
+            input_path, output_dir, pages_per_file=self.pages_per_file_spin.value(),
+        )
 
-        QMessageBox.information(
+        def done(output_paths):
+            QMessageBox.information(
+                self,
+                tr("Dividir"),
+                tr("PDF dividido em {count} arquivo(s).").format(count=len(output_paths)),
+            )
+
+        run_task(
             self,
             tr("Dividir"),
-            tr("PDF dividido em {count} arquivo(s).").format(count=len(output_paths)),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao dividir: {error}"),
         )
 
     def _split_by_bookmarks(self):
@@ -126,14 +133,19 @@ class SplitPage(QWidget):
             QMessageBox.warning(self, tr("Dividir"), tr("Escolha a pasta de saída."))
             return
 
-        try:
-            output_paths = SplitByBookmarks().run(input_path, output_dir)
-        except Exception as exc:
-            QMessageBox.critical(self, tr("Dividir"), tr("Falha ao dividir: {error}").format(error=exc))
-            return
+        task = call(SplitByBookmarks().run, input_path, output_dir)
 
-        QMessageBox.information(
+        def done(output_paths):
+            QMessageBox.information(
+                self,
+                tr("Dividir"),
+                tr("PDF dividido em {count} arquivo(s).").format(count=len(output_paths)),
+            )
+
+        run_task(
             self,
             tr("Dividir"),
-            tr("PDF dividido em {count} arquivo(s).").format(count=len(output_paths)),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao dividir: {error}"),
         )

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from core.page_numbers import AddBatesNumbers, AddHeaderFooter, AddPageNumbers
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -171,19 +172,20 @@ class PageNumbersPage(QWidget):
             QMessageBox.warning(self, tr("Numeração de páginas"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            AddPageNumbers().run(input_path, output_path, start_at=self.start_at_spin.value())
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Numeração de páginas"),
-                tr("Falha ao numerar páginas: {error}").format(error=exc),
-            )
-            return
+        task = call(AddPageNumbers().run, input_path, output_path, start_at=self.start_at_spin.value())
 
-        self.session.open(output_path)
-        QMessageBox.information(
-            self, tr("Numeração de páginas"), tr("Numeração adicionada com sucesso.")
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(
+                self, tr("Numeração de páginas"), tr("Numeração adicionada com sucesso.")
+            )
+
+        run_task(
+            self,
+            tr("Numeração de páginas"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao numerar páginas: {error}"),
         )
 
     def _apply_bates(self):
@@ -199,26 +201,28 @@ class PageNumbersPage(QWidget):
 
         position = _BATES_POSITION_LABELS[self.bates_position_combo.currentIndex()][1]
 
-        try:
-            AddBatesNumbers().run(
-                input_path,
-                output_path,
-                prefix=self.bates_prefix_edit.text(),
-                start_at=self.bates_start_at_spin.value(),
-                digits=self.bates_digits_spin.value(),
-                position=position,
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Numeração Bates"),
-                tr("Falha ao adicionar numeração Bates: {error}").format(error=exc),
-            )
-            return
+        task = call(
+            AddBatesNumbers().run,
+            input_path,
+            output_path,
+            prefix=self.bates_prefix_edit.text(),
+            start_at=self.bates_start_at_spin.value(),
+            digits=self.bates_digits_spin.value(),
+            position=position,
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(
-            self, tr("Numeração Bates"), tr("Numeração Bates adicionada com sucesso.")
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(
+                self, tr("Numeração Bates"), tr("Numeração Bates adicionada com sucesso.")
+            )
+
+        run_task(
+            self,
+            tr("Numeração Bates"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao adicionar numeração Bates: {error}"),
         )
 
     def _apply_header_footer(self):
@@ -238,17 +242,18 @@ class PageNumbersPage(QWidget):
 
         position = _HF_POSITION_LABELS[self.hf_position_combo.currentIndex()][1]
 
-        try:
-            AddHeaderFooter().run(input_path, output_path, text=text, position=position)
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Cabeçalho/Rodapé"),
-                tr("Falha ao adicionar cabeçalho/rodapé: {error}").format(error=exc),
-            )
-            return
+        task = call(AddHeaderFooter().run, input_path, output_path, text=text, position=position)
 
-        self.session.open(output_path)
-        QMessageBox.information(
-            self, tr("Cabeçalho/Rodapé"), tr("Cabeçalho/rodapé adicionado com sucesso.")
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(
+                self, tr("Cabeçalho/Rodapé"), tr("Cabeçalho/rodapé adicionado com sucesso.")
+            )
+
+        run_task(
+            self,
+            tr("Cabeçalho/Rodapé"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao adicionar cabeçalho/rodapé: {error}"),
         )

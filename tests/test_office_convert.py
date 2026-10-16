@@ -7,7 +7,9 @@ instalado. Os testes "via_libreoffice" rodam de verdade quando o
 LibreOffice esta disponivel, e sao pulados quando nao esta.
 """
 
-import subprocess
+import sys
+import threading
+import time
 
 import pytest
 from docx import Document
@@ -17,6 +19,7 @@ from pypdf import PdfReader
 
 import core.office_convert as office_convert
 from core.office_convert import ConvertOfficeToPDF, find_libreoffice
+from core.progress import OperationCancelled, Progress
 
 
 def _make_docx(path):
@@ -99,32 +102,42 @@ def test_rejects_unsupported_format(tmp_path):
         ConvertOfficeToPDF().run(str(bogus_path), str(tmp_path / "out.pdf"))
 
 
-def test_libreoffice_conversion_wraps_called_process_error(tmp_path, monkeypatch):
+def test_libreoffice_conversion_reports_the_soffice_error(tmp_path, monkeypatch):
     monkeypatch.setattr(office_convert, "find_libreoffice", lambda: "soffice")
+    monkeypatch.setattr(office_convert, "_run_cancellable", lambda *a, **k: (1, b"erro simulado do soffice"))
     docx_path = tmp_path / "doc.docx"
     _make_docx(docx_path)
-
-    def fake_run(args, **kwargs):
-        raise subprocess.CalledProcessError(1, args, stderr=b"erro simulado do soffice")
-
-    monkeypatch.setattr(office_convert.subprocess, "run", fake_run)
+    output_path = tmp_path / "out.pdf"
 
     with pytest.raises(RuntimeError, match="erro simulado do soffice"):
-        ConvertOfficeToPDF().run(str(docx_path), str(tmp_path / "out.pdf"))
+        ConvertOfficeToPDF().run(str(docx_path), str(output_path))
+    assert not output_path.exists()
 
 
-def test_libreoffice_conversion_wraps_timeout(tmp_path, monkeypatch):
-    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: "soffice")
-    docx_path = tmp_path / "doc.docx"
-    _make_docx(docx_path)
+def test_run_cancellable_returns_exit_code_and_stderr():
+    returncode, stderr = office_convert._run_cancellable(
+        [sys.executable, "-c", "import sys; sys.stderr.write('falhou'); sys.exit(3)"], Progress(), timeout=30
+    )
 
-    def fake_run(args, **kwargs):
-        raise subprocess.TimeoutExpired(cmd=args, timeout=120)
+    assert returncode == 3
+    assert stderr.endswith(b"falhou")
 
-    monkeypatch.setattr(office_convert.subprocess, "run", fake_run)
 
+def test_run_cancellable_kills_the_process_on_timeout():
+    started = time.monotonic()
     with pytest.raises(RuntimeError, match="timeout"):
-        ConvertOfficeToPDF().run(str(docx_path), str(tmp_path / "out.pdf"))
+        office_convert._run_cancellable([sys.executable, "-c", "import time; time.sleep(30)"], Progress(), timeout=0.5)
+    assert time.monotonic() - started < 10
+
+
+def test_run_cancellable_stops_when_the_user_cancels():
+    progress = Progress()
+    threading.Timer(0.3, progress.cancel).start()
+    started = time.monotonic()
+
+    with pytest.raises(OperationCancelled):
+        office_convert._run_cancellable([sys.executable, "-c", "import time; time.sleep(30)"], progress, timeout=60)
+    assert time.monotonic() - started < 10
 
 
 def test_find_libreoffice_does_not_crash():

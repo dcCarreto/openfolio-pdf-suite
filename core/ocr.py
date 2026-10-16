@@ -21,6 +21,7 @@ from pypdf import PdfWriter
 from .base import PDFOperation, open_reader, write_pdf
 from .geometry import PageGeometry
 from .overlay import materialize_inherited_attributes, visual_overlay
+from .progress import PDFIUM_LOCK, Progress, ensure_progress
 
 _TESSERACT_CANDIDATES = [
     "tesseract",
@@ -74,7 +75,9 @@ class OCRDocument(PDFOperation):
         language: str = "eng",
         skip_pages_with_text: bool = True,
         min_confidence: int = _DEFAULT_MIN_CONFIDENCE,
+        progress: Progress | None = None,
     ) -> int:
+        progress = ensure_progress(progress)
         tesseract_path = find_tesseract()
         if not tesseract_path:
             raise RuntimeError(
@@ -87,15 +90,20 @@ class OCRDocument(PDFOperation):
         materialize_inherited_attributes(writer)
         pages_ocred = 0
 
-        pdfium_doc = pdfium.PdfDocument(input_path)
+        total_pages = len(reader.pages)
+        with PDFIUM_LOCK:
+            pdfium_doc = pdfium.PdfDocument(input_path)
         try:
             for index, page in enumerate(reader.pages):
+                progress.update(index, total_pages, "Reconhecendo o texto")
                 if skip_pages_with_text and (page.extract_text() or "").strip():
                     continue
 
-                pdfium_page = pdfium_doc[index]
-                geometry = PageGeometry.from_pdfium_page(pdfium_page)
-                image = pdfium_page.render(scale=_OCR_SCALE).to_pil()
+                with PDFIUM_LOCK:
+                    pdfium_page = pdfium_doc[index]
+                    geometry = PageGeometry.from_pdfium_page(pdfium_page)
+                    image = pdfium_page.render(scale=_OCR_SCALE).to_pil()
+                    pdfium_page.close()
                 data = _run_tesseract(image, language)
 
                 overlay_page = self._build_overlay(data, geometry, image.size, min_confidence)
@@ -103,8 +111,10 @@ class OCRDocument(PDFOperation):
                     writer.pages[index].merge_page(overlay_page)
                     pages_ocred += 1
         finally:
-            pdfium_doc.close()
+            with PDFIUM_LOCK:
+                pdfium_doc.close()
 
+        progress.update(total_pages, total_pages, "Gravando")
         write_pdf(writer, output_path)
         return pages_ocred
 

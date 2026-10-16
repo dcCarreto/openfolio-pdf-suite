@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from core.watermark import AddWatermark
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -79,22 +80,24 @@ class WatermarkPage(QWidget):
             QMessageBox.warning(self, tr("Marca d'água"), tr("Digite o texto da marca d'água."))
             return
 
-        try:
-            AddWatermark().run(
-                input_path,
-                output_path,
-                text=text,
-                opacity=self.opacity_spin.value(),
-                font_size=self.font_size_spin.value(),
-                rotation=self.rotation_spin.value(),
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Marca d'água"),
-                tr("Falha ao aplicar marca d'água: {error}").format(error=exc),
-            )
-            return
+        task = call(
+            AddWatermark().run,
+            input_path,
+            output_path,
+            text=text,
+            opacity=self.opacity_spin.value(),
+            font_size=self.font_size_spin.value(),
+            rotation=self.rotation_spin.value(),
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Marca d'água"), tr("Marca d'água aplicada com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Marca d'água"), tr("Marca d'água aplicada com sucesso."))
+
+        run_task(
+            self,
+            tr("Marca d'água"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao aplicar marca d'água: {error}"),
+        )

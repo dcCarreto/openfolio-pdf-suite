@@ -25,6 +25,7 @@ from pypdf import PdfWriter
 
 from .base import PDFOperation, open_reader, require_valid_page_index, write_pdf
 from .geometry import Rect
+from .progress import PDFIUM_LOCK, Progress, ensure_progress
 from .rasterize import (
     RASTER_SCALE,
     fill_visual_rects,
@@ -64,7 +65,14 @@ class EditTextArea(PDFOperation):
     """Cobre as áreas marcadas e desenha o texto novo de cada uma por cima, achatando as
     páginas afetadas em imagem (mesma técnica de `core/redaction.RedactDocument`)."""
 
-    def run(self, input_path: str, output_path: str, edits: list[TextEditRect]) -> int:
+    def run(
+        self,
+        input_path: str,
+        output_path: str,
+        edits: list[TextEditRect],
+        progress: Progress | None = None,
+    ) -> int:
+        progress = ensure_progress(progress)
         reader = open_reader(input_path)
         edits_by_page: dict[int, list[TextEditRect]] = {}
         for edit in edits:
@@ -75,12 +83,14 @@ class EditTextArea(PDFOperation):
         # `rasterize.replace_with_image_page`); marcadores, anexos e o resto ficam.
         writer = PdfWriter(clone_from=reader)
         pages_edited = 0
-        pdfium_doc = pdfium.PdfDocument(input_path)
-        try:
+        with PDFIUM_LOCK:
+            pdfium_doc = pdfium.PdfDocument(input_path)
             pdfium_doc.init_forms()
-            for index in sorted(edits_by_page):
+        try:
+            for index in progress.steps(sorted(edits_by_page), message="Editando páginas"):
                 page_edits = edits_by_page[index]
-                image, geometry = render_visual_page(pdfium_doc[index], RASTER_SCALE)
+                with PDFIUM_LOCK:
+                    image, geometry = render_visual_page(pdfium_doc[index], RASTER_SCALE)
                 placed = []
                 for edit in page_edits:
                     clipped = geometry.clip_user_rect((edit.left, edit.bottom, edit.right, edit.top))
@@ -94,7 +104,8 @@ class EditTextArea(PDFOperation):
                 replace_with_image_page(writer, index, new_page)
                 pages_edited += 1
         finally:
-            pdfium_doc.close()
+            with PDFIUM_LOCK:
+                pdfium_doc.close()
 
         write_pdf(writer, output_path)
         return pages_edited

@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWi
 
 from core.compress import CompressPDF
 from ui.i18n import tr
+from ui.tasks import call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -43,24 +44,27 @@ class CompressPage(QWidget):
             QMessageBox.warning(self, tr("Comprimir"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            CompressPDF().run(input_path, output_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Comprimir"), tr("Falha ao comprimir: {error}").format(error=exc)
-            )
-            return
+        task = call_with_progress(CompressPDF().run, input_path, output_path)
 
-        original_size = Path(input_path).stat().st_size
-        compressed_size = Path(output_path).stat().st_size
-        reduction = 100 * (1 - compressed_size / original_size) if original_size else 0
-        self.session.open(output_path)
-        QMessageBox.information(
+        def done(_result):
+            original_size = Path(input_path).stat().st_size
+            compressed_size = Path(output_path).stat().st_size
+            reduction = 100 * (1 - compressed_size / original_size) if original_size else 0
+            self.session.open(output_path)
+            QMessageBox.information(
+                self,
+                tr("Comprimir"),
+                tr("PDF comprimido: {original} KB -> {compressed} KB ({reduction}% menor).").format(
+                    original=f"{original_size / 1024:.1f}",
+                    compressed=f"{compressed_size / 1024:.1f}",
+                    reduction=f"{reduction:.0f}",
+                ),
+            )
+
+        run_task(
             self,
             tr("Comprimir"),
-            tr("PDF comprimido: {original} KB -> {compressed} KB ({reduction}% menor).").format(
-                original=f"{original_size / 1024:.1f}",
-                compressed=f"{compressed_size / 1024:.1f}",
-                reduction=f"{reduction:.0f}",
-            ),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao comprimir: {error}"),
         )

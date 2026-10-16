@@ -20,6 +20,7 @@ from core.base import READ, open_reader
 from core.pages import InsertPages, RemovePages, ReorderPages, ReplacePages, RotatePages
 from ui.i18n import tr
 from ui.page_ranges import parse_page_ranges
+from ui.tasks import run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -189,11 +190,10 @@ class PagesPage(QWidget):
             QMessageBox.warning(self, tr("Páginas"), str(exc))
             return
 
-        try:
-            action()
-        except Exception as exc:
-            QMessageBox.critical(self, tr("Páginas"), tr("Falha ao processar: {error}").format(error=exc))
-            return
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Páginas"), tr("Operação concluída com sucesso."))
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Páginas"), tr("Operação concluída com sucesso."))
+        # As variáveis capturadas por `action` já são valores lidos dos widgets aqui, na
+        # thread da interface.
+        run_task(self, tr("Páginas"), lambda _progress: action(), on_success=done)

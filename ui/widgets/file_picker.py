@@ -128,6 +128,14 @@ class FilePicker(QWidget):
             self._path_source = None
         return self._path or self._suggestion(source)
 
+    def snapshot(self) -> tuple[str, Optional[str]]:
+        """A escolha do usuário, para passar a outra instância (ver `ui/widget_state.py`)."""
+        return self._path, self._path_source
+
+    def restore(self, state: tuple[str, Optional[str]]) -> None:
+        self._path, self._path_source = state
+        self._refresh_display()
+
     def _refresh_display(self):
         current = self.path()
         self.path_edit.setText(current)

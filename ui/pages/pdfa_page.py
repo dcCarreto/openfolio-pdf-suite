@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from core.pdfa import ConvertToPDFA, ValidatePDFA
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -127,14 +128,19 @@ class PDFAPage(QWidget):
         part = int(_PARTS[self.convert_part_combo.currentIndex()])
         conformance = _CONFORMANCE_LABELS[self.convert_conformance_combo.currentIndex()][1]
 
-        try:
-            ConvertToPDFA().run(input_path, output_path, part=part, conformance=conformance)
-        except Exception as exc:
-            QMessageBox.critical(self, tr("PDF/A"), tr("Falha ao converter: {error}").format(error=exc))
-            return
+        task = call(ConvertToPDFA().run, input_path, output_path, part=part, conformance=conformance)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("PDF/A"), tr("PDF convertido com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("PDF/A"), tr("PDF convertido com sucesso."))
+
+        run_task(
+            self,
+            tr("PDF/A"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao converter: {error}"),
+        )
 
     def _apply_validate(self):
         input_path = self.session.path()
@@ -142,20 +148,25 @@ class PDFAPage(QWidget):
             QMessageBox.warning(self, tr("PDF/A"), tr("Abra um PDF para começar."))
             return
 
-        try:
-            result = ValidatePDFA().run(input_path)
-        except Exception as exc:
-            QMessageBox.critical(self, tr("PDF/A"), tr("Falha ao validar: {error}").format(error=exc))
-            return
+        task = call(ValidatePDFA().run, input_path)
 
-        if result.is_valid:
-            QMessageBox.information(
-                self, tr("PDF/A"), tr("Nenhum problema encontrado nas verificações realizadas.")
-            )
-        else:
-            issues_text = "\n".join(f"• {issue}" for issue in result.issues)
-            QMessageBox.warning(
-                self,
-                tr("PDF/A"),
-                tr("Problemas encontrados:\n{issues}").format(issues=issues_text),
-            )
+        def done(result):
+            if result.is_valid:
+                QMessageBox.information(
+                    self, tr("PDF/A"), tr("Nenhum problema encontrado nas verificações realizadas.")
+                )
+            else:
+                issues_text = "\n".join(f"• {issue}" for issue in result.issues)
+                QMessageBox.warning(
+                    self,
+                    tr("PDF/A"),
+                    tr("Problemas encontrados:\n{issues}").format(issues=issues_text),
+                )
+
+        run_task(
+            self,
+            tr("PDF/A"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao validar: {error}"),
+        )

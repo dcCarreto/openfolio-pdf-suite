@@ -16,6 +16,7 @@ from core.annotations import AddAnnotations, ExportAnnotationsCSV
 from ui.annotation_state import AnnotationState, DEFAULT_COLOR
 from ui.document_session import DocumentSession
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.stamp_library import StampLibrary
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -259,17 +260,20 @@ class AnnotationsPage(QWidget):
             )
             return
 
-        try:
-            AddAnnotations().run(input_path, output_path, pending)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Anotações"), tr("Falha ao salvar anotações: {error}").format(error=exc)
-            )
-            return
+        task = call(AddAnnotations().run, input_path, output_path, pending)
 
-        self.annotation_state.clear_pending()
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Anotações"), tr("Anotações salvas com sucesso."))
+        def done(_result):
+            self.annotation_state.clear_pending()
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Anotações"), tr("Anotações salvas com sucesso."))
+
+        run_task(
+            self,
+            tr("Anotações"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao salvar anotações: {error}"),
+        )
 
     def _export_csv(self):
         input_path = self.session.path()
@@ -282,16 +286,19 @@ class AnnotationsPage(QWidget):
             QMessageBox.warning(self, tr("Anotações"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            count = ExportAnnotationsCSV().run(input_path, output_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Anotações"), tr("Falha ao exportar comentários: {error}").format(error=exc)
-            )
-            return
+        task = call(ExportAnnotationsCSV().run, input_path, output_path)
 
-        QMessageBox.information(
+        def done(count):
+            QMessageBox.information(
+                self,
+                tr("Anotações"),
+                tr("{count} comentário(s) exportado(s) com sucesso.").format(count=count),
+            )
+
+        run_task(
             self,
             tr("Anotações"),
-            tr("{count} comentário(s) exportado(s) com sucesso.").format(count=count),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao exportar comentários: {error}"),
         )

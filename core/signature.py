@@ -16,6 +16,7 @@ Dois jeitos de obter o certificado usado para assinar:
   para testar o fluxo ou uso pessoal/interno.
 """
 
+import contextlib
 import datetime
 import logging
 import tempfile
@@ -268,13 +269,7 @@ class DescribeSignatures(PDFOperation):
     """
 
     def run(self, input_path: str) -> list[SignatureInfo]:
-        # A validação da cadeia de confiança registra, em vários loggers internos do
-        # pyhanko, um erro esperado sempre que o certificado não chega a uma autoridade
-        # confiável (o caso do certificado de teste). Silenciamos o logging durante a
-        # checagem para isso não parecer um bug no console.
-        previous_level = logging.root.manager.disable
-        logging.disable(logging.CRITICAL)
-        try:
+        with _quiet_pyhanko_logs():
             results = []
             with open(input_path, "rb") as f:
                 reader = PdfFileReader(f)
@@ -282,8 +277,26 @@ class DescribeSignatures(PDFOperation):
                 for embedded in reader.embedded_signatures:
                     results.append(_describe(embedded, total_revisions))
             return results
-        finally:
-            logging.disable(previous_level)
+
+
+# A validação da cadeia de confiança registra, em vários loggers internos do pyhanko, um erro
+# esperado sempre que o certificado não chega a uma autoridade confiável (o caso do
+# certificado de teste). Só esses loggers são silenciados, e só durante a checagem: antes o
+# logging do processo inteiro era desligado, o que escondia erros de outras threads.
+_PYHANKO_LOGGERS = ("pyhanko", "pyhanko_certvalidator")
+
+
+@contextlib.contextmanager
+def _quiet_pyhanko_logs():
+    loggers = [logging.getLogger(name) for name in _PYHANKO_LOGGERS]
+    previous = [logger.level for logger in loggers]
+    for logger in loggers:
+        logger.setLevel(logging.CRITICAL + 1)
+    try:
+        yield
+    finally:
+        for logger, level in zip(loggers, previous):
+            logger.setLevel(level)
 
 
 def _describe(embedded, total_revisions: int) -> SignatureInfo:

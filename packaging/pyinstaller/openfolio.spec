@@ -14,7 +14,10 @@ Rodar a partir da raiz do projeto:
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules
+
 PROJECT_ROOT = Path(SPECPATH).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 ICONS_DIR = PROJECT_ROOT / "packaging" / "icons"
 
 APP_NAME = "OpenFolioPDFSuite"
@@ -38,6 +41,9 @@ a = Analysis(
         "pyhanko_certvalidator",
         "asn1crypto",
         "oscrypto",
+        # As abas são importadas pelo nome só quando abertas (ui/main_window.py), então a
+        # análise estática não as encontra sozinha.
+        *collect_submodules("ui.pages"),
     ],
     hookspath=[],
     hooksconfig={},

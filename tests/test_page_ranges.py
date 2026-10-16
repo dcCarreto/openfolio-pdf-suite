@@ -9,6 +9,7 @@ from pypdf import PdfReader
 from PySide6.QtWidgets import QApplication
 
 from ui.document_session import DocumentSession
+from ui.tasks import wait_for_tasks
 from ui.page_ranges import parse_page_ranges
 from ui.pages import pages_page
 from ui.pages.pages_page import PagesPage
@@ -72,6 +73,7 @@ def test_pages_tab_counts_pages_from_one(make_pdf, tmp_path, monkeypatch):
     page.remove_edit.setText("1, 3-")
 
     page._apply()
+    wait_for_tasks()
 
     assert messages.shown[-1][0] == "information"
     assert _page_widths(session.path()) == [200]
@@ -88,6 +90,7 @@ def test_pages_tab_reorders_with_a_reversed_range(make_pdf, monkeypatch):
     page.reorder_edit.setText("3-1")
 
     page._apply()
+    wait_for_tasks()
 
     assert messages.shown[-1][0] == "information"
     assert _page_widths(session.path()) == [300, 200, 100]
@@ -104,6 +107,7 @@ def test_pages_tab_explains_a_page_that_does_not_exist(make_pdf, monkeypatch):
     page.remove_edit.setText("3")
 
     page._apply()
+    wait_for_tasks()
 
     kind, text = messages.shown[-1]
     assert kind == "warning" and "3" in text and "2 página" in text
@@ -124,6 +128,7 @@ def test_pages_tab_replaces_an_inclusive_range(make_pdf, monkeypatch):
     page.replace_end_spin.setValue(3)
 
     page._apply()
+    wait_for_tasks()
 
     assert messages.shown[-1][0] == "information"
     assert _page_widths(session.path()) == [100, 900]

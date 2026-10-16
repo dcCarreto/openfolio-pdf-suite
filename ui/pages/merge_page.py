@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWi
 
 from core.merge import MergePDF
 from ui.i18n import tr
+from ui.tasks import call_with_progress, run_task
 from ui.widgets.file_list_editor import FileListEditor
 from ui.widgets.file_picker import FilePicker
 
@@ -45,11 +46,16 @@ class MergePage(QWidget):
             QMessageBox.warning(self, tr("Mesclar"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            MergePDF().run(input_paths, output_path)
-        except Exception as exc:
-            QMessageBox.critical(self, tr("Mesclar"), tr("Falha ao mesclar: {error}").format(error=exc))
-            return
+        task = call_with_progress(MergePDF().run, input_paths, output_path)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Mesclar"), tr("PDFs mesclados com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Mesclar"), tr("PDFs mesclados com sucesso."))
+
+        run_task(
+            self,
+            tr("Mesclar"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao mesclar: {error}"),
+        )

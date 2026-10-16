@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from core.bookmarks import AddBookmarks
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -102,13 +103,16 @@ class BookmarksPage(QWidget):
             QMessageBox.warning(self, tr("Marcadores"), tr("Adicione pelo menos um marcador."))
             return
 
-        try:
-            AddBookmarks().run(input_path, output_path, bookmarks=bookmarks)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Marcadores"), tr("Falha ao salvar marcadores: {error}").format(error=exc)
-            )
-            return
+        task = call(AddBookmarks().run, input_path, output_path, bookmarks=bookmarks)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Marcadores"), tr("Marcadores salvos com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Marcadores"), tr("Marcadores salvos com sucesso."))
+
+        run_task(
+            self,
+            tr("Marcadores"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao salvar marcadores: {error}"),
+        )

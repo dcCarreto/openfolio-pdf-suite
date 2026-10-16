@@ -53,6 +53,13 @@ diretamente sobre a página. Se o PDF estiver protegido por senha, o próprio vi
 a senha na hora de abrir. À direita, cada seção tem seus próprios campos de entrada/saída e
 botão de ação — o campo de saída já vem com um nome sugerido a partir do arquivo de entrada.
 
+As operações rodam em segundo plano: a janela continua respondendo, a barra de status mostra
+o andamento e o botão "Cancelar" interrompe a operação sem deixar arquivo pela metade. Os
+divisores entre a barra lateral, o visualizador e o painel podem ser arrastados, e o app
+lembra o tamanho da janela. Erros inesperados ficam registrados em `openfolio.log`, na pasta
+de dados do app (no Windows, `%LOCALAPPDATA%\OpenFolio\OpenFolio PDF Suite\logs`), para
+anexar a uma issue.
+
 ## Por trás do projeto
 
 Esse projeto segue um padrão que se repete nas coisas que eu construo: toda vez que preciso de
@@ -277,6 +284,7 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
   merge.py, split.py, pages.py, compress.py, convert.py, ...
   geometry.py      Conversão entre o espaço do PDF e o que aparece na tela (/Rotate, CropBox)
   overlay.py       Desenho sobre a página na orientação da tela (marca d'água, numeração, OCR)
+  progress.py      Andamento e cancelamento das operações longas; trava de acesso ao pdfium
   rasterize.py     Achatamento de página em imagem, com áreas pintadas nos próprios pixels
   annotations.py   Anotações reais (Highlight/Underline/StrikeOut/Ink/Stamp) via pypdf
   ocr.py           Reconhecimento de texto (Tesseract) com camada de texto invisível
@@ -284,13 +292,17 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
   signature.py     Assinatura digital (pyhanko) e verificação completa das assinaturas
 
 ui/              Interface gráfica (PySide6)
-  main_window.py       Janela principal: monta a sidebar e as 26 seções
+  main_window.py       Janela principal: sidebar, visualizador e as 26 seções (cada aba é
+                       construída na primeira vez em que é aberta)
   theme.py             Tema escuro único, inspirado no macOS
   icon.py              Ícone da aplicação (renderizado a partir de assets/logo.svg)
   document_session.py  Sessão compartilhada do PDF aberto no visualizador
   annotation_state.py  Estado compartilhado da ferramenta de anotações
   redaction_state.py   Estado compartilhado da ferramenta de redação
   page_ranges.py       Leitura de listas de páginas digitadas ("1-3, 5, 8-")
+  tasks.py             Execução das operações numa thread de trabalho, uma por vez
+  diagnostics.py       Log em arquivo e tratamento global de exceções
+  widget_state.py      Preserva o que foi preenchido nas abas ao trocar de idioma
   viewer/              Visualizador central: renderização, miniaturas, busca, zoom
   pages/               Uma classe de página por ferramenta (MergePage, CompressPage, ...)
   widgets/             Widgets reutilizáveis (FilePicker, FileListEditor, PageContainer)

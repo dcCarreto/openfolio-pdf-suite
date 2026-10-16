@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QLabel, QLineEdit, QMessageBox, QPushButton, QVBox
 
 from core.metadata import ReadMetadata, SetMetadata
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -89,20 +90,24 @@ class MetadataPage(QWidget):
             QMessageBox.warning(self, tr("Metadados"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            SetMetadata().run(
-                input_path,
-                output_path,
-                title=self.title_edit.text(),
-                author=self.author_edit.text(),
-                subject=self.subject_edit.text(),
-                keywords=self.keywords_edit.text(),
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Metadados"), tr("Falha ao salvar metadados: {error}").format(error=exc)
-            )
-            return
+        task = call(
+            SetMetadata().run,
+            input_path,
+            output_path,
+            title=self.title_edit.text(),
+            author=self.author_edit.text(),
+            subject=self.subject_edit.text(),
+            keywords=self.keywords_edit.text(),
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Metadados"), tr("Metadados salvos com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Metadados"), tr("Metadados salvos com sucesso."))
+
+        run_task(
+            self,
+            tr("Metadados"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao salvar metadados: {error}"),
+        )
