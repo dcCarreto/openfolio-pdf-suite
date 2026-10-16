@@ -36,6 +36,7 @@ from pypdf.generic import ArrayObject, DictionaryObject, NameObject, StreamObjec
 
 from .base import EXTRACT, PDFOperation, atomic_output, open_pdfium, open_reader, require_valid_page_index
 from .geometry import PageGeometry, Rect
+from .messages import Message
 from .progress import PDFIUM_LOCK, Progress, ensure_progress
 from .rasterize import RASTER_SCALE, fill_visual_rects, image_page, render_visual_page, visible_visual_rects
 
@@ -114,7 +115,7 @@ class FindSensitiveData(PDFOperation):
             try:
                 patterns.append((CUSTOM_PATTERN_KIND, re.compile(custom_pattern)))
             except re.error as exc:
-                raise ValueError(f"Expressão regular inválida: {exc}") from exc
+                raise ValueError(Message("Expressão regular inválida: {error}", error=exc)) from exc
         if not patterns:
             return []
 
@@ -262,13 +263,16 @@ def _verify_redaction(path: str, burned: dict[int, list[Rect]]) -> None:
             page = reader.pages[index]
             if page.extract_text().strip():
                 raise RedactionVerificationError(
-                    f"A página {index + 1} ainda tem texto depois da redação. O arquivo não foi salvo."
+                    Message("A página {page} ainda tem texto depois da redação. O arquivo não foi salvo.", page=index + 1)
                 )
             geometry = PageGeometry.from_pypdf_page(page)
             images = [image_file.image.convert("RGB") for image_file in page.images]
             if len(images) != 1:
                 raise RedactionVerificationError(
-                    f"A página {index + 1} tem conteúdo inesperado depois da redação. O arquivo não foi salvo."
+                    Message(
+                        "A página {page} tem conteúdo inesperado depois da redação. O arquivo não foi salvo.",
+                        page=index + 1,
+                    )
                 )
             with PDFIUM_LOCK:
                 rendered = document[index].render(scale=_VERIFY_RENDER_SCALE).to_pil().convert("RGB")
@@ -276,8 +280,11 @@ def _verify_redaction(path: str, burned: dict[int, list[Rect]]) -> None:
                 for rect in visual_rects:
                     if not _area_is_filled(candidate, geometry, rect, max_level):
                         raise RedactionVerificationError(
-                            f"Na página {index + 1}, uma área marcada ainda mostra conteúdo depois "
-                            "da redação. O arquivo não foi salvo."
+                            Message(
+                                "Na página {page}, uma área marcada ainda mostra conteúdo depois da "
+                                "redação. O arquivo não foi salvo.",
+                                page=index + 1,
+                            )
                         )
     finally:
         with PDFIUM_LOCK:
@@ -594,28 +601,6 @@ class _Sanitizer:
             self.report.private_data += 1
 
 
-def _is_javascript_action(action) -> bool:
-    """Usado por `core/pdfa.py` (a conversão para PDF/A ainda faz a própria limpeza de
-    JavaScript; a revisão dela é tratada à parte)."""
-    return action is not None and action.get_object().get("/S") == "/JavaScript"
-
-
-def _strip_annotation_javascript(annotation_ref) -> None:
-    """Remove ações de JavaScript de `/A` e `/AA` de uma anotação (usado por `core/pdfa.py`)."""
-    annotation = annotation_ref.get_object()
-
-    action = annotation.get("/A")
-    if _is_javascript_action(action):
-        del annotation["/A"]
-
-    additional_actions = annotation.get("/AA")
-    if additional_actions is not None:
-        aa = additional_actions.get_object()
-        for trigger in list(aa.keys()):
-            if _is_javascript_action(aa[trigger]):
-                del aa[trigger]
-
-
 def find_residual_risks(path: str, *, check_metadata: bool = True) -> list[str]:
     """Procura, num PDF já sanitizado, qualquer coisa que a sanitização deveria ter removido.
     Devolve a lista (vazia se estiver tudo limpo)."""
@@ -714,6 +699,9 @@ class SanitizeDocument(PDFOperation):
             problems = find_residual_risks(temp_path, check_metadata=remove_metadata)
             if problems:
                 raise SanitizationVerificationError(
-                    "A sanitização não conseguiu remover: " + "; ".join(problems) + ". O arquivo não foi salvo."
+                    Message(
+                        "A sanitização não conseguiu remover: {problems}. O arquivo não foi salvo.",
+                        problems="; ".join(problems),
+                    )
                 )
         return report

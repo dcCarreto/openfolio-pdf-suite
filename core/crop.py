@@ -5,6 +5,7 @@ from pypdf.generic import ArrayObject, ContentStream, FloatObject, NameObject, R
 
 from .base import PDFOperation, open_reader, write_pdf
 from .geometry import PageGeometry, intersect_rects
+from .messages import Message
 from .overlay import materialize_inherited_attributes
 
 _OTHER_BOXES = ("/BleedBox", "/TrimBox", "/ArtBox")
@@ -35,7 +36,7 @@ class CropPages(PDFOperation):
             geometry = PageGeometry.from_pypdf_page(source_page)
             visual = (left, bottom, geometry.width - right, geometry.height - top)
             if visual[2] <= visual[0] or visual[3] <= visual[1]:
-                raise ValueError(f"As margens de corte excedem o tamanho da página {index + 1}.")
+                raise ValueError(Message("As margens de corte excedem o tamanho da página {page}.", page=index + 1))
             box = RectangleObject(geometry.visual_rect_to_user(visual))
             page.mediabox = box
             page.cropbox = box

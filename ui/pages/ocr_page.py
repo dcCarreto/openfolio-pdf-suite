@@ -1,16 +1,21 @@
 """Aba de OCR: reconhecimento de texto em páginas de PDF que são só imagem (escaneadas)."""
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFormLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
-from core.ocr import OCRDocument, find_tesseract, get_available_languages
+from core.ocr import DEFAULT_DPI, OCRDocument, find_tesseract, get_available_languages, has_orientation_data
 from ui.i18n import tr
 from ui.tasks import call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -24,6 +29,17 @@ _LANGUAGE_NAMES = {
     "deu": "Alemão",
     "ita": "Italiano",
 }
+_MODES = [
+    ("auto", "Só as escaneadas"),
+    ("force", "Todas (forçar OCR)"),
+]
+_INSTALL_HELP = (
+    "Para instalar no Windows: baixe o instalador do Tesseract em "
+    "https://github.com/UB-Mannheim/tesseract/wiki e, durante a instalação, marque em "
+    '"Additional language data" o idioma Portuguese (e "Orientation and script detection", '
+    "para páginas digitalizadas de lado). No Linux: sudo apt install tesseract-ocr "
+    "tesseract-ocr-por. Depois, reabra o app."
+)
 
 
 class OCRPage(QWidget):
@@ -35,16 +51,38 @@ class OCRPage(QWidget):
 
         self.source_bar = DocumentSourceBar(session)
 
-        self.language_combo = QComboBox()
+        self._tesseract = find_tesseract()
         self._languages = get_available_languages()
+        self.language_list = QListWidget()
+        self.language_list.setMaximumHeight(110)
         for code in self._languages:
-            self.language_combo.addItem(tr(_LANGUAGE_NAMES.get(code, code)), code)
+            item = QListWidgetItem(tr(_LANGUAGE_NAMES.get(code, code)))
+            item.setData(Qt.ItemDataRole.UserRole, code)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked if code == self._default_language() else Qt.CheckState.Unchecked)
+            self.language_list.addItem(item)
 
-        self.skip_pages_checkbox = QCheckBox(tr("Pular páginas que já têm texto"))
-        self.skip_pages_checkbox.setChecked(True)
+        self.mode_combo = QComboBox()
+        for mode, label in _MODES:
+            self.mode_combo.addItem(tr(label), mode)
+
+        self.dpi_spin = QSpinBox()
+        self.dpi_spin.setRange(150, 600)
+        self.dpi_spin.setSingleStep(50)
+        self.dpi_spin.setValue(DEFAULT_DPI)
+        self.dpi_spin.setToolTip(tr("Resolução usada para ler a página. Texto pequeno pede mais DPI; 300 serve para a maioria."))
+
+        self.orientation_checkbox = QCheckBox(tr("Corrigir páginas digitalizadas de lado"))
+        self.orientation_checkbox.setToolTip(tr("Detecta páginas digitalizadas de lado ou de cabeça para baixo."))
+        if self._tesseract and has_orientation_data():
+            self.orientation_checkbox.setChecked(True)
+        else:
+            self.orientation_checkbox.setEnabled(False)
+            self.orientation_checkbox.setToolTip(tr('Requer o pacote "osd" do Tesseract.'))
 
         self.tesseract_note = QLabel()
         self.tesseract_note.setWordWrap(True)
+        self.tesseract_note.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self._update_tesseract_note()
 
         self.output_picker = FilePicker(
@@ -52,41 +90,56 @@ class OCRPage(QWidget):
         )
         self.apply_button = QPushButton(tr("Reconhecer texto"))
         self.apply_button.clicked.connect(self._apply)
-        self.apply_button.setEnabled(find_tesseract() is not None and bool(self._languages))
+        self.apply_button.setEnabled(self._tesseract is not None and bool(self._languages))
+
+        options = QFormLayout()
+        options.addRow(tr("Páginas:"), self.mode_combo)
+        options.addRow(tr("DPI:"), self.dpi_spin)
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
         layout.addWidget(self.source_bar)
-        layout.addWidget(QLabel(tr("Idioma do texto:")))
-        layout.addWidget(self.language_combo)
-        layout.addWidget(self.skip_pages_checkbox)
+        languages_label = QLabel(tr("Idiomas do texto (marque todos os que aparecem no documento):"))
+        languages_label.setWordWrap(True)
+        layout.addWidget(languages_label)
+        layout.addWidget(self.language_list)
+        layout.addLayout(options)
+        layout.addWidget(self.orientation_checkbox)
         layout.addWidget(self.tesseract_note)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
         layout.addWidget(self.apply_button)
 
+    def _default_language(self) -> str | None:
+        for code in ("por", "eng"):
+            if code in self._languages:
+                return code
+        return self._languages[0] if self._languages else None
+
+    def selected_languages(self) -> list[str]:
+        codes = []
+        for row in range(self.language_list.count()):
+            item = self.language_list.item(row)
+            if item.checkState() == Qt.CheckState.Checked:
+                codes.append(item.data(Qt.ItemDataRole.UserRole))
+        return codes
+
     def _update_tesseract_note(self):
-        if find_tesseract() is None:
-            self.tesseract_note.setText(
-                tr(
-                    "Tesseract OCR não encontrado. Instale o Tesseract "
-                    "(https://github.com/tesseract-ocr/tesseract) para usar esta ferramenta."
-                )
-            )
-            self.language_combo.setEnabled(False)
+        if self._tesseract is None:
+            self.tesseract_note.setText(tr("Tesseract OCR não encontrado.") + " " + tr(_INSTALL_HELP))
+            self.language_list.setEnabled(False)
         elif not self._languages:
             self.tesseract_note.setText(
-                tr("Nenhum idioma de reconhecimento instalado no Tesseract.")
+                tr("Nenhum idioma de reconhecimento instalado no Tesseract.") + " " + tr(_INSTALL_HELP)
             )
-            self.language_combo.setEnabled(False)
+            self.language_list.setEnabled(False)
         else:
-            self.tesseract_note.setText(
-                tr("Tesseract encontrado. Idiomas disponíveis: {languages}.").format(
-                    languages=", ".join(
-                        tr(_LANGUAGE_NAMES.get(code, code)) for code in self._languages
-                    )
-                )
+            note = tr("Tesseract encontrado. Idiomas disponíveis: {languages}.").format(
+                languages=", ".join(tr(_LANGUAGE_NAMES.get(code, code)) for code in self._languages)
             )
+            if "por" not in self._languages:
+                note += " " + tr('Para reconhecer português, instale o idioma "por" do Tesseract.')
+            self.tesseract_note.setText(note)
 
     def _apply(self):
         input_path = self.session.path()
@@ -98,18 +151,19 @@ class OCRPage(QWidget):
         if not output_path:
             QMessageBox.warning(self, tr("OCR"), tr("Escolha o arquivo de saída."))
             return
-        if self.language_combo.currentIndex() < 0:
-            QMessageBox.warning(self, tr("OCR"), tr("Nenhum idioma de reconhecimento disponível."))
+        languages = self.selected_languages()
+        if not languages:
+            QMessageBox.warning(self, tr("OCR"), tr("Marque pelo menos um idioma do texto."))
             return
-
-        language = self.language_combo.currentData()
 
         task = call_with_progress(
             OCRDocument().run,
             input_path,
             output_path,
-            language=language,
-            skip_pages_with_text=self.skip_pages_checkbox.isChecked(),
+            language="+".join(languages),
+            mode=self.mode_combo.currentData(),
+            dpi=self.dpi_spin.value(),
+            detect_orientation=self.orientation_checkbox.isChecked(),
         )
 
         def done(pages_ocred):

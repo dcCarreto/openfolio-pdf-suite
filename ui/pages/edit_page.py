@@ -2,13 +2,17 @@
 gerenciar links (hyperlinks)."""
 
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QDoubleSpinBox,
+    QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QListWidget,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QSpinBox,
     QStackedWidget,
@@ -21,21 +25,28 @@ from PySide6.QtWidgets import (
 from core.edit_text import EditTextArea, TextEditRect
 from core.extract_images import ListEmbeddedImages, ReplaceEmbeddedImage
 from core.links import AddLink, ListLinks, RemoveLink
-from ui.i18n import tr
+from ui.area_pick_state import AreaPickState
+from ui.i18n import tr, tr_message
 from ui.tasks import call, call_with_progress, run_task
+from ui.widgets.color_combo import ColorCombo
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 _MODES = ["Substituir imagem", "Editar texto", "Adicionar link", "Listar links", "Remover link"]
+_EDIT_TEXT_MODE = 1
+_EDIT_FONTS = [("sans", "Sem serifa"), ("sans-bold", "Sem serifa, negrito"), ("mono", "Monoespaçada")]
+_TEXT_COLUMN = 5
 
 
 class EditPage(QWidget):
     """Permite substituir imagens embutidas, cobrir e reescrever texto, e adicionar,
     listar ou remover links (hyperlinks) de um PDF."""
 
-    def __init__(self, session, parent=None):
+    def __init__(self, session, area_pick_state: AreaPickState | None = None, parent=None):
         super().__init__(parent)
         self.session = session
+        self.area_pick_state = area_pick_state or AreaPickState()
+        self.area_pick_state.area_picked.connect(self._on_area_picked)
 
         self.source_bar = DocumentSourceBar(session)
 
@@ -59,6 +70,13 @@ class EditPage(QWidget):
 
     def _on_mode_changed(self, index: int):
         self.stack.setCurrentIndex(index)
+        self.area_pick_state.set_mode_active(index == _EDIT_TEXT_MODE)
+        self._publish_areas()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.area_pick_state.set_mode_active(self.mode_combo.currentIndex() == _EDIT_TEXT_MODE)
+        self._publish_areas()
 
     # ---- Substituir imagem --------------------------------------------------
 
@@ -79,6 +97,9 @@ class EditPage(QWidget):
         self.new_image_picker = FilePicker(
             mode="open", file_filter="Imagens (*.png *.jpg *.jpeg *.bmp *.tiff)"
         )
+        self.image_fit_combo = QComboBox()
+        self.image_fit_combo.addItem(tr("Ajustar sem distorcer (sobra transparente)"), "contain")
+        self.image_fit_combo.addItem(tr("Esticar para ocupar a área toda"), "stretch")
         self.replace_image_output_picker = FilePicker(
             mode="save", suggested_source=self.session.path, suggested_suffix="imagem_substituida"
         )
@@ -93,6 +114,8 @@ class EditPage(QWidget):
         layout.addWidget(self.image_index_spin)
         layout.addWidget(QLabel(tr("Nova imagem:")))
         layout.addWidget(self.new_image_picker)
+        layout.addWidget(QLabel(tr("Se a proporção for diferente:")))
+        layout.addWidget(self.image_fit_combo)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.replace_image_output_picker)
         layout.addWidget(replace_button)
@@ -147,11 +170,18 @@ class EditPage(QWidget):
             page_number=self.image_page_spin.value() - 1,
             image_index=self.image_index_spin.value() - 1,
             new_image_path=new_image_path,
+            fit=self.image_fit_combo.currentData(),
         )
 
-        def done(_result):
+        def done(result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Substituir imagem"), tr("Imagem substituída com sucesso."))
+            message = tr("Imagem substituída com sucesso.")
+            if result.other_pages:
+                pages = ", ".join(str(index + 1) for index in result.other_pages)
+                message += "\n\n" + tr(
+                    "A mesma imagem também aparecia na(s) página(s) {pages}, que mudaram junto."
+                ).format(pages=pages)
+            QMessageBox.information(self, tr("Substituir imagem"), message)
 
         run_task(
             self,
@@ -176,23 +206,49 @@ class EditPage(QWidget):
             )
         )
         note.setWordWrap(True)
+        hint = QLabel(tr("Arraste no visualizador para marcar cada área. As coordenadas (em pontos PDF) podem ser ajustadas na tabela."))
+        hint.setWordWrap(True)
 
         self.edit_text_table = QTableWidget(0, 6)
         self.edit_text_table.setHorizontalHeaderLabels(
-            [tr("Página"), "Left", "Bottom", "Right", "Top", tr("Texto novo")]
+            [tr("Página"), tr("Esquerda"), tr("Base"), tr("Direita"), tr("Topo"), tr("Texto novo")]
         )
+        header = self.edit_text_table.horizontalHeader()
+        for column in range(_TEXT_COLUMN):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(_TEXT_COLUMN, QHeaderView.ResizeMode.Stretch)
+        self.edit_text_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.edit_text_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.edit_text_table.itemChanged.connect(self._on_edit_table_changed)
+        self.edit_text_table.currentCellChanged.connect(self._on_edit_row_selected)
 
         add_row_button = QPushButton(tr("Adicionar área"))
-        add_row_button.clicked.connect(self._add_edit_text_row)
+        add_row_button.clicked.connect(lambda: self._add_edit_text_row())
         remove_row_button = QPushButton(tr("Remover área"))
         remove_row_button.clicked.connect(self._remove_edit_text_row)
         row_buttons_layout = QHBoxLayout()
         row_buttons_layout.addWidget(add_row_button)
         row_buttons_layout.addWidget(remove_row_button)
 
+        self.edit_text_editor = QPlainTextEdit()
+        self.edit_text_editor.setPlaceholderText(tr("Texto novo da área selecionada (Enter quebra a linha)"))
+        self.edit_text_editor.setMaximumHeight(90)
+        self.edit_text_editor.textChanged.connect(self._on_edit_text_typed)
+
+        self.edit_text_font_combo = QComboBox()
+        for key, label in _EDIT_FONTS:
+            self.edit_text_font_combo.addItem(tr(label), key)
         self.edit_text_font_size_spin = QDoubleSpinBox()
         self.edit_text_font_size_spin.setRange(4, 96)
         self.edit_text_font_size_spin.setValue(12)
+        self.edit_text_color_combo = ColorCombo("000000")
+        self.edit_text_cover_combo = ColorCombo("ffffff")
+
+        options = QFormLayout()
+        options.addRow(tr("Fonte:"), self.edit_text_font_combo)
+        options.addRow(tr("Tamanho do texto novo:"), self.edit_text_font_size_spin)
+        options.addRow(tr("Cor do texto:"), self.edit_text_color_combo)
+        options.addRow(tr("Cor de fundo da área:"), self.edit_text_cover_combo)
 
         self.edit_text_output_picker = FilePicker(
             mode="save", suggested_source=self.session.path, suggested_suffix="texto_editado"
@@ -201,26 +257,81 @@ class EditPage(QWidget):
         apply_button.clicked.connect(self._apply_edit_text)
 
         layout.addWidget(note)
+        layout.addWidget(hint)
         layout.addWidget(self.edit_text_table)
         layout.addLayout(row_buttons_layout)
-        layout.addWidget(QLabel(tr("Tamanho do texto novo:")))
-        layout.addWidget(self.edit_text_font_size_spin)
+        layout.addWidget(self.edit_text_editor)
+        layout.addLayout(options)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.edit_text_output_picker)
         layout.addWidget(apply_button)
-        self._add_edit_text_row()
         return widget
 
-    def _add_edit_text_row(self):
+    def _add_edit_text_row(self, page_number: int | None = None, rect=None) -> int:
+        if page_number is None:
+            page_number = 1
+        left, bottom, right, top = rect or (72, 700, 272, 730)
         row = self.edit_text_table.rowCount()
+        self.edit_text_table.blockSignals(True)
         self.edit_text_table.insertRow(row)
-        for column, default in enumerate(["1", "0", "0", "100", "20", ""]):
-            self.edit_text_table.setItem(row, column, QTableWidgetItem(default))
+        for column, value in enumerate([str(page_number), f"{left:.1f}", f"{bottom:.1f}", f"{right:.1f}", f"{top:.1f}", ""]):
+            self.edit_text_table.setItem(row, column, QTableWidgetItem(value))
+        self.edit_text_table.blockSignals(False)
+        self.edit_text_table.setCurrentCell(row, _TEXT_COLUMN)
+        self._publish_areas()
+        return row
 
     def _remove_edit_text_row(self):
         row = self.edit_text_table.currentRow()
         if row >= 0:
             self.edit_text_table.removeRow(row)
+            self._publish_areas()
+
+    def _on_area_picked(self, page_index: int, left: float, bottom: float, right: float, top: float):
+        self._add_edit_text_row(page_index + 1, (left, bottom, right, top))
+        self.edit_text_editor.setFocus()
+
+    def _on_edit_row_selected(self, row: int, _column: int, _previous_row: int, _previous_column: int):
+        item = self.edit_text_table.item(row, _TEXT_COLUMN) if row >= 0 else None
+        self.edit_text_editor.blockSignals(True)
+        self.edit_text_editor.setPlainText(item.text() if item is not None else "")
+        self.edit_text_editor.setEnabled(item is not None)
+        self.edit_text_editor.blockSignals(False)
+        self._publish_areas()
+
+    def _on_edit_text_typed(self):
+        row = self.edit_text_table.currentRow()
+        item = self.edit_text_table.item(row, _TEXT_COLUMN) if row >= 0 else None
+        if item is not None:
+            self.edit_text_table.blockSignals(True)
+            item.setText(self.edit_text_editor.toPlainText())
+            self.edit_text_table.blockSignals(False)
+
+    def _on_edit_table_changed(self, item: QTableWidgetItem):
+        if item.column() == _TEXT_COLUMN and item.row() == self.edit_text_table.currentRow():
+            self.edit_text_editor.blockSignals(True)
+            self.edit_text_editor.setPlainText(item.text())
+            self.edit_text_editor.blockSignals(False)
+        self._publish_areas()
+
+    def _table_areas(self) -> list:
+        """(página a partir de 0, (left, bottom, right, top)) de cada linha que dá para ler."""
+        areas = []
+        for row in range(self.edit_text_table.rowCount()):
+            try:
+                values = [float(self.edit_text_table.item(row, column).text()) for column in range(5)]
+            except (AttributeError, ValueError):
+                areas.append((-1, (0.0, 0.0, 0.0, 0.0)))  # linha inválida: mantém a numeração
+                continue
+            page, left, bottom, right, top = values
+            areas.append((int(page) - 1, (left, bottom, right, top)))
+        return areas
+
+    def _publish_areas(self):
+        if not hasattr(self, "edit_text_table"):
+            return
+        row = self.edit_text_table.currentRow()
+        self.area_pick_state.set_areas(self._table_areas(), row if row >= 0 else None)
 
     def _apply_edit_text(self):
         input_path = self.session.path()
@@ -235,26 +346,28 @@ class EditPage(QWidget):
 
         try:
             edits = []
+            area_rows = []
             for row in range(self.edit_text_table.rowCount()):
-                new_text = self.edit_text_table.item(row, 5).text()
-                if not new_text:
+                new_text = self.edit_text_table.item(row, _TEXT_COLUMN).text()
+                if not new_text.strip():
                     continue
                 page_index = int(self.edit_text_table.item(row, 0).text()) - 1
-                left = float(self.edit_text_table.item(row, 1).text())
-                bottom = float(self.edit_text_table.item(row, 2).text())
-                right = float(self.edit_text_table.item(row, 3).text())
-                top = float(self.edit_text_table.item(row, 4).text())
+                left, bottom, right, top = (float(self.edit_text_table.item(row, c).text()) for c in range(1, 5))
                 edits.append(
                     TextEditRect(
                         page_index=page_index,
-                        left=left,
-                        bottom=bottom,
-                        right=right,
-                        top=top,
+                        left=min(left, right),
+                        bottom=min(bottom, top),
+                        right=max(left, right),
+                        top=max(bottom, top),
                         new_text=new_text,
                         font_size=self.edit_text_font_size_spin.value(),
+                        text_color=self.edit_text_color_combo.color(),
+                        cover_color=self.edit_text_cover_combo.color(),
+                        font=self.edit_text_font_combo.currentData(),
                     )
                 )
+                area_rows.append(row + 1)
         except ValueError:
             QMessageBox.warning(
                 self,
@@ -269,13 +382,16 @@ class EditPage(QWidget):
 
         task = call_with_progress(EditTextArea().run, input_path, output_path, edits)
 
-        def done(pages_edited):
+        def done(result):
             self.session.open(output_path)
-            QMessageBox.information(
-                self,
-                tr("Editar texto"),
-                tr("{count} página(s) editada(s) com sucesso.").format(count=pages_edited),
-            )
+            message = tr("{count} página(s) editada(s) com sucesso.").format(count=result.pages_edited)
+            if result.clipped:
+                areas = ", ".join(str(area_rows[index]) for index in result.clipped)
+                message += "\n\n" + tr(
+                    "O texto não coube inteiro na(s) área(s) {areas}: o que não coube ficou de fora. "
+                    "Aumente a área ou diminua a fonte."
+                ).format(areas=areas)
+            QMessageBox.information(self, tr("Editar texto"), message)
 
         run_task(
             self,
@@ -326,7 +442,7 @@ class EditPage(QWidget):
 
         layout.addWidget(QLabel(tr("Página:")))
         layout.addWidget(self.link_page_spin)
-        layout.addWidget(QLabel("Left / Bottom / Right / Top:"))
+        layout.addWidget(QLabel(tr("Esquerda / Base / Direita / Topo (pontos PDF):")))
         for spin in (self.link_left_spin, self.link_bottom_spin, self.link_right_spin, self.link_top_spin):
             layout.addWidget(spin)
         layout.addWidget(QLabel(tr("Destino:")))
@@ -413,7 +529,7 @@ class EditPage(QWidget):
                 return
             for link in links:
                 self.links_list.addItem(
-                    f"{tr('Página')} {link.page_index + 1} — #{link.link_index + 1} — {link.target}"
+                    f"{tr('Página')} {link.page_index + 1} — #{link.link_index + 1} — {tr_message(link.target)}"
                 )
 
         run_task(

@@ -42,6 +42,46 @@ def tr(text: str) -> str:
     return _EN_TRANSLATIONS.get(text, text)
 
 
+def tr_message(text) -> str:
+    """Traduz um texto vindo do `core`: uma `core.messages.Message` (modelo + valores) ou um
+    texto fixo, procurado no dicionário como qualquer outro."""
+    template = getattr(text, "template", None)
+    if template is not None:
+        params = {
+            key: tr_message(value) if getattr(value, "template", None) is not None else value
+            for key, value in text.params.items()
+        }
+        return tr(template).format(**params)
+    return tr(str(text))
+
+
+def error_text(exc: BaseException) -> str:
+    """A mensagem de um erro no idioma ativo (ver `tr_message`)."""
+    if len(exc.args) == 1 and isinstance(exc.args[0], str):
+        return tr_message(exc.args[0])
+    return str(exc)
+
+
+_qt_translator = None
+
+
+def install_qt_translator(app) -> None:
+    """Traduz os textos do próprio Qt (botões "Yes"/"No"/"Cancel" das caixas de diálogo,
+    menus de contexto dos campos de texto) para o idioma ativo."""
+    global _qt_translator
+    from PySide6.QtCore import QLibraryInfo, QTranslator
+
+    if _qt_translator is not None:
+        app.removeTranslator(_qt_translator)
+        _qt_translator = None
+    if _current_language != PT_BR:
+        return  # o Qt já vem em inglês
+    translator = QTranslator(app)
+    if translator.load("qtbase_pt_BR", QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
+        app.installTranslator(translator)
+        _qt_translator = translator
+
+
 _EN_TRANSLATIONS: dict[str, str] = {
     # Sidebar sections + subtitles
     "Criar PDF": "Create PDF",
@@ -240,14 +280,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Imagens (na ordem desejada):": "Images (in the desired order):",
     "Arquivo PDF de saída:": "Output PDF file:",
     "Arquivo Word, Excel ou PowerPoint de entrada:": "Input Word, Excel, or PowerPoint file:",
-    "LibreOffice encontrado: a conversão preserva a formatação original.": (
-        "LibreOffice found: the conversion preserves the original formatting."
-    ),
-    "LibreOffice não encontrado: usando conversão básica em Python "
-    "(preserva texto, mas não a formatação visual exata).": (
-        "LibreOffice not found: using basic Python conversion "
-        "(preserves text, but not the exact visual formatting)."
-    ),
     "Arquivo XML de entrada:": "Input XML file:",
     "Escolha o arquivo PDF de entrada.": "Choose the input PDF file.",
     "Falha ao converter: {error}": "Failed to convert: {error}",
@@ -423,15 +455,12 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Nenhum campo de formulário encontrado.": "No form fields found.",
     "Falha ao listar campos: {error}": "Failed to list fields: {error}",
     # Form fields: export/import data
-    "Exportar dados (CSV)": "Export data (CSV)",
     "Exportar dados (FDF)": "Export data (FDF)",
-    "Importar dados (CSV)": "Import data (CSV)",
     "Importar dados (FDF)": "Import data (FDF)",
     "Exportar": "Export",
     "Importar": "Import",
     "Exportar dados": "Export data",
     "Importar dados": "Import data",
-    "Arquivo CSV com os dados:": "CSV file with the data:",
     "Arquivo FDF com os dados:": "FDF file with the data:",
     "Escolha o arquivo de dados.": "Choose the data file.",
     "Falha ao exportar dados: {error}": "Failed to export data: {error}",
@@ -533,14 +562,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "Recognize text in scanned pages, making them searchable."
     ),
     # OCR: page UI
-    "Idioma do texto:": "Text language:",
-    "Pular páginas que já têm texto": "Skip pages that already have text",
     "Reconhecer texto": "Recognize text",
-    "Tesseract OCR não encontrado. Instale o Tesseract "
-    "(https://github.com/tesseract-ocr/tesseract) para usar esta ferramenta.": (
-        "Tesseract OCR not found. Install Tesseract "
-        "(https://github.com/tesseract-ocr/tesseract) to use this tool."
-    ),
     "Nenhum idioma de reconhecimento instalado no Tesseract.": (
         "No recognition language installed in Tesseract."
     ),
@@ -818,7 +840,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Falha ao remover link: {error}": "Failed to remove link: {error}",
     "Link removido com sucesso.": "Link removed successfully.",
     # Annotations: export comments
-    "Exportar comentários (CSV)": "Export comments (CSV)",
     "Exportar comentários existentes para CSV:": "Export existing comments to CSV:",
     "Falha ao exportar comentários: {error}": "Failed to export comments: {error}",
     "{count} comentário(s) exportado(s) com sucesso.": "{count} comment(s) exported successfully.",
@@ -951,4 +972,382 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Ocorreu um erro inesperado: {error}': 'An unexpected error occurred: {error}',
     'Os detalhes foram gravados em:\n{path}': 'The details were saved to:\n{path}',
     'Buscando...': 'Searching...',
+    # Etapa 4: qualidade das ferramentas
+    'Nível de compressão:': 'Compression level:',
+    'Leve (sem perda de qualidade)': 'Light (no quality loss)',
+    'Média (imagens a 150 DPI)': 'Medium (images at 150 DPI)',
+    'Forte (imagens a 100 DPI)': 'Strong (images at 100 DPI)',
+    'Converter as imagens para escala de cinza': 'Convert images to grayscale',
+    'Usar o Ghostscript': 'Use Ghostscript',
+    'O Ghostscript comprime mais, mas pode descartar anexos, campos de formulário e a marcação de acessibilidade.': (
+        'Ghostscript compresses further, but may drop attachments, form fields and accessibility tags.'
+    ),
+    'Ghostscript não encontrado. Instalado, ele permite comprimir ainda mais (ghostscript.com).': (
+        'Ghostscript not found. Once installed, it allows even more compression (ghostscript.com).'
+    ),
+    'Comprimido com o Ghostscript.': 'Compressed with Ghostscript.',
+    'O arquivo não ficou menor ({original} KB -> {compressed} KB), então nada foi gravado. Tente um nível mais forte.': (
+        'The file did not get smaller ({original} KB -> {compressed} KB), so nothing was saved. Try a stronger level.'
+    ),
+    '{count} imagem(ns) recomprimida(s).': '{count} image(s) recompressed.',
+    'Comprimindo imagens': 'Compressing images',
+    'Comprimindo com o Ghostscript': 'Compressing with Ghostscript',
+    'O Ghostscript falhou ao comprimir o arquivo: {detail}': (
+        'Ghostscript failed to compress the file: {detail}'
+    ),
+    'Ghostscript não encontrado. Instale o Ghostscript ou desmarque a opção.': (
+        'Ghostscript not found. Install Ghostscript or uncheck the option.'
+    ),
+    'Tamanho da página:': 'Page size:',
+    'Margem:': 'Margin:',
+    'DPI da imagem:': 'Image DPI:',
+    'A4': 'A4',
+    'Ajustar ao tamanho da imagem': 'Fit to the image size',
+    'Resolução usada para calcular o tamanho da página a partir da imagem.': (
+        'Resolution used to compute the page size from the image.'
+    ),
+    'Documentos do Office': 'Office documents',
+    'LibreOffice encontrado: a conversão preserva a formatação original e aceita também .doc, .xls, .ppt, .odt, .ods, .odp e .rtf.': (
+        'LibreOffice found: the conversion keeps the original formatting and also accepts .doc, .xls, .ppt, .odt, .ods, .odp and .rtf.'
+    ),
+    'LibreOffice não encontrado: usando a conversão básica, que leva o texto, os títulos, as listas e as tabelas de arquivos .docx, .xlsx e .pptx, mas não a formatação visual exata, as imagens nem os cabeçalhos e rodapés.': (
+        'LibreOffice not found: using the basic conversion, which keeps the text, headings, lists and tables of .docx, .xlsx and .pptx files, but not the exact visual formatting, images, headers or footers.'
+    ),
+    'A conversão básica deixou de fora:': 'The basic conversion left out:',
+    'Páginas em paisagem (linhas mais longas)': 'Landscape pages (longer lines)',
+    'Informe ao menos uma imagem para converter.': 'Provide at least one image to convert.',
+    'A margem não pode ser negativa.': 'The margin cannot be negative.',
+    'O DPI precisa ser maior que zero.': 'DPI must be greater than zero.',
+    'A margem é maior que a página.': 'The margin is larger than the page.',
+    'As imagens do documento não foram incluídas.': "The document's images were not included.",
+    'Cabeçalhos e rodapés não foram incluídos.': 'Headers and footers were not included.',
+    '{count} slide(s) com texto demais para uma página continuaram na página seguinte.': (
+        '{count} slide(s) with too much text for one page continued on the next page.'
+    ),
+    'As imagens e gráficos dos slides não foram incluídos.': (
+        "The slides' images and charts were not included."
+    ),
+    'Formato não suportado: {suffix}': 'Unsupported format: {suffix}',
+    'Arquivos {suffix} só podem ser convertidos com o LibreOffice instalado (libreoffice.org). Sem ele, salve o arquivo como .docx, .xlsx ou .pptx.': (
+        '{suffix} files can only be converted with LibreOffice installed (libreoffice.org). Without it, save the file as .docx, .xlsx or .pptx.'
+    ),
+    'Gráficos e imagens da planilha "{sheet}" não foram incluídos.': (
+        'Charts and images of the "{sheet}" sheet were not included.'
+    ),
+    'O LibreOffice falhou ao converter o arquivo: {detail}': (
+        'LibreOffice failed to convert the file: {detail}'
+    ),
+    'A planilha "{sheet}" tem {columns} colunas; só as {limit} primeiras foram incluídas.': (
+        'The "{sheet}" sheet has {columns} columns; only the first {limit} were included.'
+    ),
+    'O LibreOffice não gerou o arquivo PDF esperado.': 'LibreOffice did not produce the expected PDF file.',
+    '{program} demorou demais para terminar (timeout de {seconds}s).': (
+        '{program} took too long to finish ({seconds}s timeout).'
+    ),
+    'O programa externo': 'The external program',
+    'O LibreOffice': 'LibreOffice',
+    'O Ghostscript': 'Ghostscript',
+    'O veraPDF': 'veraPDF',
+    'Ajustar sem distorcer (sobra transparente)': 'Fit without distortion (transparent margins)',
+    'Esticar para ocupar a área toda': 'Stretch to fill the whole area',
+    'Se a proporção for diferente:': 'If the proportions differ:',
+    'A mesma imagem também aparecia na(s) página(s) {pages}, que mudaram junto.': (
+        'The same image also appeared on page(s) {pages}, which changed too.'
+    ),
+    'Arraste no visualizador para marcar cada área. As coordenadas (em pontos PDF) podem ser ajustadas na tabela.': (
+        'Drag over the viewer to mark each area. The coordinates (in PDF points) can be adjusted in the table.'
+    ),
+    'Texto novo da área selecionada (Enter quebra a linha)': (
+        'New text for the selected area (Enter starts a new line)'
+    ),
+    'Fonte:': 'Font:',
+    'Sem serifa': 'Sans serif',
+    'Sem serifa, negrito': 'Sans serif, bold',
+    'Monoespaçada': 'Monospaced',
+    'Cor do texto:': 'Text color:',
+    'Cor de fundo da área:': 'Area background color:',
+    'Esquerda': 'Left',
+    'Base': 'Bottom',
+    'Direita': 'Right',
+    'Topo': 'Top',
+    'Esquerda / Base / Direita / Topo (pontos PDF):': 'Left / Bottom / Right / Top (PDF points):',
+    'O texto não coube inteiro na(s) área(s) {areas}: o que não coube ficou de fora. Aumente a área ou diminua a fonte.': (
+        'The text did not fit entirely in area(s) {areas}: what did not fit was left out. Enlarge the area or reduce the font.'
+    ),
+    'https://exemplo.com': 'https://example.com',
+    'A imagem {number} não existe: a página tem {count} imagem(ns).': (
+        'Image {number} does not exist: the page has {count} image(s).'
+    ),
+    'Esta imagem está gravada dentro do conteúdo da página (imagem inline) e não pode ser substituída sem reescrever a página. Use Editar texto ou a redação para cobri-la.': (
+        'This image is stored inside the page content (inline image) and cannot be replaced without rewriting the page. Use Edit text or redaction to cover it.'
+    ),
+    'O link {number} não existe: a página tem {count} link(s).': (
+        'Link {number} does not exist: the page has {count} link(s).'
+    ),
+    'Informe uma URL ou uma página de destino — exatamente uma das duas.': (
+        'Provide a URL or a target page — exactly one of them.'
+    ),
+    'Esta página não tem nenhum link.': 'This page has no links.',
+    'página {page}': 'page {page}',
+    'destino interno': 'internal destination',
+    'ação: {action}': 'action: {action}',
+    'sem destino': 'no destination',
+    'Página de destino': 'Target page',
+    'Branco': 'White',
+    'Cinza': 'Gray',
+    'Outra cor...': 'Other color...',
+    'Escolher cor': 'Choose color',
+    'Exportar dados (CSV ou Excel)': 'Export data (CSV or Excel)',
+    'Importar dados (CSV ou Excel)': 'Import data (CSV or Excel)',
+    'Arquivo CSV ou Excel com os dados:': 'CSV or Excel file with the data:',
+    'Já existe um campo chamado "{name}" neste PDF. Escolha outro nome.': (
+        'This PDF already has a field named "{name}". Choose another name.'
+    ),
+    'Nenhum dos campos do arquivo de dados existe neste PDF: {names}': (
+        'None of the fields in the data file exist in this PDF: {names}'
+    ),
+    'O arquivo FDF está malformado: {error}': 'The FDF file is malformed: {error}',
+    'Um grupo de opções precisa de pelo menos duas opções.': 'An option group needs at least two options.',
+    'Os valores das opções devem ser únicos.': 'Option values must be unique.',
+    'selected_value deve ser um dos valores das opções.': (
+        'The selected value must be one of the option values.'
+    ),
+    'Nenhum campo com nome válido encontrado no CSV.': 'No field with a valid name found in the CSV.',
+    'Nenhum campo encontrado no arquivo FDF.': 'No field found in the FDF file.',
+    'Exportar comentários (CSV ou Excel)': 'Export comments (CSV or Excel)',
+    'Adicionar anexo': 'Add attachment',
+    'Remover anexo': 'Remove attachment',
+    'Nenhum anexo chamado "{name}" foi encontrado neste PDF.': (
+        'No attachment named "{name}" was found in this PDF.'
+    ),
+    'O anexo "{name}" continuaria no arquivo; nada foi salvo.': (
+        'The attachment "{name}" would remain in the file; nothing was saved.'
+    ),
+    'O anexo "{name}" tentou gravar fora da pasta escolhida.': (
+        'The attachment "{name}" tried to write outside the chosen folder.'
+    ),
+    'Criado com:': 'Created with:',
+    'Aplicativo em que o documento foi criado': 'Application the document was created in',
+    'Produtor do PDF:': 'PDF producer:',
+    'Aplicativo que gerou o PDF': 'Application that produced the PDF',
+    'não informada': 'not set',
+    'Criado em: {created}. Modificado em: {modified}.': 'Created: {created}. Modified: {modified}.',
+    'Idiomas do texto (marque todos os que aparecem no documento):': (
+        'Text languages (check all that appear in the document):'
+    ),
+    'Só as escaneadas': 'Scanned pages only',
+    'Todas (forçar OCR)': 'All (force OCR)',
+    'DPI:': 'DPI:',
+    'Resolução usada para ler a página. Texto pequeno pede mais DPI; 300 serve para a maioria.': (
+        'Resolution used to read the page. Small text needs more DPI; 300 suits most documents.'
+    ),
+    'Corrigir páginas digitalizadas de lado': 'Fix pages scanned sideways',
+    'Detecta páginas digitalizadas de lado ou de cabeça para baixo.': 'Detects pages scanned sideways or upside down.',
+    'Requer o pacote "osd" do Tesseract.': 'Requires the Tesseract "osd" package.',
+    'Marque pelo menos um idioma do texto.': 'Check at least one text language.',
+    'Tesseract OCR não encontrado.': 'Tesseract OCR not found.',
+    'Para reconhecer português, instale o idioma "por" do Tesseract.': (
+        'To recognize Portuguese, install the Tesseract "por" language.'
+    ),
+    'Para instalar no Windows: baixe o instalador do Tesseract em https://github.com/UB-Mannheim/tesseract/wiki e, durante a instalação, marque em "Additional language data" o idioma Portuguese (e "Orientation and script detection", para páginas digitalizadas de lado). No Linux: sudo apt install tesseract-ocr tesseract-ocr-por. Depois, reabra o app.': (
+        'To install on Windows: download the Tesseract installer from https://github.com/UB-Mannheim/tesseract/wiki and, during installation, check the languages you need under "Additional language data" (and "Orientation and script detection", for pages scanned sideways). On Linux: sudo apt install tesseract-ocr tesseract-ocr-por. Then reopen the app.'
+    ),
+    'O DPI do OCR precisa estar entre 72 e 1200.': 'OCR DPI must be between 72 and 1200.',
+    'Escolha pelo menos um idioma de reconhecimento.': 'Choose at least one recognition language.',
+    'Tesseract OCR não encontrado. Instale o Tesseract para usar esta ferramenta.': (
+        'Tesseract OCR not found. Install Tesseract to use this tool.'
+    ),
+    'Numeração de página': 'Page numbering',
+    'Marcador desconhecido no texto: {names}. Use {{page}} (número da página) e {{pages}} (total de páginas).': (
+        'Unknown placeholder in the text: {names}. Use {{page}} (page number) and {{pages}} (total pages).'
+    ),
+    'Remove o que o PDF/A proíbe (JavaScript, ações automáticas, anexos não permitidos), embute o perfil de cor sRGB e sincroniza os metadados. Depois verifica fontes, transparência e estrutura: se algo impedir a conformidade, nada é gravado e a lista do que falta é mostrada. PDFs protegidos por senha precisam passar antes por "Remover senha".': (
+        'Removes what PDF/A forbids (JavaScript, automatic actions, attachments that are not allowed), embeds the sRGB color profile and syncs the metadata. Then checks fonts, transparency and structure: if anything prevents conformance, nothing is saved and the list of what is missing is shown. Password-protected PDFs must go through "Remove password" first.'
+    ),
+    'Embute as fontes e achata a transparência, o que a conversão própria do app não faz.': (
+        "Embeds fonts and flattens transparency, which the app's own conversion does not do."
+    ),
+    'Ghostscript não encontrado (ghostscript.com).': 'Ghostscript not found (ghostscript.com).',
+    'veraPDF encontrado: além das verificações do app, o arquivo passa pela validação completa dele.': (
+        "veraPDF found: besides the app's checks, the file goes through its full validation."
+    ),
+    'Verifica os requisitos de PDF/A que o app cobre (declaração, perfil de cor, fontes embutidas, transparência, ações e anexos proibidos, metadados) — não é a validação ISO 19005 completa. Para ela, instale o veraPDF (verapdf.org).': (
+        'Checks the PDF/A requirements the app covers (declaration, color profile, embedded fonts, transparency, forbidden actions and attachments, metadata) — not the full ISO 19005 validation. For that, install veraPDF (verapdf.org).'
+    ),
+    'O veraPDF confirmou a conformidade, e as verificações do app não encontraram problemas.': (
+        "veraPDF confirmed conformance, and the app's checks found no problems."
+    ),
+    'Nenhum problema encontrado nas verificações do app. Elas não cobrem a norma inteira: para arquivamento legal, confirme com o veraPDF.': (
+        "No problems found by the app's checks. They do not cover the whole standard: for legal archiving, confirm with veraPDF."
+    ),
+    'O documento não pôde ser convertido, e nada foi gravado:': (
+        'The document could not be converted, and nothing was saved:'
+    ),
+    'Tente de novo com "Usar o Ghostscript" marcado.': 'Try again with "Use Ghostscript" checked.',
+    'Com o Ghostscript instalado (ghostscript.com), o app consegue corrigir fontes e transparência.': (
+        'With Ghostscript installed (ghostscript.com), the app can fix fonts and transparency.'
+    ),
+    'Ajustes feitos:': 'Changes made:',
+    'Parte PDF/A inválida: {part} (use 1, 2 ou 3).': 'Invalid PDF/A part: {part} (use 1, 2 or 3).',
+    'O nível {conformance} não existe no PDF/A-{part} (use {options}).': (
+        'Level {conformance} does not exist in PDF/A-{part} (use {options}).'
+    ),
+    '{count} ação(ões) proibida(s) removida(s) (JavaScript, abrir programas, ações automáticas).': (
+        '{count} forbidden action(s) removed (JavaScript, launching programs, automatic actions).'
+    ),
+    '{count} anexo(s) removido(s): o PDF/A-{part} não permite esses anexos.': (
+        '{count} attachment(s) removed: PDF/A-{part} does not allow them.'
+    ),
+    '{count} anotação(ões) removida(s) (multimídia, escondidas ou com anexo não permitido).': (
+        '{count} annotation(s) removed (multimedia, hidden or with a disallowed attachment).'
+    ),
+    '{count} anotação(ões) marcada(s) para impressão, como o PDF/A exige.': (
+        '{count} annotation(s) marked for printing, as PDF/A requires.'
+    ),
+    '{count} stream(s) com compressão LZW recodificado(s).': '{count} LZW-compressed stream(s) re-encoded.',
+    'Formulário XFA removido (proibido em PDF/A).': 'XFA form removed (forbidden in PDF/A).',
+    'Falta o perfil de cor (/OutputIntent).': 'The color profile (/OutputIntent) is missing.',
+    'Fontes não embutidas: {fonts}.': 'Fonts not embedded: {fonts}.',
+    'O PDF/A-1 não permite transparência, e o documento usa (escolha a parte 2 ou 3).': (
+        'PDF/A-1 does not allow transparency, and the document uses it (choose part 2 or 3).'
+    ),
+    'O PDF/A-1 não permite camadas, e o documento tem (escolha a parte 2 ou 3).': (
+        'PDF/A-1 does not allow layers, and the document has them (choose part 2 or 3).'
+    ),
+    'O nível {conformance} exige que o texto tenha mapeamento Unicode, e estas fontes não têm: {fonts}.': (
+        'Level {conformance} requires text with a Unicode mapping, and these fonts lack it: {fonts}.'
+    ),
+    'O nível A exige um documento tagueado (com estrutura de acessibilidade); use o nível B.': (
+        'Level A requires a tagged document (with accessibility structure); use level B.'
+    ),
+    'O nível A exige o idioma do documento (/Lang); defina-o em Acessibilidade.': (
+        'Level A requires the document language (/Lang); set it in Accessibility.'
+    ),
+    '{count} anotação(ões) sem aparência definida (/AP).': (
+        '{count} annotation(s) without a defined appearance (/AP).'
+    ),
+    'O título no dicionário Info e no XMP não são iguais.': (
+        'The title in the Info dictionary and in the XMP differ.'
+    ),
+    'O autor no dicionário Info e no XMP não são iguais.': (
+        'The author in the Info dictionary and in the XMP differ.'
+    ),
+    'O Ghostscript falhou ao converter para PDF/A: {detail}': (
+        'Ghostscript failed to convert to PDF/A: {detail}'
+    ),
+    'Os metadados XMP não declaram conformidade PDF/A.': (
+        'The XMP metadata does not declare PDF/A conformance.'
+    ),
+    'O arquivo declara PDF/A-{declared}, não PDF/A-{part}.': (
+        'The file declares PDF/A-{declared}, not PDF/A-{part}.'
+    ),
+    'O arquivo declara o nível {declared}, não o nível {conformance}.': (
+        'The file declares level {declared}, not level {conformance}.'
+    ),
+    'Os metadados XMP estão malformados.': 'The XMP metadata is malformed.',
+    'veraPDF: {rule}': 'veraPDF: {rule}',
+    'O PDF está protegido por senha — PDF/A não permite criptografia.': (
+        'The PDF is password-protected — PDF/A does not allow encryption.'
+    ),
+    'O documento contém JavaScript.': 'The document contains JavaScript.',
+    'O documento contém anexos, proibidos em PDF/A-1.': (
+        'The document contains attachments, forbidden in PDF/A-1.'
+    ),
+    'O documento contém anexos que não são PDF/A, proibidos em PDF/A-2.': (
+        'The document contains non-PDF/A attachments, forbidden in PDF/A-2.'
+    ),
+    'O documento tem ações automáticas (/AA).': 'The document has automatic actions (/AA).',
+    'O documento contém um formulário XFA.': 'The document contains an XFA form.',
+    'O formulário pede ao leitor que gere as aparências dos campos (/NeedAppearances).': (
+        'The form asks the reader to generate the field appearances (/NeedAppearances).'
+    ),
+    'O documento contém ações proibidas em PDF/A (JavaScript, abrir programas, multimídia...).': (
+        'The document contains actions forbidden in PDF/A (JavaScript, launching programs, multimedia...).'
+    ),
+    'Uma página tem ações automáticas (/AA).': 'A page has automatic actions (/AA).',
+    'O documento usa compressão LZW.': 'The document uses LZW compression.',
+    'O documento contém anotações multimídia ou 3D.': 'The document contains multimedia or 3D annotations.',
+    'Há anotações escondidas ou que não saem na impressão.': (
+        'There are hidden annotations or annotations that do not print.'
+    ),
+    'Preparando o documento': 'Preparing the document',
+    'Verificando o documento': 'Checking the document',
+    'Convertendo com o Ghostscript': 'Converting with Ghostscript',
+    'Validando com o veraPDF': 'Validating with veraPDF',
+    'O leitor mostra o nome do arquivo em vez do título (falta /DisplayDocTitle).': (
+        'Readers show the file name instead of the title (/DisplayDocTitle is missing).'
+    ),
+    '{count} figura(s) tagueada(s) sem texto alternativo (/Alt).': (
+        '{count} tagged figure(s) without alternative text (/Alt).'
+    ),
+    '{count} página(s) com links ou campos sem ordem de tabulação pela estrutura (/Tabs /S).': (
+        '{count} page(s) with links or fields without structure tab order (/Tabs /S).'
+    ),
+    '{count} campo(s) de formulário sem descrição para leitores de tela (/TU): {names}.': (
+        '{count} form field(s) without a description for screen readers (/TU): {names}.'
+    ),
+    'Informe um idioma (ex.: pt-BR).': 'Provide a language (e.g.: en-US).',
+    'Informe um título para o documento.': 'Provide a title for the document.',
+    '{label} {page} não existe: o documento tem {total} página(s).': (
+        '{label} {page} does not exist: the document has {total} page(s).'
+    ),
+    'Página(s) repetida(s) na nova ordem: {pages}.': 'Repeated page(s) in the new order: {pages}.',
+    'A nova ordem precisa incluir todas as {total} páginas; faltam: {pages}. Para tirar páginas, use Remover.': (
+        'The new order must include all {total} pages; missing: {pages}. To drop pages, use Remove.'
+    ),
+    'Posição de inserção inválida: o documento tem {total} página(s); dá para inserir antes da página 1 até depois da página {total}.': (
+        'Invalid insert position: the document has {total} page(s); you can insert from before page 1 up to after page {total}.'
+    ),
+    'Intervalo inválido: a página final precisa vir depois da inicial ({start}) e o documento tem {total} página(s).': (
+        'Invalid range: the last page must come after the first one ({start}) and the document has {total} page(s).'
+    ),
+    'O ângulo de rotação precisa ser múltiplo de 90 graus.': (
+        'The rotation angle must be a multiple of 90 degrees.'
+    ),
+    'A remoção resultaria em um PDF sem nenhuma página.': 'Removing them would leave a PDF with no pages.',
+    'As margens de corte excedem o tamanho da página {page}.': (
+        'The crop margins exceed the size of page {page}.'
+    ),
+    'A largura e a altura precisam ser maiores que zero.': 'Width and height must be greater than zero.',
+    'A camada {number} não existe: o documento tem {count} camada(s).': (
+        'Layer {number} does not exist: the document has {count} layer(s).'
+    ),
+    'Informe ao menos um arquivo PDF para mesclar.': 'Provide at least one PDF file to merge.',
+    'O PDF não tem marcadores de nível superior para dividir.': (
+        'The PDF has no top-level bookmarks to split by.'
+    ),
+    'Não foi possível localizar a página de nenhum marcador.': 'Could not find the page of any bookmark.',
+    'Senha incorreta.': 'Wrong password.',
+    'Este PDF está protegido por senha. Abra-o no visualizador (que pede a senha) para usá-lo nas ferramentas de leitura, ou use "Remover senha" em Proteger para trabalhar sobre uma cópia sem proteção.': (
+        'This PDF is password-protected. Open it in the viewer (which asks for the password) to use it in the reading tools, or use "Remove password" in Protect to work on an unprotected copy.'
+    ),
+    'Este PDF abre sem senha, mas o autor restringiu alterações com uma senha de permissões. Para alterá-lo, use "Remover senha" em Proteger informando a senha de permissões — o resultado sai sem proteção, e você pode protegê-lo de novo depois.': (
+        'This PDF opens without a password, but the author restricted changes with a permissions password. To change it, use "Remove password" in Protect with the permissions password — the result has no protection, and you can protect it again afterwards.'
+    ),
+    'Este PDF está protegido por senha. Alterá-lo aqui geraria uma cópia sem a proteção; use "Remover senha" em Proteger e, se quiser, proteja o resultado de novo depois.': (
+        'This PDF is password-protected. Changing it here would produce an unprotected copy; use "Remove password" in Protect and, if you want, protect the result again afterwards.'
+    ),
+    'O autor deste PDF não permite copiar o conteúdo dele (texto e imagens). Para extrair, use "Remover senha" em Proteger informando a senha de permissões.': (
+        'The author of this PDF does not allow copying its content (text and images). To extract, use "Remove password" in Protect with the permissions password.'
+    ),
+    'Não foi possível carregar o certificado .pfx (senha incorreta ou arquivo inválido).': (
+        'Could not load the .pfx certificate (wrong password or invalid file).'
+    ),
+    'Falha ao gerar o certificado de teste.': 'Failed to generate the test certificate.',
+    'Informe um certificado .pfx ou os dados para gerar um certificado de teste.': (
+        'Provide a .pfx certificate or the details to generate a test certificate.'
+    ),
+    'Expressão regular inválida: {error}': 'Invalid regular expression: {error}',
+    'A página {page} ainda tem texto depois da redação. O arquivo não foi salvo.': (
+        'Page {page} still has text after redaction. The file was not saved.'
+    ),
+    'A página {page} tem conteúdo inesperado depois da redação. O arquivo não foi salvo.': (
+        'Page {page} has unexpected content after redaction. The file was not saved.'
+    ),
+    'Na página {page}, uma área marcada ainda mostra conteúdo depois da redação. O arquivo não foi salvo.': (
+        'On page {page}, a marked area still shows content after redaction. The file was not saved.'
+    ),
+    'A sanitização não conseguiu remover: {problems}. O arquivo não foi salvo.': (
+        'Sanitization could not remove: {problems}. The file was not saved.'
+    ),
 }

@@ -24,6 +24,9 @@ build = ["pyinstaller>=6.0"]
 [tool.setuptools]
 packages = ["core", "ui"]
 
+[tool.setuptools.package-data]
+core = ["data/fonts/*", "data/icc/*"]
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

@@ -126,6 +126,14 @@ def _restore_one(widget: QWidget, state: Any) -> None:
                 if text is not None:
                     widget.setItem(row, column, QTableWidgetItem(text))
     elif isinstance(widget, QListWidget):
+        if _same_items(widget, state):
+            # Mesmos itens, com o texto já no idioma novo (ex.: idiomas do OCR): só as
+            # marcações voltam.
+            for row, item_state in enumerate(state):
+                check = item_state["data"].get(int(Qt.ItemDataRole.CheckStateRole.value))
+                if check is not None:
+                    widget.item(row).setData(Qt.ItemDataRole.CheckStateRole, check)
+            return
         widget.clear()
         for item_state in state:
             item = QListWidgetItem(item_state["icon"], item_state["text"])
@@ -135,6 +143,17 @@ def _restore_one(widget: QWidget, state: Any) -> None:
             widget.addItem(item)
     elif isinstance(widget, QAbstractButton):
         widget.setChecked(state)
+
+
+def _same_items(widget: QListWidget, state: list[dict[str, Any]]) -> bool:
+    user_role = int(Qt.ItemDataRole.UserRole.value)
+    if widget.count() != len(state) or not state:
+        return False
+    for row, item_state in enumerate(state):
+        value = item_state["data"].get(user_role)
+        if value is None or widget.item(row).data(Qt.ItemDataRole.UserRole) != value:
+            return False
+    return True
 
 
 def capture_state(root: QWidget) -> list[tuple[type, Any]]:

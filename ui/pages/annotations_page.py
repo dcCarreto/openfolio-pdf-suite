@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 from core.annotations import AddAnnotations, ExportAnnotationsCSV
 from ui.annotation_state import AnnotationState, DEFAULT_COLOR
 from ui.document_session import DocumentSession
-from ui.i18n import tr
+from ui.i18n import error_text, tr
 from ui.tasks import call, run_task
 from ui.stamp_library import StampLibrary
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -100,7 +100,7 @@ class AnnotationsPage(QWidget):
         self.stamp_combo.editTextChanged.connect(self._on_stamp_text_edited)
 
         self._stamp_library = StampLibrary()
-        self._stamp_entries: list[tuple[str, str | None] | None] = []
+        self._stamp_entries: list[tuple[str, str | None, str | None] | None] = []  # (texto, cor, nome salvo)
         self._reload_stamp_combo()
 
         self.new_stamp_name_edit = QLineEdit()
@@ -130,8 +130,8 @@ class AnnotationsPage(QWidget):
         save_button = QPushButton(tr("Salvar anotações"))
         save_button.clicked.connect(self._save)
 
-        self.export_csv_picker = FilePicker(mode="save", file_filter="CSV (*.csv)")
-        export_csv_button = QPushButton(tr("Exportar comentários (CSV)"))
+        self.export_csv_picker = FilePicker(mode="save", file_filter="CSV (*.csv);;Excel (*.xlsx)")
+        export_csv_button = QPushButton(tr("Exportar comentários (CSV ou Excel)"))
         export_csv_button.clicked.connect(self._export_csv)
 
         layout = QVBoxLayout(self)
@@ -162,7 +162,7 @@ class AnnotationsPage(QWidget):
         for text in _STAMP_TEXTS:
             label = tr(text)
             self.stamp_combo.addItem(label)
-            self._stamp_entries.append((label, None))
+            self._stamp_entries.append((label, None, None))
 
         custom_stamps = self._stamp_library.list_stamps()
         if custom_stamps:
@@ -170,7 +170,7 @@ class AnnotationsPage(QWidget):
             self._stamp_entries.append(None)
             for stamp in custom_stamps:
                 self.stamp_combo.addItem(stamp.name)
-                self._stamp_entries.append((stamp.text, stamp.color))
+                self._stamp_entries.append((stamp.text, stamp.color, stamp.name))
         self.stamp_combo.blockSignals(False)
 
         target_index = 0
@@ -187,7 +187,7 @@ class AnnotationsPage(QWidget):
         entry = self._stamp_entries[index]
         if entry is None:
             return
-        text, color = entry
+        text, color, _name = entry
         self.annotation_state.set_stamp_text(text)
         if color is not None:
             self.annotation_state.set_color(color)
@@ -212,7 +212,7 @@ class AnnotationsPage(QWidget):
             self._stamp_library.add_stamp(name, text, color=self.annotation_state.active_color())
         except Exception as exc:
             QMessageBox.critical(
-                self, tr("Anotações"), tr("Falha ao salvar carimbo: {error}").format(error=exc)
+                self, tr("Anotações"), tr("Falha ao salvar carimbo: {error}").format(error=error_text(exc))
             )
             return
 
@@ -223,13 +223,14 @@ class AnnotationsPage(QWidget):
     def _remove_custom_stamp(self):
         index = self.stamp_combo.currentIndex()
         entry = self._stamp_entries[index] if 0 <= index < len(self._stamp_entries) else None
-        if entry is None or entry[1] is None:
+        if entry is None or entry[2] is None:
             QMessageBox.warning(
                 self, tr("Anotações"), tr("Selecione um carimbo customizado para remover.")
             )
             return
 
-        self._stamp_library.remove_stamp(self.stamp_combo.currentText())
+        # Pelo nome salvo: o combo é editável, e o texto dele pode já ter sido alterado.
+        self._stamp_library.remove_stamp(entry[2])
         self._reload_stamp_combo()
 
     def _update_stamp_visibility(self):

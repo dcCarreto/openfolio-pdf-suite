@@ -4,6 +4,7 @@ from pypdf import PdfWriter
 from reportlab.lib.colors import Color
 
 from .base import PDFOperation, open_reader, write_pdf
+from .fonts import SANS_BOLD, register_fonts
 from .geometry import PageGeometry
 from .overlay import materialize_inherited_attributes, visual_overlay
 
@@ -24,12 +25,13 @@ class AddWatermark(PDFOperation):
         reader = open_reader(input_path)
         writer = PdfWriter(clone_from=reader)
         materialize_inherited_attributes(writer)
+        register_fonts()
 
         def draw(canvas, width: float, height: float) -> None:
             canvas.translate(width / 2, height / 2)
             canvas.rotate(rotation)
             canvas.setFillColor(Color(0, 0, 0, alpha=opacity))
-            canvas.setFont("Helvetica-Bold", font_size)
+            canvas.setFont(SANS_BOLD, font_size)
             canvas.drawCentredString(0, 0, text)
 
         for source_page, page in zip(reader.pages, writer.pages):

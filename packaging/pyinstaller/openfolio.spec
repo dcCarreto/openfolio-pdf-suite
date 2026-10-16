@@ -36,6 +36,10 @@ a = Analysis(
     datas=[
         (str(PROJECT_ROOT / "assets" / "icon.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "logo.svg"), "assets"),
+        # Fontes embutidas no texto que o app desenha nos PDFs (core/fonts.py) e o perfil
+        # de cor sRGB dos arquivos PDF/A (core/pdfa.py).
+        (str(PROJECT_ROOT / "core" / "data" / "fonts"), "core/data/fonts"),
+        (str(PROJECT_ROOT / "core" / "data" / "icc"), "core/data/icc"),
     ],
     hiddenimports=[
         "pyhanko_certvalidator",

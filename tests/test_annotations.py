@@ -1,5 +1,7 @@
 """Testes de core/annotations.py: gravação de anotações reais em um PDF."""
 
+import re
+
 import pytest
 from reportlab.pdfgen import canvas as rl_canvas
 from pypdf import PdfReader
@@ -66,7 +68,7 @@ def test_ink_and_stamp_get_an_appearance_stream(tmp_path):
     AddAnnotations().run(str(path_in), str(path_out), specs)
 
     by_subtype = _annotations_by_subtype(path_out)
-    for subtype in ("/PolyLine", "/FreeText"):
+    for subtype in ("/Ink", "/FreeText"):
         annotation = by_subtype[subtype]
         assert "/AP" in annotation
         appearance = annotation["/AP"]["/N"].get_object()
@@ -223,3 +225,96 @@ def test_stamp_appearance_is_rotated_with_the_page(tmp_path, make_text_pdf):
     appearance = annotation["/AP"]["/N"].get_object()
     assert [float(v) for v in appearance["/Matrix"]] == [0, 1, -1, 0, 0, 0]
     assert [float(v) for v in appearance["/BBox"]] == [0, 0, 160, 40]
+
+
+def test_comments_csv_counts_pages_from_one_and_opens_in_excel(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    path_annotated = tmp_path / "annotated.pdf"
+    _make_pdf(path_in, "texto de exemplo")
+    AddAnnotations().run(
+        str(path_in),
+        str(path_annotated),
+        [AnnotationSpec(page_index=0, kind="note", position=(40, 200), text="=CMD|' /C calc'!A0")],
+    )
+    csv_path = tmp_path / "comentarios.csv"
+
+    ExportAnnotationsCSV().run(str(path_annotated), str(csv_path))
+
+    raw = csv_path.read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf")  # BOM: o Excel em português lê os acentos
+    rows = raw.decode("utf-8-sig").splitlines()
+    assert rows[1].startswith("1,")  # primeira página = 1
+    assert ",'=CMD" in rows[1]  # não vira fórmula no Excel
+
+
+def test_comments_export_to_xlsx(tmp_path):
+    from openpyxl import load_workbook
+
+    path_in = tmp_path / "doc.pdf"
+    path_annotated = tmp_path / "annotated.pdf"
+    _make_pdf(path_in, "texto de exemplo")
+    AddAnnotations().run(
+        str(path_in), str(path_annotated), [AnnotationSpec(page_index=0, kind="note", position=(40, 200), text="Ótimo")]
+    )
+    xlsx_path = tmp_path / "comentarios.xlsx"
+
+    ExportAnnotationsCSV().run(str(path_annotated), str(xlsx_path))
+
+    rows = list(load_workbook(xlsx_path).active.iter_rows(values_only=True))
+    assert rows[0] == ("pagina", "tipo", "autor", "texto", "cor")
+    assert rows[1][0] == 1 and rows[1][3] == "Ótimo"
+
+
+def test_ink_is_saved_as_ink_with_color_width_author_and_date(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    path_out = tmp_path / "out.pdf"
+    _make_pdf(path_in, "texto")
+
+    AddAnnotations().run(
+        str(path_in),
+        str(path_out),
+        [AnnotationSpec(page_index=0, kind="ink", color="ff0000", points=[(10, 10), (20, 30), (40, 15)])],
+        author="Revisora",
+    )
+
+    (ink,) = [ref.get_object() for ref in PdfReader(str(path_out)).pages[0]["/Annots"]]
+    assert ink["/Subtype"] == "/Ink"
+    assert [float(v) for v in ink["/InkList"][0]] == [10, 10, 20, 30, 40, 15]
+    assert [float(v) for v in ink["/C"]] == [1, 0, 0]
+    assert float(ink["/BS"]["/W"]) > 0
+    assert ink["/T"] == "Revisora"
+    assert str(ink["/M"]).startswith("D:")
+
+
+def test_note_keeps_the_chosen_color(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    path_out = tmp_path / "out.pdf"
+    _make_pdf(path_in, "texto")
+
+    AddAnnotations().run(
+        str(path_in), str(path_out), [AnnotationSpec(page_index=0, kind="note", color="2196f3", position=(40, 200), text="oi")]
+    )
+
+    (note,) = [ref.get_object() for ref in PdfReader(str(path_out)).pages[0]["/Annots"]]
+    assert [round(float(v), 2) for v in note["/C"]] == [0.13, 0.59, 0.95]
+    assert note["/T"]  # autor padrão: o usuário do sistema
+
+
+def test_stamp_appearance_uses_the_embedded_font_and_fits_long_text(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    path_out = tmp_path / "out.pdf"
+    _make_pdf(path_in, "texto")
+
+    AddAnnotations().run(
+        str(path_in),
+        str(path_out),
+        [AnnotationSpec(page_index=0, kind="stamp", position=(100, 100), text="ŁÓDŹ ΩМЕГА — APROVADO COM RESSALVAS")],
+    )
+
+    appearance = _annotations_by_subtype(path_out)["/FreeText"]["/AP"]["/N"].get_object()
+    fonts = [ref.get_object() for ref in appearance["/Resources"]["/Font"].values()]
+    (font,) = [f for f in fonts if "DejaVuSans-Bold" in str(f["/BaseFont"])]
+    descendant = font["/DescendantFonts"][0].get_object() if "/DescendantFonts" in font else font
+    assert "/FontFile2" in descendant["/FontDescriptor"]  # embutida
+    sizes = [float(token) for token in re.findall(rb"([\d.]+) Tf", appearance.get_data())]
+    assert sizes and min(sizes) < 14  # texto longo encolhe para caber na caixa

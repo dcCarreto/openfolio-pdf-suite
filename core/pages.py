@@ -9,6 +9,7 @@ from pypdf import PdfWriter
 
 from .base import PDFOperation, open_reader, require_valid_page_index, write_pdf
 from .document import pages_writer
+from .messages import Message
 
 
 def _page_list(pages: list[int]) -> str:
@@ -51,12 +52,16 @@ class ReorderPages(PDFOperation):
             require_valid_page_index(total_pages, index)
         duplicated = {index for index in order if order.count(index) > 1}
         if duplicated:
-            raise ValueError(f"Página(s) repetida(s) na nova ordem: {_page_list(duplicated)}.")
+            raise ValueError(Message("Página(s) repetida(s) na nova ordem: {pages}.", pages=_page_list(duplicated)))
         missing = set(range(total_pages)) - set(order)
         if missing:
             raise ValueError(
-                f"A nova ordem precisa incluir todas as {total_pages} páginas; faltam: "
-                f"{_page_list(missing)}. Para tirar páginas, use Remover."
+                Message(
+                    "A nova ordem precisa incluir todas as {total} páginas; faltam: {pages}. "
+                    "Para tirar páginas, use Remover.",
+                    total=total_pages,
+                    pages=_page_list(missing),
+                )
             )
 
         write_pdf(pages_writer([(reader, order)]), output_path)
@@ -88,8 +93,11 @@ class InsertPages(PDFOperation):
         total_pages = len(reader.pages)
         if not 0 <= at_index <= total_pages:
             raise ValueError(
-                f"Posição de inserção inválida: o documento tem {total_pages} página(s); dá "
-                f"para inserir antes da página 1 até depois da página {total_pages}."
+                Message(
+                    "Posição de inserção inválida: o documento tem {total} página(s); dá para "
+                    "inserir antes da página 1 até depois da página {total}.",
+                    total=total_pages,
+                )
             )
 
         parts = [
@@ -118,8 +126,12 @@ class ReplacePages(PDFOperation):
         require_valid_page_index(total_pages, start_index, label="Página inicial")
         if not start_index < end_index <= total_pages:
             raise ValueError(
-                f"Intervalo inválido: a página final precisa vir depois da inicial "
-                f"({start_index + 1}) e o documento tem {total_pages} página(s)."
+                Message(
+                    "Intervalo inválido: a página final precisa vir depois da inicial ({start}) e "
+                    "o documento tem {total} página(s).",
+                    start=start_index + 1,
+                    total=total_pages,
+                )
             )
 
         parts = [

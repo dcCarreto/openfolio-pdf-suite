@@ -10,6 +10,8 @@ import pypdfium2 as pdfium
 from pypdf import PasswordType, PdfReader, PdfWriter
 from pypdf.constants import UserAccessPermissions
 
+from .messages import Message
+
 
 class PDFOperation:
     """Interface base para operações sobre arquivos PDF."""
@@ -145,6 +147,20 @@ def atomic_output(output_path: str) -> Iterator[str]:
             os.remove(temp_path)
 
 
+def add_object(writer: PdfWriter, obj):
+    """Registra `obj` como objeto indireto do `writer` e devolve a referência.
+
+    O pypdf não tem API pública para isso; o acesso à API privada fica concentrado aqui e
+    em `replace_object`, para que uma mudança no pypdf quebre um lugar só."""
+    return writer._add_object(obj)
+
+
+def replace_object(writer: PdfWriter, reference, obj) -> None:
+    """Põe `obj` no lugar do objeto indireto `reference` do `writer`: quem aponta para a
+    referência (páginas, formulários) passa a ver o objeto novo."""
+    writer._replace_object(reference, obj)
+
+
 def write_pdf(writer: PdfWriter, output_path: str) -> None:
     """Grava o PDF de forma atômica (ver `atomic_output`)."""
     with atomic_output(output_path) as temp_path:
@@ -157,5 +173,10 @@ def require_valid_page_index(total_pages: int, index: int, *, label: str = "Pág
     documento. A mensagem fala em páginas contadas a partir de 1, como o usuário as vê."""
     if not 0 <= index < total_pages:
         raise ValueError(
-            f"{label} {index + 1} não existe: o documento tem {total_pages} página(s)."
+            Message(
+                "{label} {page} não existe: o documento tem {total} página(s).",
+                label=Message(label),
+                page=index + 1,
+                total=total_pages,
+            )
         )

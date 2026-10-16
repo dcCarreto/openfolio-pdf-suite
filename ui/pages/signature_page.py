@@ -23,7 +23,7 @@ from core.signature import (
     SignDocument,
 )
 from ui import i18n
-from ui.i18n import tr
+from ui.i18n import tr, tr_message
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -89,7 +89,7 @@ def format_signature_info(info: SignatureInfo, number: int, total: int) -> str:
         tr("Resultado: {verdict}").format(verdict=tr(_VERDICT_LABELS[info.verdict])),
     ]
     if info.error:
-        lines.append(tr("Não foi possível verificar esta assinatura: {error}").format(error=info.error))
+        lines.append(tr("Não foi possível verificar esta assinatura: {error}").format(error=tr_message(info.error)))
         return "\n".join(lines)
 
     issuer = (

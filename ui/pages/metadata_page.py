@@ -3,14 +3,15 @@
 from PySide6.QtWidgets import QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from core.metadata import ReadMetadata, SetMetadata
-from ui.i18n import tr
+from ui.i18n import error_text, tr
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 
 class MetadataPage(QWidget):
-    """Permite ler e editar os metadados (título, autor, assunto, palavras-chave) de um PDF."""
+    """Permite ler e editar os metadados (título, autor, assunto, palavras-chave, aplicativos
+    de origem) de um PDF, e mostra as datas de criação e modificação."""
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
@@ -28,6 +29,12 @@ class MetadataPage(QWidget):
         self.subject_edit = QLineEdit()
         self.keywords_edit = QLineEdit()
         self.keywords_edit.setPlaceholderText(tr("Separadas por vírgula"))
+        self.creator_edit = QLineEdit()
+        self.creator_edit.setPlaceholderText(tr("Aplicativo em que o documento foi criado"))
+        self.producer_edit = QLineEdit()
+        self.producer_edit.setPlaceholderText(tr("Aplicativo que gerou o PDF"))
+        self.dates_label = QLabel()
+        self.dates_label.setWordWrap(True)
 
         self.output_picker = FilePicker(
             mode="save", suggested_source=session.path, suggested_suffix="metadados"
@@ -47,6 +54,11 @@ class MetadataPage(QWidget):
         layout.addWidget(self.subject_edit)
         layout.addWidget(QLabel(tr("Palavras-chave:")))
         layout.addWidget(self.keywords_edit)
+        layout.addWidget(QLabel(tr("Criado com:")))
+        layout.addWidget(self.creator_edit)
+        layout.addWidget(QLabel(tr("Produtor do PDF:")))
+        layout.addWidget(self.producer_edit)
+        layout.addWidget(self.dates_label)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
         layout.addWidget(save_button)
@@ -61,7 +73,7 @@ class MetadataPage(QWidget):
             self._apply_metadata_fields(ReadMetadata().run(input_path))
         except Exception as exc:
             QMessageBox.critical(
-                self, tr("Metadados"), tr("Falha ao ler metadados: {error}").format(error=exc)
+                self, tr("Metadados"), tr("Falha ao ler metadados: {error}").format(error=error_text(exc))
             )
 
     def _auto_load(self):
@@ -78,6 +90,17 @@ class MetadataPage(QWidget):
         self.author_edit.setText(metadata["author"])
         self.subject_edit.setText(metadata["subject"])
         self.keywords_edit.setText(metadata["keywords"])
+        self.creator_edit.setText(metadata["creator"])
+        self.producer_edit.setText(metadata["producer"])
+
+        def describe(moment):
+            return moment.strftime("%d/%m/%Y %H:%M") if moment is not None else tr("não informada")
+
+        self.dates_label.setText(
+            tr("Criado em: {created}. Modificado em: {modified}.").format(
+                created=describe(metadata["created"]), modified=describe(metadata["modified"])
+            )
+        )
 
     def _save(self):
         input_path = self.session.path()
@@ -98,6 +121,8 @@ class MetadataPage(QWidget):
             author=self.author_edit.text(),
             subject=self.subject_edit.text(),
             keywords=self.keywords_edit.text(),
+            creator=self.creator_edit.text(),
+            producer=self.producer_edit.text(),
         )
 
         def done(_result):

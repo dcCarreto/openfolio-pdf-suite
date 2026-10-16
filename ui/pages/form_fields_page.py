@@ -48,9 +48,9 @@ _MODES = [
     "Adicionar campo",
     "Adicionar grupo de opções",
     "Listar campos",
-    "Exportar dados (CSV)",
+    "Exportar dados (CSV ou Excel)",
     "Exportar dados (FDF)",
-    "Importar dados (CSV)",
+    "Importar dados (CSV ou Excel)",
     "Importar dados (FDF)",
     "Achatar formulário",
 ]
@@ -376,7 +376,7 @@ class FormFieldsPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        file_filter = "CSV (*.csv)" if fmt == "csv" else "FDF (*.fdf)"
+        file_filter = "CSV (*.csv);;Excel (*.xlsx)" if fmt == "csv" else "FDF (*.fdf)"
         output_picker = FilePicker(mode="save", file_filter=file_filter)
 
         export_button = QPushButton(tr("Exportar"))
@@ -420,7 +420,7 @@ class FormFieldsPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        file_filter = "CSV (*.csv)" if fmt == "csv" else "FDF (*.fdf)"
+        file_filter = "CSV (*.csv);;Excel (*.xlsx)" if fmt == "csv" else "FDF (*.fdf)"
         data_picker = FilePicker(mode="open", file_filter=file_filter)
         output_picker = FilePicker(
             mode="save", suggested_source=self.session.path, suggested_suffix="preenchido"
@@ -429,7 +429,7 @@ class FormFieldsPage(QWidget):
         import_button = QPushButton(tr("Importar"))
         import_button.clicked.connect(lambda: self._import_data(fmt, data_picker, output_picker))
 
-        label = tr("Arquivo CSV com os dados:") if fmt == "csv" else tr("Arquivo FDF com os dados:")
+        label = tr("Arquivo CSV ou Excel com os dados:") if fmt == "csv" else tr("Arquivo FDF com os dados:")
         layout.addWidget(QLabel(label))
         layout.addWidget(data_picker)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))

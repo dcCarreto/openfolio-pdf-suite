@@ -7,6 +7,7 @@ from pypdf import PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject
 
 from .base import READ, PDFOperation, open_reader, write_pdf
+from .messages import Message
 
 
 @dataclass
@@ -29,16 +30,24 @@ class ListLayers(PDFOperation):
         oc_properties = oc_properties_ref.get_object()
 
         ocg_refs = oc_properties.get("/OCGs") or []
-        default_config_ref = oc_properties.get("/D")
-        off_refs = (
-            default_config_ref.get_object().get("/OFF") or [] if default_config_ref is not None else []
-        )
+        default_config = oc_properties.get("/D")
+        default_config = default_config.get_object() if default_config is not None else {}
+        on_refs = default_config.get("/ON") or []
+        off_refs = default_config.get("/OFF") or []
+        # /BaseState diz o estado das camadas que não estão em /ON nem em /OFF; com
+        # /BaseState /OFF, antes todas apareciam como visíveis.
+        base_visible = default_config.get("/BaseState") != "/OFF"
 
         layers = []
         for index, ocg_ref in enumerate(ocg_refs):
             ocg = ocg_ref.get_object()
             name = str(ocg.get("/Name", "")) or f"Camada {index + 1}"
-            visible = ocg_ref not in off_refs
+            if ocg_ref in on_refs:
+                visible = True
+            elif ocg_ref in off_refs:
+                visible = False
+            else:
+                visible = base_visible
             layers.append(LayerInfo(index=index, name=name, visible=visible))
         return layers
 
@@ -62,8 +71,11 @@ class SetLayerVisibility(PDFOperation):
         ocg_refs = oc_properties.get("/OCGs") or []
         if not 0 <= layer_index < len(ocg_refs):
             raise ValueError(
-                f"Índice de camada inválido: {layer_index} (o documento tem {len(ocg_refs)} "
-                f"camada(s), de 0 a {len(ocg_refs) - 1})."
+                Message(
+                    "A camada {number} não existe: o documento tem {count} camada(s).",
+                    number=layer_index + 1,
+                    count=len(ocg_refs),
+                )
             )
         target_ref = ocg_refs[layer_index]
 

@@ -586,3 +586,82 @@ def test_add_field_registers_its_font_when_the_form_has_no_default_resources(tmp
 
     acroform = PdfReader(str(output_path)).trailer["/Root"]["/AcroForm"]
     assert acroform["/DR"]["/Font"]
+
+
+def test_fdf_export_writes_checkbox_state_as_a_name_and_nests_hierarchical_names(tmp_path):
+    form = _build_pdf_with_various_fields(tmp_path)
+    filled = tmp_path / "filled.pdf"
+    seed = tmp_path / "seed.csv"
+    seed.write_text("campo,valor\naceite,/Yes\nnome,Ana\n", encoding="utf-8")
+    ImportFormDataCSV().run(str(form), str(filled), str(seed))
+    fdf_path = tmp_path / "dados.fdf"
+
+    ExportFormDataFDF().run(str(filled), str(fdf_path))
+
+    text = fdf_path.read_text(encoding="latin-1")
+    assert "/V /Yes" in text  # nome, não a string "(/Yes)"
+    hierarchical = tmp_path / "hier.fdf"
+    ExportFormDataFDF().run(str(_hierarchical_form(tmp_path)), str(hierarchical))
+    assert "/Kids [" in hierarchical.read_text(encoding="latin-1")
+
+
+def test_fdf_import_understands_acrobat_syntax(tmp_path):
+    fdf_path = tmp_path / "acrobat.fdf"
+    fdf_path.write_bytes(
+        b"%FDF-1.2\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<< /FDF << /Fields [\n"
+        # Escapes do próprio FDF: octal (\343 = ã), parênteses escapados e \n.
+        rb"<< /T (cliente) /Kids [ << /T (nome) /V (Jo\343o \(filho\)\nSilva) >> ] >>" b"\n"
+        b"] >> >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"
+    )
+    output = tmp_path / "out.pdf"
+
+    result = ImportFormDataFDF().run(str(_hierarchical_form(tmp_path)), str(output), str(fdf_path))
+
+    assert result.filled == 1
+    assert PdfReader(str(output)).get_fields()["cliente.nome"]["/V"] == "João (filho)\nSilva"
+
+
+def test_fdf_import_reads_checkbox_names(tmp_path):
+    form = _build_pdf_with_various_fields(tmp_path)
+    fdf_path = tmp_path / "marcado.fdf"
+    fdf_path.write_bytes(b"%FDF-1.2\n1 0 obj << /FDF << /Fields [ << /T (aceite) /V /Yes >> ] >> >> endobj\n%%EOF")
+    output = tmp_path / "out.pdf"
+
+    ImportFormDataFDF().run(str(form), str(output), str(fdf_path))
+
+    assert PdfReader(str(output)).get_fields()["aceite"]["/V"] == "/Yes"
+
+
+def test_csv_export_protects_formulas_and_import_round_trips(tmp_path):
+    form = _build_pdf_with_various_fields(tmp_path)
+    filled = tmp_path / "filled.pdf"
+    seed = tmp_path / "seed.csv"
+    seed.write_text('campo,valor\nnome,"=HYPERLINK(""http://x"")"\n', encoding="utf-8")
+    ImportFormDataCSV().run(str(form), str(filled), str(seed))
+    exported = tmp_path / "dados.csv"
+
+    ExportFormDataCSV().run(str(filled), str(exported))
+
+    assert "'=HYPERLINK" in exported.read_text(encoding="utf-8-sig")
+    again = tmp_path / "again.pdf"
+    ImportFormDataCSV().run(str(form), str(again), str(exported))
+    assert PdfReader(str(again)).get_fields()["nome"]["/V"] == '=HYPERLINK("http://x")'
+
+
+def test_form_data_round_trips_through_xlsx(tmp_path):
+    from openpyxl import load_workbook
+
+    form = _build_pdf_with_various_fields(tmp_path)
+    filled = tmp_path / "filled.pdf"
+    seed = tmp_path / "seed.csv"
+    seed.write_text("campo,valor\nnome,=1+1\n", encoding="utf-8")
+    ImportFormDataCSV().run(str(form), str(filled), str(seed))
+    xlsx = tmp_path / "dados.xlsx"
+
+    ExportFormDataCSV().run(str(filled), str(xlsx))
+
+    cell = next(row for row in load_workbook(xlsx).active.iter_rows() if row[0].value == "nome")[2]
+    assert cell.value == "=1+1" and cell.data_type == "s"  # texto, não fórmula
+    again = tmp_path / "again.pdf"
+    ImportFormDataCSV().run(str(form), str(again), str(xlsx))
+    assert PdfReader(str(again)).get_fields()["nome"]["/V"] == "=1+1"

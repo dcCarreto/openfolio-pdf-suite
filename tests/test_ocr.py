@@ -51,10 +51,29 @@ def test_get_available_languages_returns_empty_when_tesseract_missing(monkeypatc
     assert ocr.get_available_languages() == []
 
 
+@pytest.fixture(autouse=True)
+def _fresh_language_cache():
+    ocr._installed_languages.cache_clear()
+    yield
+    ocr._installed_languages.cache_clear()
+
+
 def test_get_available_languages_excludes_osd(monkeypatch):
     monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
     monkeypatch.setattr(ocr.pytesseract, "get_languages", lambda config: ["eng", "osd", "por"])
     assert ocr.get_available_languages() == ["eng", "por"]
+    assert ocr.has_orientation_data()
+
+
+def test_languages_are_asked_to_tesseract_only_once(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+    monkeypatch.setattr(ocr.pytesseract, "get_languages", lambda config: calls.append(1) or ["por"])
+
+    ocr.get_available_languages()
+    ocr.get_available_languages()
+
+    assert calls == [1]  # a aba de OCR não roda o Tesseract de novo a cada troca de idioma
 
 
 def test_run_raises_when_tesseract_missing(monkeypatch, tmp_path):
@@ -190,6 +209,158 @@ def test_invisible_text_lands_on_the_recognized_word_on_hard_pages(monkeypatch, 
     scale = ocr._OCR_SCALE
     word_left, word_top = word_px[0] / scale, geometry.height - word_px[1] / scale
     word_bottom = word_top - word_px[3] / scale
-    assert left == pytest.approx(word_left, abs=3)
+    # A caixa do caractere mede a tinta do glifo; com a palavra esticada na largura da
+    # imagem (Tz), o recuo lateral do "H" também estica um pouco.
+    assert left == pytest.approx(word_left, abs=4)
     assert word_bottom - 3 <= bottom and top <= word_top + 3
     assert right - left > top - bottom  # a palavra corre na horizontal, como na tela
+
+
+
+def _blank_pdf(path, pages=1, size=(400, 300)):
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    for _ in range(pages):
+        writer.add_blank_page(width=size[0], height=size[1])
+    with open(path, "wb") as f:
+        writer.write(f)
+    return path
+
+
+def _char_boxes(path):
+    import pypdfium2 as pdfium
+
+    document = pdfium.PdfDocument(str(path))
+    try:
+        textpage = document[0].get_textpage()
+        boxes = [textpage.get_charbox(i, loose=True) for i in range(textpage.count_chars())]
+        text = textpage.get_text_range()
+        textpage.close()
+    finally:
+        document.close()
+    return text, boxes
+
+
+def test_invisible_word_spans_the_recognized_width(monkeypatch, tmp_path):
+    # Sem a escala horizontal (Tz), "Hi" ficava bem mais estreito que a palavra na imagem
+    # e a seleção não cobria o que aparece na tela.
+    path_in = _blank_pdf(tmp_path / "scan.pdf")
+    word_px = (100, 100, 600, 50)  # palavra larga: 144 pt
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+    monkeypatch.setattr(ocr, "_run_tesseract", lambda image, language: _fake_ocr_data([("Hi", *word_px, 90)]))
+    path_out = tmp_path / "out.pdf"
+
+    ocr.OCRDocument().run(str(path_in), str(path_out))
+
+    text, boxes = _char_boxes(path_out)
+    assert text.strip() == "Hi"
+    left, right = min(b[0] for b in boxes), max(b[2] for b in boxes)
+    expected_width = word_px[2] / ocr._OCR_SCALE
+    assert right - left == pytest.approx(expected_width, rel=0.1)
+
+
+def _scan_with_stamp(path, stamp_text="PROTOCOLO 123"):
+    """Página "escaneada" (uma imagem cobrindo a página) com um carimbo de texto por cima."""
+    import io
+
+    from PIL import Image
+    from reportlab.lib.utils import ImageReader
+
+    buffer = io.BytesIO()
+    Image.new("L", (400, 300), 230).save(buffer, format="PNG")
+    buffer.seek(0)
+    canvas = rl_canvas.Canvas(str(path), pagesize=(400, 300))
+    canvas.drawImage(ImageReader(buffer), 0, 0, 400, 300)
+    canvas.setFont("Helvetica", 10)
+    canvas.drawString(300, 280, stamp_text)
+    canvas.showPage()
+    canvas.save()
+    return path
+
+
+def test_scanned_page_with_a_text_stamp_still_gets_ocr(monkeypatch, tmp_path):
+    path_in = _scan_with_stamp(tmp_path / "scan.pdf")
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+    monkeypatch.setattr(
+        ocr, "_run_tesseract", lambda image, language: _fake_ocr_data([("Contrato", 100, 400, 300, 50, 90)])
+    )
+    path_out = tmp_path / "out.pdf"
+
+    assert ocr.OCRDocument().run(str(path_in), str(path_out)) == 1
+
+    text = PdfReader(str(path_out)).pages[0].extract_text()
+    assert "Contrato" in text and "PROTOCOLO" in text
+
+
+def test_page_with_real_text_is_skipped_in_auto_mode_but_not_in_force_mode(monkeypatch, tmp_path):
+    path_in = tmp_path / "texto.pdf"
+    _make_pdf_with_text(path_in, "texto de verdade " * 20)
+    calls = []
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+    monkeypatch.setattr(ocr, "_run_tesseract", lambda image, language: calls.append(language) or _fake_ocr_data([]))
+
+    ocr.OCRDocument().run(str(path_in), str(tmp_path / "auto.pdf"), mode="auto")
+    assert calls == []
+    ocr.OCRDocument().run(str(path_in), str(tmp_path / "force.pdf"), mode="force", language="por+eng")
+    assert calls == ["por+eng"]  # vários idiomas vão juntos para o Tesseract
+
+
+def test_dpi_controls_the_rendered_image(monkeypatch, tmp_path):
+    path_in = _blank_pdf(tmp_path / "scan.pdf")
+    sizes = []
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+    monkeypatch.setattr(ocr, "_run_tesseract", lambda image, language: sizes.append(image.size) or _fake_ocr_data([]))
+
+    ocr.OCRDocument().run(str(path_in), str(tmp_path / "out.pdf"), dpi=144)
+
+    assert sizes == [(800, 600)]
+
+
+@pytest.mark.parametrize("kwargs", [{"dpi": 20}, {"mode": "sempre"}, {"language": ""}, {"language": "por+"}])
+def test_invalid_options_are_rejected(monkeypatch, tmp_path, kwargs):
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+
+    with pytest.raises(ValueError):
+        ocr.OCRDocument().run(str(_blank_pdf(tmp_path / "scan.pdf")), str(tmp_path / "out.pdf"), **kwargs)
+
+
+@pytest.mark.parametrize("rotation", [90, 180, 270])
+def test_sideways_scan_text_follows_the_lines_in_the_image(monkeypatch, tmp_path, rotation):
+    # Página digitalizada de lado: o Tesseract recebe a imagem já de pé, e o texto
+    # invisível precisa voltar para onde a palavra está na imagem original, na direção dela.
+    path_in = _blank_pdf(tmp_path / "scan.pdf", size=(400, 400))
+    image_side = round(400 * ocr._OCR_SCALE)
+    received = []
+
+    def fake_tesseract(image, language):
+        received.append(image.size)
+        return _fake_ocr_data([("Palavra", 300, 200, 600, 80, 90)])  # no canto superior esquerdo da imagem de pé
+
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+    monkeypatch.setattr(ocr, "_detect_rotation", lambda image: rotation)
+    monkeypatch.setattr(ocr, "_run_tesseract", fake_tesseract)
+    path_out = tmp_path / "out.pdf"
+
+    ocr.OCRDocument().run(str(path_in), str(path_out), detect_orientation=True)
+
+    assert received == [(image_side, image_side)]
+    _text, boxes = _char_boxes(path_out)
+    left, bottom = min(b[0] for b in boxes), min(b[1] for b in boxes)
+    right, top = max(b[2] for b in boxes), max(b[3] for b in boxes)
+
+    # Onde a palavra (x 300..900, y 200..280 na imagem de pé) fica na página, em pontos PDF.
+    scale = ocr._OCR_SCALE
+    s_ = image_side
+    expected = {
+        90: ((200, 280), (300, 900)),
+        180: ((s_ - 900, s_ - 300), (200, 280)),
+        270: ((s_ - 280, s_ - 200), (s_ - 900, s_ - 300)),
+    }[rotation]
+    (x0, x1), (y0, y1) = expected
+    assert (left + right) / 2 == pytest.approx((x0 + x1) / 2 / scale, abs=8)
+    assert (bottom + top) / 2 == pytest.approx((y0 + y1) / 2 / scale, abs=8)
+    if rotation == 180:
+        assert right - left > top - bottom
+    else:
+        assert top - bottom > right - left  # a linha corre na vertical da página

@@ -87,27 +87,27 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | 📄 Mesclar | Combina vários PDFs em um único arquivo, na ordem que você definir |
 | ✂️ Dividir | Separa um PDF em vários arquivos menores (uma ou N páginas por arquivo, ou um arquivo por marcador de nível superior do sumário) |
 | 🔃 Páginas | Rotaciona, reordena, remove, insere ou substitui páginas de um PDF (inserção/substituição usando páginas de outro PDF). As páginas são contadas a partir de 1, como no visualizador, e aceitam intervalos como `1-3, 5, 8-` |
-| 🗜️ Comprimir | Reduz o tamanho de um PDF recomprimindo conteúdo e removendo objetos duplicados (as imagens ainda não são recomprimidas, então PDFs escaneados quase não diminuem) |
-| 🖼️ Converter | Converte entre PDF e imagens, Word/Excel/PowerPoint e PDF, e XML e PDF |
+| 🗜️ Comprimir | Reduz o tamanho de um PDF em três níveis: leve (sem perda), médio e forte (imagens reamostradas para 150 ou 100 DPI, pelo tamanho com que aparecem na página, e regravadas em JPEG; imagens sem cor passam a escala de cinza). Usa o Ghostscript, se você quiser e ele estiver instalado, e não grava nada se o arquivo não ficar menor |
+| 🖼️ Converter | Converte entre PDF e imagens (com tamanho de página A4, Carta, Ofício ou o da imagem, margem, orientação da câmera e fundo branco em imagens transparentes), Word/Excel/PowerPoint e PDF (com o LibreOffice, também .doc, .xls, .ppt, .odt, .ods, .odp e .rtf), e XML e PDF (linhas longas quebradas com recuo) |
 | 💧 Marca d'água | Adiciona um texto de marca d'água (opacidade, tamanho e rotação configuráveis) |
 | 🔒 Proteger | Protege um PDF com senha (AES-256), define permissões granulares (impressão, edição, cópia, formulários) com senha de proprietário separada, ou remove a senha de um PDF protegido |
-| 🏷️ Metadados | Lê e edita título, autor, assunto e palavras-chave de um PDF |
+| 🏷️ Metadados | Lê e edita título, autor, assunto, palavras-chave e os aplicativos de origem de um PDF (também no XMP), e mostra as datas de criação e modificação |
 | 🔢 Numeração | Adiciona números de página no rodapé (com página inicial configurável), numeração Bates (prefixo + sequência global, para uso jurídico), ou um texto livre de cabeçalho/rodapé (com placeholders `{page}`/`{pages}`) |
-| 📜 PDF/A | Converte um PDF para uma aproximação de PDF/A (remove JavaScript/anexos/criptografia e declara conformidade nos metadados XMP) ou valida um PDF existente contra esse subconjunto de requisitos |
+| 📜 PDF/A | Converte para PDF/A-1, 2 ou 3: remove o que a norma proíbe, embute o perfil de cor sRGB e sincroniza os metadados, e só declara a conformidade se fontes, transparência e estrutura passarem na verificação (senão, mostra o que falta e não grava nada). Com o Ghostscript, faz a conversão completa. A validação cobre esses requisitos e, com o veraPDF instalado, roda também a validação oficial |
 | 📝 Extrair texto | Extrai todo o texto de um PDF para um arquivo `.txt` |
 | 📷 Extrair imagens | Extrai as imagens embutidas nas páginas de um PDF, em seus formatos originais |
 | 📐 Cortar/Redimensionar | Corta margens ou redimensiona as páginas de um PDF para um novo tamanho |
-| ✏️ Editar | Substitui uma imagem já embutida por outra (mantendo posição e tamanho), "edita" texto cobrindo a área e reescrevendo por cima (achatando a página, como na redação), e adiciona, lista ou remove links (URL externa ou página do documento) |
+| ✏️ Editar | Substitui uma imagem já embutida por outra (mantendo posição e tamanho, sem distorcer), "edita" texto cobrindo uma área marcada no visualizador e reescrevendo por cima com fonte, tamanho e cores à escolha, com quebra de linha (achatando a página, como na redação), e adiciona, lista ou remove links (URL externa ou página do documento) |
 | 🔖 Marcadores | Monta um sumário de navegação (outline) com título e página de destino |
-| 🗂️ Camadas | Lista as camadas (Optional Content Groups) de um PDF e alterna a visibilidade padrão de cada uma |
+| 🗂️ Camadas | Lista as camadas (Optional Content Groups) de um PDF, inclusive as desligadas por padrão, e alterna a visibilidade padrão de cada uma |
 | 📎 Anexos | Lista, adiciona, remove ou extrai os anexos embutidos de um PDF (a extração nunca grava fora da pasta escolhida, mesmo que o nome do anexo tente) |
-| 🧾 Campos de formulário | Adiciona campos de formulário **interativos** (texto, data, caixa de seleção, lista suspensa, lista de seleção ou grupo de opções) — o PDF resultante é preenchível em qualquer leitor. Também lista campos já existentes, exporta/importa dados preenchidos (CSV ou FDF) e achata o formulário (Fill & Sign simplificado) |
-| 🖍️ Anotações | Realce, sublinhe, risque, adicione notas, desenhe à mão livre ou carimbe direto sobre a página, no próprio visualizador — com uma biblioteca de carimbos customizados (nome, texto e cor) salva localmente. Também exporta os comentários já existentes no PDF para CSV |
+| 🧾 Campos de formulário | Adiciona campos de formulário **interativos** (texto, data, caixa de seleção, lista suspensa, lista de seleção ou grupo de opções) — o PDF resultante é preenchível em qualquer leitor. Também lista campos já existentes, exporta/importa dados preenchidos (CSV, Excel ou FDF) e achata o formulário (Fill & Sign simplificado) |
+| 🖍️ Anotações | Realce, sublinhe, risque, adicione notas, desenhe à mão livre ou carimbe direto sobre a página, no próprio visualizador — com uma biblioteca de carimbos customizados (nome, texto e cor) salva localmente. Cada anotação leva autor e data. Também exporta os comentários já existentes no PDF para CSV ou Excel |
 | 📏 Medição | Mede a distância entre dois pontos de um PDF, arrastando no visualizador central (mm, cm, polegadas ou pontos PDF) |
-| 🔍 OCR | Reconhece o texto de páginas escaneadas (via Tesseract) e gera um PDF pesquisável, com o texto invisível posicionado sobre cada palavra reconhecida (inclusive em páginas giradas) |
+| 🔍 OCR | Reconhece o texto de páginas escaneadas (via Tesseract) e gera um PDF pesquisável, com o texto invisível ajustado à largura de cada palavra reconhecida (inclusive em páginas giradas). Aceita vários idiomas ao mesmo tempo, DPI configurável, corrige páginas digitalizadas de lado e também reconhece escaneados que têm um carimbo de texto |
 | ⬛ Redigir/Sanitizar | Apaga áreas de um PDF de forma irreversível: a página marcada vira imagem, com as áreas pintadas de preto nos próprios pixels, e o resultado é conferido antes de ser salvo (funciona também em páginas giradas ou com área de corte). Detecta padrões sensíveis (CPF, CNPJ, e-mail, telefone, cartão de crédito ou regex personalizada), com revisão de cada área antes de aplicar. A sanitização remove metadados, JavaScript (inclusive em ações de páginas, campos e links), ações que abrem arquivos ou programas ou enviam dados, e arquivos embutidos — e mostra o que foi removido |
 | ✒️ Assinatura digital | Assina um PDF com selo visível e assinatura criptográfica de verdade (CMS/PKCS#7), usando um certificado .pfx real ou um certificado de teste gerado na hora. A verificação mostra se o conteúdo assinado está íntegro, se algo foi alterado depois da assinatura e se o certificado é confiável |
-| ♿ Acessibilidade | Verifica um subconjunto de PDF/UA (idioma, título, árvore de estrutura, texto alternativo em figuras) e corrige idioma/título — não tagueia automaticamente, pelo risco de gerar uma estrutura malformada |
+| ♿ Acessibilidade | Verifica um subconjunto de PDF/UA (idioma, título, árvore de estrutura, texto alternativo em figuras, ordem de tabulação, descrição dos campos) e corrige idioma, título e ordem de tabulação — não tagueia automaticamente, pelo risco de gerar uma estrutura malformada |
 | 🆚 Comparar | Compara duas versões de um PDF: diff de texto por página, ou diff visual (imagem por página destacando em vermelho o que mudou) |
 
 ## Demonstração
@@ -228,11 +228,18 @@ uso — isso é esperado numa release beta open source, veja como prosseguir em
 - Python 3.10 ou superior
 - Windows, Linux ou macOS (interface gráfica via PySide6/Qt)
 - [LibreOffice](https://www.libreoffice.org/) (opcional) — se instalado, a conversão de
-  Word/Excel/PowerPoint para PDF preserva a formatação original. Sem ele, a conversão ainda
-  funciona, mas com uma formatação básica (só texto e estrutura, via Python puro).
+  Word/Excel/PowerPoint para PDF preserva a formatação original e aceita também os formatos
+  antigos e os do LibreOffice. Sem ele, .docx, .xlsx e .pptx ainda são convertidos, com uma
+  formatação básica (texto, títulos, listas e tabelas, via Python puro), e o app avisa o que
+  ficou de fora.
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (opcional, necessário só para a
   ferramenta de OCR) — a aplicação detecta a instalação automaticamente e lista os idiomas de
-  reconhecimento disponíveis.
+  reconhecimento disponíveis. Instale também o idioma `por` e, para páginas digitalizadas de
+  lado, o pacote `osd`.
+- [Ghostscript](https://ghostscript.com/) (opcional) — comprime mais e faz a conversão
+  completa para PDF/A (embutindo fontes e achatando transparência).
+- [veraPDF](https://verapdf.org/) (opcional) — se instalado, a validação de PDF/A usa o
+  validador de referência, além das verificações do app.
 
 ## Como instalar a partir do código-fonte
 
@@ -272,6 +279,10 @@ escolher a ferramenta desejada na barra lateral.
 | [pyhanko](https://github.com/MatthiasValvekens/pyHanko) | Assinatura digital de PDF (CMS/PKCS#7) e verificação de integridade |
 | [LibreOffice](https://www.libreoffice.org/) (opcional, externo) | Conversão de Word/Excel/PowerPoint para PDF com formatação fiel ao original |
 | [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (opcional, externo) | Motor de reconhecimento de texto usado pela ferramenta de OCR |
+| [Ghostscript](https://ghostscript.com/) (opcional, externo) | Compressão mais forte e conversão completa para PDF/A |
+| [veraPDF](https://verapdf.org/) (opcional, externo) | Validação de referência de PDF/A |
+| [Fontes DejaVu](https://dejavu-fonts.github.io/) (incluídas) | Fonte embutida em todo texto que o app desenha nos PDFs (marca d'água, numeração, carimbos, edição de texto, OCR, XML, Office), com acentos, grego, cirílico e símbolos |
+| [Compact ICC Profiles](https://github.com/saucecontrol/Compact-ICC-Profiles) (incluído, CC0) | Perfil de cor sRGB embutido nos arquivos PDF/A |
 
 ## Estrutura do projeto
 
@@ -285,6 +296,11 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
   geometry.py      Conversão entre o espaço do PDF e o que aparece na tela (/Rotate, CropBox)
   overlay.py       Desenho sobre a página na orientação da tela (marca d'água, numeração, OCR)
   progress.py      Andamento e cancelamento das operações longas; trava de acesso ao pdfium
+  messages.py      Mensagens para o usuário que a interface traduz (modelo + valores)
+  fonts.py         Fontes TrueType embutidas no texto desenhado (data/fonts, DejaVu)
+  external.py      Localização e execução canceláveis de LibreOffice, Ghostscript, veraPDF
+  tabular.py       Exportação para CSV ou Excel protegida contra fórmulas
+  pdfa.py          Conversão e verificação de PDF/A (perfil de cor em data/icc)
   rasterize.py     Achatamento de página em imagem, com áreas pintadas nos próprios pixels
   annotations.py   Anotações reais (Highlight/Underline/StrikeOut/Ink/Stamp) via pypdf
   ocr.py           Reconhecimento de texto (Tesseract) com camada de texto invisível
@@ -303,6 +319,7 @@ ui/              Interface gráfica (PySide6)
   tasks.py             Execução das operações numa thread de trabalho, uma por vez
   diagnostics.py       Log em arquivo e tratamento global de exceções
   widget_state.py      Preserva o que foi preenchido nas abas ao trocar de idioma
+  area_pick_state.py   Marcação de áreas no visualizador para a edição de texto
   viewer/              Visualizador central: renderização, miniaturas, busca, zoom
   pages/               Uma classe de página por ferramenta (MergePage, CompressPage, ...)
   widgets/             Widgets reutilizáveis (FilePicker, FileListEditor, PageContainer)
@@ -337,7 +354,8 @@ pytest
 Todos os módulos de `core/` têm testes cobrindo o comportamento esperado, e há um teste de
 fumaça que garante que a janela principal monta todas as seções sem erros. Um teste de
 preservação passa cada operação por um PDF com sumário, metadados, anexo, formulário, rótulos
-de página e camadas, e confere que nada disso se perde no caminho. A suíte também
+de página e camadas, e confere que nada disso se perde no caminho. Um teste de traduções
+confere que todo texto da interface e toda mensagem do `core` têm versão em inglês. A suíte também
 roda automaticamente a cada push em `main` e a cada pull request, em Windows, Linux e macOS
 (veja [.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
@@ -347,4 +365,6 @@ Contribuições são bem-vindas. Veja [CONTRIBUTING.md](CONTRIBUTING.md) para ma
 
 ## Licença
 
-Distribuído sob a licença [MIT](LICENSE).
+Distribuído sob a licença [MIT](LICENSE). As fontes DejaVu incluídas em `core/data/fonts`
+têm licença própria, livre ([LICENSE-DejaVu.txt](core/data/fonts/LICENSE-DejaVu.txt)), e o
+perfil de cor em `core/data/icc` é de domínio público (CC0).

@@ -28,7 +28,8 @@ from core.progress import PDFIUM_LOCK
 from core.redaction import RedactionRect
 from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
-from ui.i18n import tr
+from ui.i18n import error_text, tr
+from ui.area_pick_state import AreaPickState
 from ui.measure_state import MeasureState, format_distance
 from ui.redaction_state import RedactionState
 from ui.viewer.page_canvas import PageCanvas
@@ -73,12 +74,14 @@ class PdfViewer(QWidget):
         redaction_state: RedactionState,
         measure_state: MeasureState | None = None,
         parent=None,
+        area_pick_state: AreaPickState | None = None,
     ):
         super().__init__(parent)
         self.session = session
         self.annotation_state = annotation_state
         self.redaction_state = redaction_state
         self.measure_state = measure_state or MeasureState()
+        self.area_pick_state = area_pick_state or AreaPickState()
         self._document = None
         self._geometries: dict[int, PageGeometry] = {}
         self._scale = _DEFAULT_SCALE
@@ -96,6 +99,7 @@ class PdfViewer(QWidget):
         self._ink_points_pdf: list[tuple[float, float]] = []
         self._ink_preview_base: QPixmap | None = None
         self._redaction_drag_start_pdf: tuple[float, float] | None = None
+        self._area_drag_start_pdf: tuple[float, float] | None = None
         self._measure_drag_start_pdf: tuple[float, float] | None = None
         self._measure_preview_base: QPixmap | None = None
         self._translatable_tooltips: list[tuple[QWidget, str]] = []
@@ -119,6 +123,8 @@ class PdfViewer(QWidget):
         self.measure_state.active_changed.connect(self._on_markup_state_changed)
         self.measure_state.result_changed.connect(self._refresh_current_render)
         self.measure_state.unit_changed.connect(self._refresh_current_render)
+        self.area_pick_state.active_changed.connect(self._on_markup_state_changed)
+        self.area_pick_state.areas_changed.connect(self._on_picked_areas_changed)
         if session.path():
             self._reload()
         self._on_markup_state_changed()
@@ -386,7 +392,7 @@ class PdfViewer(QWidget):
                 prompted = True
             except Exception as exc:
                 QMessageBox.critical(
-                    self, tr("Abrir PDF"), tr("Não foi possível abrir o PDF: {error}").format(error=exc)
+                    self, tr("Abrir PDF"), tr("Não foi possível abrir o PDF: {error}").format(error=error_text(exc))
                 )
                 return None
 
@@ -444,6 +450,7 @@ class PdfViewer(QWidget):
         pixmap = self._with_highlight(pixmap, index)
         pixmap = self._with_pending_annotations(pixmap, index)
         pixmap = self._with_pending_redactions(pixmap, index)
+        pixmap = self._with_picked_areas(pixmap, index)
         return self._with_measure_overlay(pixmap, index)
 
     def _show_single_page(self, index: int):
@@ -565,6 +572,43 @@ class PdfViewer(QWidget):
                 painter.drawRect(screen_rect.adjusted(-3, -3, 3, 3))
         painter.end()
         return result
+
+    def _with_picked_areas(self, pixmap: QPixmap, page_index: int) -> QPixmap:
+        """Áreas marcadas para a edição de texto (só com a ferramenta ativa)."""
+        if not self.area_pick_state.is_page_active():
+            return pixmap
+        areas = [(n, rect) for n, (page, rect) in enumerate(self.area_pick_state.areas()) if page == page_index]
+        if not areas:
+            return pixmap
+        selected = self.area_pick_state.selected()
+        result = QPixmap(pixmap)
+        painter = QPainter(result)
+        for number, rect in areas:
+            color = QColor("#ff5252") if number == selected else QColor("#2f80ed")
+            painter.setPen(QPen(color, 2, Qt.PenStyle.DashLine))
+            painter.setBrush(QColor(color.red(), color.green(), color.blue(), 40))
+            screen_rect = self._user_rect_to_screen(page_index, rect)
+            painter.drawRect(screen_rect)
+            painter.setPen(color)
+            painter.drawText(screen_rect.adjusted(3, 2, 0, 0), str(number + 1))
+        painter.end()
+        return result
+
+    def _on_picked_areas_changed(self):
+        """Mostra a página da área escolhida na tabela da aba Editar."""
+        selected = self.area_pick_state.selected()
+        areas = self.area_pick_state.areas()
+        if (
+            self._document is not None
+            and selected is not None
+            and 0 <= selected < len(areas)
+            and 0 <= areas[selected][0] < self._page_count()
+            and areas[selected][0] != self._current_page
+            and not self._continuous
+        ):
+            self._show_single_page(areas[selected][0])
+            return
+        self._refresh_current_render()
 
     def _with_measure_overlay(self, pixmap: QPixmap, page_index: int) -> QPixmap:
         segment = self.measure_state.last_segment()
@@ -847,6 +891,7 @@ class PdfViewer(QWidget):
             (self.annotation_state.is_page_active() and tool in _DRAWING_TOOLS)
             or self.redaction_state.is_page_active()
             or self.measure_state.is_page_active()
+            or self.area_pick_state.is_page_active()
         )
         if drawing_active and self._continuous:
             self._set_continuous(False)
@@ -863,7 +908,7 @@ class PdfViewer(QWidget):
         if self.measure_state.is_page_active():
             canvas.setCursor(Qt.CursorShape.CrossCursor)
             return
-        if self.redaction_state.is_page_active():
+        if self.redaction_state.is_page_active() or self.area_pick_state.is_page_active():
             canvas.setCursor(Qt.CursorShape.CrossCursor)
             return
         if not self.annotation_state.is_page_active():
@@ -901,6 +946,9 @@ class PdfViewer(QWidget):
             return
         if self.redaction_state.is_page_active():
             self._redaction_drag_start_pdf = self._widget_point_to_pdf(self._current_page, x, y)
+            return
+        if self.area_pick_state.is_page_active():
+            self._area_drag_start_pdf = self._widget_point_to_pdf(self._current_page, x, y)
             return
         if not self.annotation_state.is_page_active():
             return
@@ -974,6 +1022,17 @@ class PdfViewer(QWidget):
                 end_pdf = self._widget_point_to_pdf(page_index, x, y)
                 self._finish_redaction_drag(page_index, self._redaction_drag_start_pdf, end_pdf)
                 self._redaction_drag_start_pdf = None
+            return
+
+        if self.area_pick_state.is_page_active():
+            if self._area_drag_start_pdf is not None:
+                end_pdf = self._widget_point_to_pdf(self._current_page, x, y)
+                (x1, y1), (x2, y2) = self._area_drag_start_pdf, end_pdf
+                self._area_drag_start_pdf = None
+                left, right = sorted((x1, x2))
+                bottom, top = sorted((y1, y2))
+                if right - left >= 2 and top - bottom >= 2:
+                    self.area_pick_state.pick(self._current_page, (left, bottom, right, top))
             return
 
         tool = self.annotation_state.active_tool()

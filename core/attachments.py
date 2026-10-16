@@ -11,6 +11,7 @@ from pypdf.generic import DictionaryObject, NameObject
 
 from .base import READ, PDFOperation, atomic_output, open_reader, write_pdf
 from .document import build_name_tree, iter_name_tree, unique_name
+from .messages import Message
 
 
 @dataclass
@@ -109,7 +110,7 @@ class ExtractAttachments(PDFOperation):
             for content in contents:
                 output_path = _unique_path(output_dir_path, safe_attachment_filename(name), used)
                 if not output_path.resolve().is_relative_to(resolved_dir):
-                    raise ValueError(f'O anexo "{name}" tentou gravar fora da pasta escolhida.')
+                    raise ValueError(Message('O anexo "{name}" tentou gravar fora da pasta escolhida.', name=name))
                 output_path.write_bytes(content)
                 output_paths.append(str(output_path))
         return output_paths
@@ -147,7 +148,7 @@ class RemoveAttachment(PDFOperation):
             if str(key) != name and name not in _filespec_names(filespec)
         ]
         if len(remaining) == len(entries):
-            raise ValueError(f'Nenhum anexo chamado "{name}" foi encontrado neste PDF.')
+            raise ValueError(Message('Nenhum anexo chamado "{name}" foi encontrado neste PDF.', name=name))
 
         names = writer.root_object["/Names"].get_object()
         if remaining:
@@ -158,4 +159,4 @@ class RemoveAttachment(PDFOperation):
             with open(temp_path, "wb") as f:
                 writer.write(f)
             if name in PdfReader(temp_path).attachments:
-                raise RuntimeError(f'O anexo "{name}" continuaria no arquivo; nada foi salvo.')
+                raise RuntimeError(Message('O anexo "{name}" continuaria no arquivo; nada foi salvo.', name=name))

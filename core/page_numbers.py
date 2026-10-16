@@ -4,10 +4,14 @@ As posições ("rodapé ao centro", "canto superior direito"...) valem para a p�
 aparece na tela, também em páginas com `/Rotate` (ver `core/overlay.py`).
 """
 
+import re
+
 from pypdf import PdfWriter
 
 from .base import PDFOperation, open_reader, write_pdf
+from .fonts import SANS, register_fonts
 from .geometry import PageGeometry
+from .messages import Message
 from .overlay import materialize_inherited_attributes, visual_overlay
 
 
@@ -17,6 +21,7 @@ def _stamp_text(input_path: str, output_path: str, label_for_page, position_for_
     reader = open_reader(input_path)
     writer = PdfWriter(clone_from=reader)
     materialize_inherited_attributes(writer)
+    register_fonts()
     total_pages = len(reader.pages)
 
     for index, (source_page, page) in enumerate(zip(reader.pages, writer.pages)):
@@ -24,7 +29,7 @@ def _stamp_text(input_path: str, output_path: str, label_for_page, position_for_
 
         def draw(canvas, width: float, height: float, text=text) -> None:
             x, y, align = position_for_page(width, height)
-            canvas.setFont("Helvetica", font_size)
+            canvas.setFont(SANS, font_size)
             if align == "left":
                 canvas.drawString(x, y, text)
             elif align == "right":
@@ -108,12 +113,45 @@ _HF_POSITIONS = {
 }
 
 
+_PLACEHOLDER_RE = re.compile(r"\{\{|\}\}|\{(\w*)\}")
+_PLACEHOLDERS = ("page", "pages")
+
+
+def _check_placeholders(text: str) -> None:
+    unknown = sorted(
+        {match[1] for match in _PLACEHOLDER_RE.finditer(text) if match[1] is not None and match[1] not in _PLACEHOLDERS}
+    )
+    if unknown:
+        raise ValueError(
+            Message(
+                "Marcador desconhecido no texto: {names}. Use {{page}} (número da página) e "
+                "{{pages}} (total de páginas).",
+                names=", ".join("{" + name + "}" for name in unknown),
+            )
+        )
+
+
+def _fill_placeholders(text: str, page: int, pages: int) -> str:
+    values = {"page": str(page), "pages": str(pages)}
+
+    def replace(match: re.Match) -> str:
+        token = match[0]
+        if token == "{{":
+            return "{"
+        if token == "}}":
+            return "}"
+        return values[match[1]]
+
+    return _PLACEHOLDER_RE.sub(replace, text)
+
+
 class AddHeaderFooter(PDFOperation):
     """Adiciona um texto livre de cabeçalho ou rodapé a todas as páginas de um PDF.
 
-    Suporta os placeholders `{page}` (número da página) e `{pages}` (total de páginas) no
-    texto — ex.: `"Página {page} de {pages}"` — resolvidos por página com `str.format()`.
-    Para escrever uma chave literal, use `{{` e `}}`.
+    Suporta os marcadores `{page}` (número da página) e `{pages}` (total de páginas) no
+    texto — ex.: `"Página {page} de {pages}"`. Qualquer outra chave é texto comum ("{",
+    "}" soltos ou "{{"/"}}", que viram uma chave só); um marcador desconhecido como
+    `{pagina}` é recusado, porque quase sempre é erro de digitação.
     """
 
     def run(
@@ -127,19 +165,13 @@ class AddHeaderFooter(PDFOperation):
     ) -> None:
         if position not in _HF_POSITIONS:
             raise ValueError(f"Posição inválida: {position}")
-        try:
-            text.format(page=1, pages=1)
-        except (KeyError, IndexError, ValueError) as exc:
-            raise ValueError(
-                f"Texto inválido ({exc}). Use {{page}} e {{pages}} como marcadores; para uma "
-                "chave literal, escreva {{ ou }}."
-            ) from exc
+        _check_placeholders(text)
 
         place = _HF_POSITIONS[position]
         _stamp_text(
             input_path,
             output_path,
-            lambda index, total: text.format(page=index + 1, pages=total),
+            lambda index, total: _fill_placeholders(text, index + 1, total),
             lambda width, height: place(width, height, margin),
             font_size,
         )

@@ -114,3 +114,37 @@ def test_set_layer_visibility_rejects_encrypted_input(make_encrypted_pdf, tmp_pa
 
     with pytest.raises(EncryptedPDFError):
         SetLayerVisibility().run(str(encrypted_path), str(tmp_path / "out.pdf"), layer_index=0, visible=False)
+
+
+def _with_base_state_off(path, visible: list[str]) -> None:
+    """Camadas desligadas por padrão (/BaseState /OFF), com só `visible` em /ON."""
+    writer = PdfWriter(clone_from=str(path))
+    properties = writer.root_object["/OCProperties"].get_object()
+    config = properties["/D"].get_object()
+    refs = list(properties["/OCGs"])
+    names = [str(ref.get_object()["/Name"]) for ref in refs]
+    config[NameObject("/BaseState")] = NameObject("/OFF")
+    config[NameObject("/ON")] = ArrayObject(ref for ref, name in zip(refs, names) if name in visible)
+    config[NameObject("/OFF")] = ArrayObject()
+    writer.write(str(path))
+
+
+def test_layers_with_base_state_off_are_listed_as_hidden(tmp_path):
+    pdf_path = tmp_path / "layers.pdf"
+    _make_pdf_with_layers(pdf_path, ["Texto", "Cotas", "Rascunho"])
+    _with_base_state_off(pdf_path, visible=["Texto"])
+
+    layers = ListLayers().run(str(pdf_path))
+
+    assert [(layer.name, layer.visible) for layer in layers] == [("Texto", True), ("Cotas", False), ("Rascunho", False)]
+
+
+def test_showing_a_layer_with_base_state_off(tmp_path):
+    pdf_path = tmp_path / "layers.pdf"
+    _make_pdf_with_layers(pdf_path, ["Texto", "Cotas"])
+    _with_base_state_off(pdf_path, visible=[])
+    output = tmp_path / "out.pdf"
+
+    SetLayerVisibility().run(str(pdf_path), str(output), layer_index=1, visible=True)
+
+    assert [layer.visible for layer in ListLayers().run(str(output))] == [False, True]

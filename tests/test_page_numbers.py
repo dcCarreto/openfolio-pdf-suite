@@ -157,8 +157,27 @@ def test_header_footer_accepts_escaped_braces(make_pdf, tmp_path):
     assert "{rascunho} pag 1" in PdfReader(str(output_path)).pages[0].extract_text()
 
 
-def test_header_footer_rejects_unbalanced_brace_with_clear_error(make_pdf, tmp_path):
+def test_header_footer_keeps_lone_braces_as_text(make_pdf, tmp_path):
+    pdf_path = make_pdf("doc.pdf", [(300, 300)])
+    output_path = tmp_path / "out.pdf"
+
+    AddHeaderFooter().run(str(pdf_path), str(output_path), text="valor { solto } de {pages}")
+
+    assert "valor { solto } de 1" in PdfReader(str(output_path)).pages[0].extract_text()
+
+
+def test_header_footer_names_the_unknown_placeholder(make_pdf, tmp_path):
     pdf_path = make_pdf("doc.pdf", [(300, 300)])
 
-    with pytest.raises(ValueError, match="chave literal"):
-        AddHeaderFooter().run(str(pdf_path), str(tmp_path / "out.pdf"), text="valor { solto")
+    with pytest.raises(ValueError, match=r"\{pagina\}"):
+        AddHeaderFooter().run(str(pdf_path), str(tmp_path / "out.pdf"), text="Página {pagina}")
+
+
+def test_overlay_text_outside_latin1_is_kept(make_pdf, tmp_path):
+    # Fonte embutida (core/fonts.py): antes, com a Helvetica base14, "Ł", "ő" e "Ω" sumiam.
+    pdf_path = make_pdf("doc.pdf", [(300, 300)])
+    output_path = tmp_path / "out.pdf"
+
+    AddHeaderFooter().run(str(pdf_path), str(output_path), text="Łódź ő Ω {page}")
+
+    assert "Łódź ő Ω 1" in PdfReader(str(output_path)).pages[0].extract_text()

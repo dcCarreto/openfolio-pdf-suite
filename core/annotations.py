@@ -7,11 +7,13 @@ nesta sessão que o pdfium não desenha nada sem um /AP, então ambos ganham uma
 stream (Form XObject) construída à mão.
 """
 
-import csv
+import datetime
+import getpass
+import io
 from dataclasses import dataclass, field
 
-from pypdf import PdfWriter
-from pypdf.annotations import FreeText, Highlight, PolyLine, Text
+from pypdf import PdfReader, PdfWriter
+from pypdf.annotations import FreeText, Highlight, Text
 from pypdf.generic import (
     ArrayObject,
     DecodedStreamObject,
@@ -19,9 +21,14 @@ from pypdf.generic import (
     FloatObject,
     NameObject,
     NumberObject,
+    TextStringObject,
 )
 
-from .base import READ, PDFOperation, atomic_output, open_reader, require_valid_page_index, write_pdf
+from reportlab.pdfgen import canvas as rl_canvas
+
+from .base import READ, PDFOperation, add_object, open_reader, require_valid_page_index, write_pdf
+from .fonts import SANS_BOLD, register_fonts, text_width
+from .tabular import write_table
 
 _NOTE_SIZE = 24
 _STAMP_SIZE = (160, 40)
@@ -50,8 +57,24 @@ def _hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
     return tuple(int(hex_color[i : i + 2], 16) / 255 for i in (0, 2, 4))
 
 
-def _escape_pdf_text(text: str) -> str:
-    return text.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
+def _color_array(hex_color: str) -> ArrayObject:
+    return ArrayObject([FloatObject(round(v, 4)) for v in _hex_to_rgb01(hex_color)])
+
+
+def _pdf_date(moment: datetime.datetime) -> str:
+    offset = moment.utcoffset() or datetime.timedelta(0)
+    minutes = int(offset.total_seconds() // 60)
+    sign = "+" if minutes >= 0 else "-"
+    minutes = abs(minutes)
+    return moment.strftime("D:%Y%m%d%H%M%S") + f"{sign}{minutes // 60:02d}'{minutes % 60:02d}'"
+
+
+def default_author() -> str:
+    """O nome de usuário do sistema, como o Acrobat usa por padrão no autor dos comentários."""
+    try:
+        return getpass.getuser()
+    except Exception:
+        return ""
 
 
 def _quad_points(quads: list[tuple[float, float, float, float]]) -> ArrayObject:
@@ -114,28 +137,12 @@ def spec_rect(spec: AnnotationSpec) -> tuple[float, float, float, float]:
     raise ValueError(f"Tipo de anotação desconhecido: {spec.kind}")
 
 
-def _make_appearance_stream(writer: PdfWriter, rect, content: str, needs_font: bool = False, matrix=None):
+def _make_appearance_stream(writer: PdfWriter, rect, content: bytes | str, resources=None, matrix=None):
     """Registra uma appearance stream (Form XObject) no writer e retorna sua referência.
     `rect` vira a /BBox; `matrix`, se informada, é a /Matrix do formulário."""
     stream = DecodedStreamObject()
-    # A appearance stream usa uma fonte base14 (WinAnsi/Latin-1); caracteres fora
-    # desse repertório (emoji, CJK, etc.) não seriam desenhados de qualquer forma,
-    # então são substituídos em vez de derrubar a gravação da anotação inteira.
-    stream.set_data(content.encode("latin-1", errors="replace"))
-
-    resources = DictionaryObject()
-    if needs_font:
-        resources[NameObject("/Font")] = DictionaryObject(
-            {
-                NameObject("/Helv"): DictionaryObject(
-                    {
-                        NameObject("/Type"): NameObject("/Font"),
-                        NameObject("/Subtype"): NameObject("/Type1"),
-                        NameObject("/BaseFont"): NameObject("/Helvetica-Bold"),
-                    }
-                )
-            }
-        )
+    stream.set_data(content if isinstance(content, bytes) else content.encode("latin-1"))
+    resources = resources if resources is not None else DictionaryObject()
 
     left, bottom, right, top = rect
     stream.update(
@@ -151,7 +158,7 @@ def _make_appearance_stream(writer: PdfWriter, rect, content: str, needs_font: b
     )
     if matrix is not None:
         stream[NameObject("/Matrix")] = ArrayObject([FloatObject(v) for v in matrix])
-    return writer._add_object(stream)
+    return add_object(writer, stream)
 
 
 def _ink_appearance_content(points: list[tuple[float, float]], color: str) -> str:
@@ -165,26 +172,33 @@ def _ink_appearance_content(points: list[tuple[float, float]], color: str) -> st
     return "\n".join(lines) + "\n"
 
 
-def _stamp_appearance_content(rect: tuple[float, float, float, float], text: str, color: str) -> str:
-    left, bottom, right, top = rect
+def _stamp_appearance(writer: PdfWriter, width: float, height: float, text: str, color: str):
+    """Conteúdo e recursos da aparência do carimbo, desenhados pelo reportlab com a fonte
+    embutida (`core/fonts.py`): antes a aparência usava a Helvetica base14, e acentos fora
+    do Latin-1, grego ou cirílico viravam "?". Um texto longo encolhe para caber na caixa."""
+    register_fonts()
     r, g, b = _hex_to_rgb01(color)
-    width, height = right - left, top - bottom
-    lines = [
-        "1 1 1 rg",
-        f"{left:.2f} {bottom:.2f} {width:.2f} {height:.2f} re",
-        "f",
-        f"{r:.3f} {g:.3f} {b:.3f} RG",
-        "2 w",
-        f"{left + 1:.2f} {bottom + 1:.2f} {width - 2:.2f} {height - 2:.2f} re",
-        "S",
-        "BT",
-        f"/Helv {_STAMP_FONT_SIZE} Tf",
-        f"{r:.3f} {g:.3f} {b:.3f} rg",
-        f"{left + 8:.2f} {bottom + height / 2 - _STAMP_FONT_SIZE / 3:.2f} Td",
-        f"({_escape_pdf_text(text)}) Tj",
-        "ET",
-    ]
-    return "\n".join(lines) + "\n"
+    available = width - 16
+    size = _STAMP_FONT_SIZE
+    natural = text_width(text, SANS_BOLD, size)
+    if natural > available > 0:
+        size = max(6.0, size * available / natural)
+
+    buffer = io.BytesIO()
+    canvas = rl_canvas.Canvas(buffer, pagesize=(width, height))
+    canvas.setFillColorRGB(1, 1, 1)
+    canvas.rect(0, 0, width, height, stroke=0, fill=1)
+    canvas.setStrokeColorRGB(r, g, b)
+    canvas.setLineWidth(2)
+    canvas.rect(1, 1, width - 2, height - 2, stroke=1, fill=0)
+    canvas.setFillColorRGB(r, g, b)
+    canvas.setFont(SANS_BOLD, size)
+    canvas.drawString(8, height / 2 - size / 3, text)
+    canvas.showPage()
+    canvas.save()
+    buffer.seek(0)
+    page = PdfReader(buffer).pages[0]
+    return page.get_contents().get_data(), page["/Resources"].clone(writer)
 
 
 def _text_markup_annotation(subtype: str, spec: AnnotationSpec) -> DictionaryObject:
@@ -212,10 +226,27 @@ def _build_annotation(writer: PdfWriter, spec: AnnotationSpec):
     if spec.kind == "strikeout":
         return _text_markup_annotation("StrikeOut", spec)
     if spec.kind == "note":
-        return Text(rect=spec_rect(spec), text=spec.text)
+        annotation = Text(rect=spec_rect(spec), text=spec.text)
+        annotation[NameObject("/C")] = _color_array(spec.color)  # antes a cor escolhida era ignorada
+        return annotation
     if spec.kind == "ink":
+        # Caneta é /Ink com /InkList (antes era gravada como /PolyLine, sem cor nem
+        # espessura: leitores que regeneram a aparência mostravam outro traço).
         rect = spec_rect(spec)
-        annotation = PolyLine(vertices=spec.points)
+        annotation = DictionaryObject(
+            {
+                NameObject("/Type"): NameObject("/Annot"),
+                NameObject("/Subtype"): NameObject("/Ink"),
+                NameObject("/Rect"): ArrayObject([FloatObject(v) for v in rect]),
+                NameObject("/InkList"): ArrayObject(
+                    [ArrayObject([FloatObject(v) for point in spec.points for v in point])]
+                ),
+                NameObject("/C"): _color_array(spec.color),
+                NameObject("/BS"): DictionaryObject(
+                    {NameObject("/W"): FloatObject(_INK_STROKE_WIDTH), NameObject("/S"): NameObject("/S")}
+                ),
+            }
+        )
         appearance_ref = _make_appearance_stream(
             writer, rect, _ink_appearance_content(spec.points, spec.color)
         )
@@ -238,11 +269,12 @@ def _build_annotation(writer: PdfWriter, spec: AnnotationSpec):
         )
         # A aparência é desenhada "de pé" num quadro local (0, 0, largura, altura); a
         # /Matrix gira esse quadro junto com os eixos da tela, e o leitor o encaixa no /Rect.
+        content, resources = _stamp_appearance(writer, width, height, spec.text, spec.color)
         appearance_ref = _make_appearance_stream(
             writer,
             (0, 0, width, height),
-            _stamp_appearance_content((0, 0, width, height), spec.text, spec.color),
-            needs_font=True,
+            content,
+            resources=resources,
             matrix=(ux, uy, vx, vy, 0, 0),
         )
         if rotation:
@@ -253,17 +285,26 @@ def _build_annotation(writer: PdfWriter, spec: AnnotationSpec):
 
 
 class AddAnnotations(PDFOperation):
-    """Grava uma lista de anotações pendentes em um PDF."""
+    """Grava uma lista de anotações pendentes em um PDF. Cada uma recebe autor (`/T`; por
+    padrão o usuário do sistema) e data (`/M`), que os leitores mostram na lista de
+    comentários."""
 
-    def run(self, input_path: str, output_path: str, specs: list[AnnotationSpec]) -> None:
+    def run(self, input_path: str, output_path: str, specs: list[AnnotationSpec], author: str | None = None) -> None:
         reader = open_reader(input_path)
         total_pages = len(reader.pages)
         for spec in specs:
             require_valid_page_index(total_pages, spec.page_index)
 
+        author = default_author() if author is None else author
+        now = _pdf_date(datetime.datetime.now().astimezone())
         writer = PdfWriter(clone_from=reader)
         for spec in specs:
-            writer.add_annotation(page_number=spec.page_index, annotation=_build_annotation(writer, spec))
+            annotation = _build_annotation(writer, spec)
+            if author:
+                annotation[NameObject("/T")] = TextStringObject(author)
+            annotation[NameObject("/M")] = TextStringObject(now)
+            annotation[NameObject("/CreationDate")] = TextStringObject(now)
+            writer.add_annotation(page_number=spec.page_index, annotation=annotation)
         write_pdf(writer, output_path)
 
 
@@ -296,8 +337,9 @@ def _describe_annotation_color(color_array) -> str:
 
 
 class ExportAnnotationsCSV(PDFOperation):
-    """Exporta os comentários/anotações já existentes num PDF para um CSV: página, tipo,
-    autor, texto e cor. Ignora links, widgets de formulário e popups de anotação (não são
+    """Exporta os comentários/anotações já existentes num PDF para CSV (ou Excel, se o
+    arquivo terminar em .xlsx — ver `core/tabular.py`): página (a partir de 1), tipo, autor,
+    texto e cor. Ignora links, widgets de formulário e popups de anotação (não são
     "comentários" no sentido de revisão de documento)."""
 
     def run(self, input_path: str, output_path: str) -> int:
@@ -320,11 +362,10 @@ class ExportAnnotationsCSV(PDFOperation):
                     )
                 )
 
-        with atomic_output(output_path) as temp_path:
-            with open(temp_path, "w", newline="", encoding="utf-8") as f:
-                csv_writer = csv.writer(f)
-                csv_writer.writerow(["pagina", "tipo", "autor", "texto", "cor"])
-                for row in rows:
-                    csv_writer.writerow([row.page_index, row.kind, row.author, row.content, row.color])
+        write_table(
+            output_path,
+            ["pagina", "tipo", "autor", "texto", "cor"],
+            ([row.page_index + 1, row.kind, row.author, row.content, row.color] for row in rows),
+        )
 
         return len(rows)

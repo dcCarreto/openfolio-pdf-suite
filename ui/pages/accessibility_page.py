@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.accessibility import CheckAccessibility, FixBasicAccessibilityIssues
-from ui.i18n import tr
+from ui.i18n import tr, tr_message
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -117,7 +117,7 @@ class AccessibilityPage(QWidget):
                     self, tr("Acessibilidade"), tr("Nenhum problema encontrado nas verificações realizadas.")
                 )
             else:
-                issues_text = "\n".join(f"• {issue}" for issue in report.issues)
+                issues_text = "\n".join("• " + tr_message(issue) for issue in report.issues)
                 QMessageBox.warning(
                     self, tr("Acessibilidade"), tr("Problemas encontrados:\n{issues}").format(issues=issues_text)
                 )

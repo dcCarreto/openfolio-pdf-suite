@@ -8,16 +8,17 @@ em qualquer leitor de PDF.
 
 import csv
 import io
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
-from pypdf.generic import ArrayObject, BooleanObject, DictionaryObject, NameObject
+from pypdf.generic import ArrayObject, BooleanObject, DictionaryObject, NameObject, read_object
 from reportlab.pdfgen import canvas
 
 from .base import READ, PDFOperation, atomic_output, open_reader, require_valid_page_index, write_pdf
 from .document import remove_widgets_from_form
+from .messages import Message
+from .tabular import escape_formula, write_table
 
 _VALID_FIELD_TYPES = ("text", "checkbox", "date", "dropdown", "listbox")
 _CHOICE_FIELD_TYPES = ("dropdown", "listbox")
@@ -138,7 +139,7 @@ def _require_new_field_name(reader: PdfReader, field_name: str) -> None:
     """Dois campos raiz com o mesmo nome deixam o formulário ambíguo: cada leitor decide de
     um jeito qual valor vale. Por isso o nome precisa ser novo."""
     if field_name in (reader.get_fields() or {}):
-        raise ValueError(f'Já existe um campo chamado "{field_name}" neste PDF. Escolha outro nome.')
+        raise ValueError(Message('Já existe um campo chamado "{name}" neste PDF. Escolha outro nome.', name=field_name))
 
 
 def _merge_default_fonts(writer: PdfWriter, acroform_obj: DictionaryObject, overlay_acroform) -> None:
@@ -331,19 +332,13 @@ class ListFormFields(PDFOperation):
 
 
 class ExportFormDataCSV(PDFOperation):
-    """Exporta nome, tipo e valor atual de cada campo de um PDF para um arquivo CSV.
-
-    O arquivo sai em UTF-8 com BOM: sem o BOM, o Excel em português abre os acentos
-    quebrados."""
+    """Exporta nome, tipo e valor atual de cada campo de um PDF para CSV (ou Excel, se o
+    arquivo terminar em .xlsx). Ver `core/tabular.py`: UTF-8 com BOM e valores que o Excel
+    leria como fórmula protegidos."""
 
     def run(self, input_path: str, output_path: str) -> int:
         fields = ListFormFields().run(input_path)
-        with atomic_output(output_path) as temp_path:
-            with open(temp_path, "w", newline="", encoding="utf-8-sig") as f:
-                csv_writer = csv.writer(f)
-                csv_writer.writerow(["campo", "tipo", "valor"])
-                for info in fields:
-                    csv_writer.writerow([info.name, info.field_type, info.value])
+        write_table(output_path, ["campo", "tipo", "valor"], ([f.name, f.field_type, f.value] for f in fields))
         return len(fields)
 
 
@@ -368,20 +363,49 @@ def _read_csv_text(csv_path: str) -> str:
 
 def _read_csv_values(csv_path: str) -> dict[str, str]:
     """Lê "campo"/"valor" (ou "name"/"value") de um CSV, aceitando o que o Excel grava em
-    português: UTF-8 com BOM ou Windows-1252, separado por vírgula ou ponto e vírgula."""
-    text = _read_csv_text(csv_path)
-    try:
-        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t")
-    except csv.Error:
-        dialect = csv.excel
+    português: UTF-8 com BOM ou Windows-1252, separado por vírgula ou ponto e vírgula. Um
+    arquivo .xlsx (o que `ExportFormDataCSV` grava com esse nome) também serve."""
+    if Path(csv_path).suffix.lower() == ".xlsx":
+        rows = _read_xlsx_rows(csv_path)
+    else:
+        text = _read_csv_text(csv_path)
+        # O Sniffer só escolhe o separador: as aspas são sempre as duplas do padrão. Deixado
+        # livre, ele confunde o apóstrofo que protege fórmulas com o caractere de aspas.
+        try:
+            delimiter = csv.Sniffer().sniff(text[:4096], delimiters=",;\t").delimiter
+        except csv.Error:
+            delimiter = ","
+        rows = csv.DictReader(io.StringIO(text), delimiter=delimiter)
     values: dict[str, str] = {}
-    for row in csv.DictReader(io.StringIO(text), dialect=dialect):
+    for row in rows:
         normalized = {str(key).strip().lower(): (value or "") for key, value in row.items() if key is not None}
-        name = (normalized.get("campo") or normalized.get("name") or "").strip()
+        name = _unescape_formula(str(normalized.get("campo") or normalized.get("name") or "").strip())
         if not name:
             continue
-        values[name] = normalized.get("valor") or normalized.get("value") or ""
+        values[name] = _unescape_formula(str(normalized.get("valor") or normalized.get("value") or ""))
     return values
+
+
+def _unescape_formula(text: str) -> str:
+    """Desfaz o apóstrofo que a exportação põe na frente de valores que o Excel leria como
+    fórmula (ver `core/tabular.py`)."""
+    if text.startswith("'") and escape_formula(text[1:]) == text:
+        return text[1:]
+    return text
+
+
+def _read_xlsx_rows(path: str) -> list[dict]:
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    try:
+        rows = list(workbook.active.iter_rows(values_only=True))
+    finally:
+        workbook.close()
+    if not rows:
+        return []
+    header = ["" if value is None else str(value) for value in rows[0]]
+    return [dict(zip(header, ("" if value is None else str(value) for value in row))) for row in rows[1:]]
 
 
 def _fill_fields(reader: PdfReader, output_path: str, values: dict[str, str]) -> FormImportResult:
@@ -394,7 +418,10 @@ def _fill_fields(reader: PdfReader, output_path: str, values: dict[str, str]) ->
     not_found = sorted(name for name in values if name not in known)
     if not matched:
         raise ValueError(
-            "Nenhum dos campos do arquivo de dados existe neste PDF: " + ", ".join(not_found[:10])
+            Message(
+                "Nenhum dos campos do arquivo de dados existe neste PDF: {names}",
+                names=", ".join(not_found[:10]),
+            )
         )
     writer = PdfWriter(clone_from=reader)
     writer.update_page_form_field_values(list(writer.pages), matched, auto_regenerate=False)
@@ -419,79 +446,120 @@ class ImportFormDataCSV(PDFOperation):
 
 def _fdf_hex_string(value: str) -> str:
     # Hexadecimal com BOM UTF-16BE (em vez de string literal com parênteses) evita ter que
-    # escapar "\", "(" e ")" na mão — a fonte mais comum de FDF malformado feito à unha — e
+    # escapar "\\", "(" e ")" na mão — a fonte mais comum de FDF malformado feito à unha — e
     # já suporta acentos/Unicode sem depender de PDFDocEncoding.
     return "<FEFF" + value.encode("utf-16-be").hex().upper() + ">"
+
+
+def _fdf_name(value: str) -> str:
+    """Um nome PDF (/Yes, /Opção_1) com os caracteres especiais escapados como #xx."""
+    buffer = io.BytesIO()
+    NameObject("/" + value.lstrip("/")).write_to_stream(buffer)
+    return buffer.getvalue().decode("latin-1")
+
+
+def _fdf_field_lines(name: str, node: dict, lines: list[str]) -> None:
+    lines.append("<<")
+    lines.append(f"/T {_fdf_hex_string(name)}")
+    if "value" in node:
+        info = node["value"]
+        if info.field_type in ("checkbox", "radio") and info.value.startswith("/"):
+            # Caixas de seleção e grupos de opções guardam o estado como nome (/Yes, /Off);
+            # gravar como texto ("/Yes") faz o Acrobat ignorar o valor ao importar.
+            lines.append(f"/V {_fdf_name(info.value)}")
+        else:
+            lines.append(f"/V {_fdf_hex_string(info.value)}")
+    if node["kids"]:
+        lines.append("/Kids [")
+        for kid_name, kid in node["kids"].items():
+            _fdf_field_lines(kid_name, kid, lines)
+        lines.append("]")
+    lines.append(">>")
 
 
 class ExportFormDataFDF(PDFOperation):
     """Exporta os valores atuais dos campos de um PDF para um arquivo FDF (o formato nativo
     do Acrobat para dados de formulário) — útil para reaproveitar os mesmos dados em outra
-    cópia do mesmo formulário."""
+    cópia do mesmo formulário. Nomes hierárquicos ("cliente.nome") viram campos aninhados
+    em `/Kids`, como o Acrobat grava."""
 
     def run(self, input_path: str, output_path: str) -> int:
         fields = ListFormFields().run(input_path)
+        tree: dict = {"kids": {}}
+        for info in fields:
+            node = tree
+            for part in info.name.split("."):
+                node = node["kids"].setdefault(part, {"kids": {}})
+            node["value"] = info
         lines = ["%FDF-1.2", "1 0 obj", "<<", "/FDF", "<<", "/Fields ["]
-        for field in fields:
-            lines.append("<<")
-            lines.append(f"/T {_fdf_hex_string(field.name)}")
-            lines.append(f"/V {_fdf_hex_string(field.value)}")
-            lines.append(">>")
+        for name, node in tree["kids"].items():
+            _fdf_field_lines(name, node, lines)
         lines.extend(["]", ">>", ">>", "endobj", "trailer", "<<", "/Root 1 0 R", ">>", "%%EOF"])
         with atomic_output(output_path) as temp_path:
             with open(temp_path, "wb") as f:
-                f.write("\n".join(lines).encode("ascii"))
+                f.write("\n".join(lines).encode("latin-1"))
         return len(fields)
 
 
-_FDF_ENTRY_RE = re.compile(
-    r"/T\s*(?:\((?P<t_lit>(?:\\.|[^()])*)\)|<(?P<t_hex>[0-9A-Fa-f\s]*)>)\s*"
-    r"/V\s*(?:\((?P<v_lit>(?:\\.|[^()])*)\)|<(?P<v_hex>[0-9A-Fa-f\s]*)>)",
-    re.DOTALL,
-)
+def _fdf_value(value) -> str | None:
+    value = value.get_object() if hasattr(value, "get_object") and not isinstance(value, (str, bytes)) else value
+    if isinstance(value, NameObject):
+        return str(value)  # "/Yes": o mesmo formato bruto que o CSV usa
+    if isinstance(value, ArrayObject):
+        return _fdf_value(value[0]) if value else ""  # lista com várias seleções: a primeira
+    if isinstance(value, (str, bytes)):
+        return value if isinstance(value, str) else value.decode("latin-1")
+    return None
 
 
-def _decode_fdf_hex(hex_text: str) -> str:
-    raw = bytes.fromhex(re.sub(r"\s+", "", hex_text))
-    if raw[:2] == b"\xfe\xff":
-        return raw[2:].decode("utf-16-be")
-    return raw.decode("latin-1")
+def _parse_fdf(data: bytes) -> dict[str, str]:
+    """Lê os campos de um FDF com o parser de objetos do próprio pypdf: strings literais
+    com parênteses aninhados e escapes (\\n, \\ddd), hexadecimais, nomes (/Yes) e campos
+    aninhados em /Kids (o nome completo junta as partes com ".")."""
+    marker = data.find(b"/Fields")
+    if marker < 0:
+        return {}
+    start = marker + len(b"/Fields")
+    while start < len(data) and data[start:start + 1].isspace():
+        start += 1
+    stream = io.BytesIO(data)
+    stream.seek(start)
+    try:
+        fields = read_object(stream, None)
+    except Exception as exc:
+        raise ValueError(Message("O arquivo FDF está malformado: {error}", error=exc)) from exc
+    values: dict[str, str] = {}
 
+    def visit(entries, prefix: str, depth: int = 0) -> None:
+        if not isinstance(entries, ArrayObject) or depth > 32:
+            return
+        for entry in entries:
+            if not isinstance(entry, DictionaryObject):
+                continue  # referência indireta: o FDF não é um PDF completo para resolvê-la
+            part = _fdf_value(entry.get("/T"))
+            name = f"{prefix}.{part}" if prefix and part else (part or prefix)
+            if "/V" in entry and name:
+                value = _fdf_value(entry["/V"])
+                if value is not None:
+                    values[name] = value
+            visit(entry.get("/Kids"), name or "", depth + 1)
 
-def _decode_fdf_literal(text: str) -> str:
-    return text.replace(r"\)", ")").replace(r"\(", "(").replace(r"\\", "\\")
+    visit(fields, "")
+    return values
 
 
 class ImportFormDataFDF(PDFOperation):
     """Importa valores de campos a partir de um arquivo FDF e preenche o PDF.
 
-    Suporta o subconjunto de FDF mais comum: uma lista plana de entradas `/T`/`/V` por
-    campo, com valor em string literal ou hexadecimal (o formato usado por
-    `ExportFormDataFDF` e pelo Acrobat para texto Unicode). Não suporta nomes de campo
-    hierárquicos (`/Kids` dentro do próprio FDF) nem múltiplos valores por campo — para
-    isso, o formato CSV é mais direto de qualquer forma.
+    Entende os FDFs gravados pelo Acrobat e por `ExportFormDataFDF`: valores de texto
+    (literais ou hexadecimais, com escapes), estados de caixas de seleção como nome (/Yes) e
+    nomes hierárquicos em `/Kids`. Numa lista com várias seleções, vale a primeira.
     """
 
     def run(self, input_path: str, output_path: str, fdf_path: str) -> FormImportResult:
         reader = open_reader(input_path)
-
         with open(fdf_path, "rb") as f:
-            text = f.read().decode("latin-1")
-
-        values: dict[str, str] = {}
-        for match in _FDF_ENTRY_RE.finditer(text):
-            name = (
-                _decode_fdf_hex(match["t_hex"])
-                if match["t_hex"] is not None
-                else _decode_fdf_literal(match["t_lit"])
-            )
-            value = (
-                _decode_fdf_hex(match["v_hex"])
-                if match["v_hex"] is not None
-                else _decode_fdf_literal(match["v_lit"])
-            )
-            values[name] = value
-
+            values = _parse_fdf(f.read())
         if not values:
             raise ValueError("Nenhum campo encontrado no arquivo FDF.")
         return _fill_fields(reader, output_path, values)

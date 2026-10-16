@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 
 from core.base import READ, open_reader
 from core.pages import InsertPages, RemovePages, ReorderPages, ReplacePages, RotatePages
-from ui.i18n import tr
+from ui.i18n import error_text, tr
 from ui.page_ranges import parse_page_ranges
 from ui.tasks import run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -187,7 +187,7 @@ class PagesPage(QWidget):
                         input_path, output_path, source_path, start_index=start_index, end_index=end_index
                     )
         except ValueError as exc:
-            QMessageBox.warning(self, tr("Páginas"), str(exc))
+            QMessageBox.warning(self, tr("Páginas"), error_text(exc))
             return
 
         def done(_result):

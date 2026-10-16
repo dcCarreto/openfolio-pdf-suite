@@ -6,6 +6,7 @@ import logging
 from PySide6.QtCore import QByteArray, QSettings, QSize, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QHBoxLayout,
     QListWidget,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from ui import i18n, sidebar_icons
 from ui.annotation_state import AnnotationState
+from ui.area_pick_state import AreaPickState
 from ui.document_session import DocumentSession
 from ui.flags import build_br_flag_icon, build_us_flag_icon
 from ui.i18n import tr
@@ -133,12 +135,14 @@ class MainWindow(QMainWindow):
         self.annotation_state = AnnotationState()
         self.redaction_state = RedactionState()
         self.measure_state = MeasureState()
+        self.area_pick_state = AreaPickState()
         self._tasks = task_manager()
 
         self._row_of = {class_name: row for row, (*_rest, class_name) in enumerate(_SECTIONS)}
         self._annotations_row = self._row_of["AnnotationsPage"]
         self._redaction_row = self._row_of["RedactionPage"]
         self._measure_row = self._row_of["MeasurePage"]
+        self._edit_row = self._row_of["EditPage"]
         self._pages: dict[int, QWidget] = {}  # linha -> aba já construída
 
         self._build_ui()
@@ -146,6 +150,7 @@ class MainWindow(QMainWindow):
         self._restore_layout()
         apply_dark_titlebar(self)
 
+        i18n.install_qt_translator(QApplication.instance())
         i18n.language_changed.changed.connect(self._on_language_changed)
         self._tasks.started.connect(self._on_task_started)
         self._tasks.finished.connect(self._on_task_finished)
@@ -170,7 +175,11 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(scroll_area)
 
         self.viewer = PdfViewer(
-            self.session, self.annotation_state, self.redaction_state, self.measure_state
+            self.session,
+            self.annotation_state,
+            self.redaction_state,
+            self.measure_state,
+            area_pick_state=self.area_pick_state,
         )
         self.viewer.setMinimumWidth(_VIEWER_MIN_WIDTH)
 
@@ -214,6 +223,8 @@ class MainWindow(QMainWindow):
             return page_class(self.session, self.redaction_state)
         if row == self._measure_row:
             return page_class(self.session, self.measure_state)
+        if row == self._edit_row:
+            return page_class(self.session, self.area_pick_state)
         return page_class(self.session)
 
     def _ensure_page(self, row: int) -> QWidget:
@@ -324,6 +335,7 @@ class MainWindow(QMainWindow):
         são reconstruídas (os textos delas são definidos na construção), recebendo de volta
         o que estava preenchido nelas (ver `ui/widget_state.py`).
         """
+        i18n.install_qt_translator(QApplication.instance())
         for row, (_icon, title, _subtitle, _module, _class) in enumerate(_SECTIONS):
             self.sidebar.item(row).setText(tr(title))
 
@@ -356,6 +368,7 @@ class MainWindow(QMainWindow):
         self.annotation_state.set_page_active(row == self._annotations_row)
         self.redaction_state.set_page_active(row == self._redaction_row)
         self.measure_state.set_page_active(row == self._measure_row)
+        self.area_pick_state.set_page_active(row == self._edit_row)
 
     def _open_pdf(self):
         path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), "", "PDF (*.pdf)")

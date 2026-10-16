@@ -10,6 +10,7 @@ LibreOffice esta disponivel, e sao pulados quando nao esta.
 import sys
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from docx import Document
@@ -19,6 +20,7 @@ from pypdf import PdfReader
 
 import core.office_convert as office_convert
 from core.office_convert import ConvertOfficeToPDF, find_libreoffice
+from core.external import run_cancellable
 from core.progress import OperationCancelled, Progress
 
 
@@ -102,9 +104,128 @@ def test_rejects_unsupported_format(tmp_path):
         ConvertOfficeToPDF().run(str(bogus_path), str(tmp_path / "out.pdf"))
 
 
+def _all_text(path) -> str:
+    return " ".join(_normalized_text(page) for page in PdfReader(str(path)).pages)
+
+
+def test_docx_tables_are_converted_in_order(tmp_path, monkeypatch):
+    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
+    document = Document()
+    document.add_paragraph("Antes da tabela")
+    table = document.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "Produto"
+    table.cell(0, 1).text = "Preço"
+    table.cell(1, 0).text = "Caneta"
+    table.cell(1, 1).text = "R$ 2,50"
+    document.add_paragraph("Depois da tabela")
+    docx_path = tmp_path / "tabela.docx"
+    document.save(docx_path)
+    output_path = tmp_path / "tabela.pdf"
+
+    result = ConvertOfficeToPDF().run(str(docx_path), str(output_path))
+
+    text = _all_text(output_path)
+    assert not result.used_libreoffice
+    for expected in ("Produto", "Preço", "Caneta", "R$ 2,50"):
+        assert expected in text
+    assert text.index("Antes da tabela") < text.index("Caneta") < text.index("Depois da tabela")
+
+
+def test_docx_images_and_headers_are_reported(tmp_path, monkeypatch):
+    from PIL import Image
+
+    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
+    image_path = tmp_path / "logo.png"
+    Image.new("RGB", (40, 40), "red").save(image_path)
+    document = Document()
+    document.sections[0].header.paragraphs[0].text = "Cabeçalho da empresa"
+    document.add_paragraph("Texto")
+    document.add_picture(str(image_path))
+    docx_path = tmp_path / "imagem.docx"
+    document.save(docx_path)
+
+    result = ConvertOfficeToPDF().run(str(docx_path), str(tmp_path / "out.pdf"))
+
+    assert any("imagens" in warning for warning in result.warnings)
+    assert any("Cabeçalhos" in warning for warning in result.warnings)
+
+
+def test_pptx_long_text_continues_on_the_next_page(tmp_path, monkeypatch):
+    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[1])
+    slide.shapes.title.text = "Muitos itens"
+    frame = slide.placeholders[1].text_frame
+    frame.text = "Item 1"
+    for number in range(2, 41):
+        frame.add_paragraph().text = f"Item {number}"
+    pptx_path = tmp_path / "longo.pptx"
+    presentation.save(pptx_path)
+    output_path = tmp_path / "longo.pdf"
+
+    result = ConvertOfficeToPDF().run(str(pptx_path), str(output_path))
+
+    text = _all_text(output_path)
+    assert all(f"Item {number}" in text for number in range(1, 41))  # antes, 14 de 40 sumiam
+    assert len(PdfReader(str(output_path)).pages) > 1
+    assert any("continuaram" in warning for warning in result.warnings)
+
+
+def test_pptx_tables_are_included(tmp_path, monkeypatch):
+    from pptx.util import Inches
+
+    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+    slide.shapes.title.text = "Resultados"
+    table = slide.shapes.add_table(2, 2, Inches(1), Inches(2), Inches(6), Inches(1)).table
+    table.cell(0, 0).text = "Trimestre"
+    table.cell(1, 0).text = "Q1"
+    table.cell(1, 1).text = "42"
+    pptx_path = tmp_path / "tabela.pptx"
+    presentation.save(pptx_path)
+    output_path = tmp_path / "tabela.pdf"
+
+    ConvertOfficeToPDF().run(str(pptx_path), str(output_path))
+
+    text = _all_text(output_path)
+    assert "Trimestre" in text and "Q1" in text and "42" in text
+
+
+@pytest.mark.parametrize("suffix", [".xls", ".doc", ".odt"])
+def test_formats_that_need_libreoffice_have_a_clear_error(tmp_path, monkeypatch, suffix):
+    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
+    path = tmp_path / f"antigo{suffix}"
+    path.write_bytes(b"qualquer coisa")
+
+    with pytest.raises(ValueError, match="LibreOffice"):
+        ConvertOfficeToPDF().run(str(path), str(tmp_path / "out.pdf"))
+
+
+def test_libreoffice_is_used_for_opendocument_formats(tmp_path, monkeypatch):
+    commands = []
+
+    def fake_run(command, progress, timeout, program=""):
+        commands.append(command)
+        outdir = command[command.index("--outdir") + 1]
+        Path(outdir, "planilha.pdf").write_bytes(b"%PDF-1.4 convertido")
+        return 0, b""
+
+    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: "soffice")
+    monkeypatch.setattr(office_convert, "run_cancellable", fake_run)
+    ods_path = tmp_path / "planilha.ods"
+    ods_path.write_bytes(b"ods")
+    output_path = tmp_path / "out.pdf"
+
+    result = ConvertOfficeToPDF().run(str(ods_path), str(output_path))
+
+    assert result.used_libreoffice
+    assert output_path.read_bytes() == b"%PDF-1.4 convertido"
+
+
 def test_libreoffice_conversion_reports_the_soffice_error(tmp_path, monkeypatch):
     monkeypatch.setattr(office_convert, "find_libreoffice", lambda: "soffice")
-    monkeypatch.setattr(office_convert, "_run_cancellable", lambda *a, **k: (1, b"erro simulado do soffice"))
+    monkeypatch.setattr(office_convert, "run_cancellable", lambda *a, **k: (1, b"erro simulado do soffice"))
     docx_path = tmp_path / "doc.docx"
     _make_docx(docx_path)
     output_path = tmp_path / "out.pdf"
@@ -114,8 +235,8 @@ def test_libreoffice_conversion_reports_the_soffice_error(tmp_path, monkeypatch)
     assert not output_path.exists()
 
 
-def test_run_cancellable_returns_exit_code_and_stderr():
-    returncode, stderr = office_convert._run_cancellable(
+def test_external_run_cancellable_returns_exit_code_and_stderr():
+    returncode, stderr = run_cancellable(
         [sys.executable, "-c", "import sys; sys.stderr.write('falhou'); sys.exit(3)"], Progress(), timeout=30
     )
 
@@ -123,20 +244,20 @@ def test_run_cancellable_returns_exit_code_and_stderr():
     assert stderr.endswith(b"falhou")
 
 
-def test_run_cancellable_kills_the_process_on_timeout():
+def test_external_run_cancellable_kills_the_process_on_timeout():
     started = time.monotonic()
     with pytest.raises(RuntimeError, match="timeout"):
-        office_convert._run_cancellable([sys.executable, "-c", "import time; time.sleep(30)"], Progress(), timeout=0.5)
+        run_cancellable([sys.executable, "-c", "import time; time.sleep(30)"], Progress(), timeout=0.5)
     assert time.monotonic() - started < 10
 
 
-def test_run_cancellable_stops_when_the_user_cancels():
+def test_external_run_cancellable_stops_when_the_user_cancels():
     progress = Progress()
     threading.Timer(0.3, progress.cancel).start()
     started = time.monotonic()
 
     with pytest.raises(OperationCancelled):
-        office_convert._run_cancellable([sys.executable, "-c", "import time; time.sleep(30)"], progress, timeout=60)
+        run_cancellable([sys.executable, "-c", "import time; time.sleep(30)"], progress, timeout=60)
     assert time.monotonic() - started < 10
 
 

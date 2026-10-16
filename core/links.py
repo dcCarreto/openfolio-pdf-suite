@@ -1,5 +1,6 @@
 """Anotações de link (hyperlink) em arquivos PDF: URL externa ou destino interno (página)."""
 
+import re
 from dataclasses import dataclass
 
 from pypdf import PdfWriter
@@ -7,6 +8,22 @@ from pypdf.annotations import Link
 from pypdf.generic import ArrayObject, NameObject
 
 from .base import READ, PDFOperation, open_reader, require_valid_page_index, write_pdf
+from .messages import Message
+
+_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+_EMAIL_RE = re.compile(r"^[^@\s/]+@[^@\s/]+\.[^@\s/]+$")
+
+
+def normalize_url(url: str) -> str:
+    """Completa o endereço digitado sem esquema: "exemplo.com" vira "https://exemplo.com" e
+    "ana@exemplo.com" vira "mailto:ana@exemplo.com". Sem isso o leitor tratava o endereço
+    como um caminho relativo ao arquivo, e o link não abria."""
+    url = url.strip()
+    if not url or _SCHEME_RE.match(url):
+        return url
+    if _EMAIL_RE.match(url):
+        return "mailto:" + url
+    return "https://" + url.lstrip("/")
 
 
 class AddLink(PDFOperation):
@@ -35,7 +52,7 @@ class AddLink(PDFOperation):
 
         writer = PdfWriter(clone_from=reader)
         if url:
-            annotation = Link(rect=(left, bottom, right, top), url=url)
+            annotation = Link(rect=(left, bottom, right, top), url=normalize_url(url))
         else:
             annotation = Link(rect=(left, bottom, right, top), target_page_index=target_page)
         writer.add_annotation(page_number=page_number, annotation=annotation)
@@ -53,16 +70,46 @@ class LinkInfo:
     target: str
 
 
-def _describe_link_target(annotation) -> str:
+def _destination_page(reader, destination) -> int | None:
+    """Índice (a partir de 0) da página de um destino: array [página /XYZ ...] ou nome."""
+    destination = destination.get_object() if hasattr(destination, "get_object") else destination
+    if isinstance(destination, (str, bytes)):
+        named = reader.named_destinations.get(str(destination))
+        if named is None:
+            return None
+        try:
+            return reader.get_destination_page_number(named)
+        except Exception:
+            return None
+    if isinstance(destination, dict) and "/D" in destination:
+        return _destination_page(reader, destination["/D"])
+    if isinstance(destination, list) and destination:
+        page_ref = destination[0]
+        for index, page in enumerate(reader.pages):
+            if page.indirect_reference is not None and page_ref == page.indirect_reference:
+                return index
+        if isinstance(page_ref, int):
+            return page_ref  # destino remoto usa o número da página
+    return None
+
+
+def _describe_link_target(reader, annotation) -> str:
     action = annotation.get("/A")
     if action is not None:
         action_obj = action.get_object()
         if action_obj.get("/S") == "/URI":
             return str(action_obj.get("/URI", ""))
-        return "ação: " + str(action_obj.get("/S", "desconhecida"))
+        if action_obj.get("/S") == "/GoTo":
+            page = _destination_page(reader, action_obj.get("/D"))
+            if page is not None:
+                return Message("página {page}", page=page + 1)
+        return Message("ação: {action}", action=str(action_obj.get("/S", "?")).lstrip("/"))
     if "/Dest" in annotation:
-        return "destino interno"
-    return "sem destino"
+        page = _destination_page(reader, annotation["/Dest"])
+        if page is not None:
+            return Message("página {page}", page=page + 1)
+        return Message("destino interno")
+    return Message("sem destino")
 
 
 class ListLinks(PDFOperation):
@@ -84,7 +131,7 @@ class ListLinks(PDFOperation):
                         page_index=page_index,
                         link_index=link_index,
                         rect=rect,
-                        target=_describe_link_target(annotation),
+                        target=_describe_link_target(reader, annotation),
                     )
                 )
                 link_index += 1
@@ -108,8 +155,11 @@ class RemoveLink(PDFOperation):
         link_refs = [a for a in annots if a.get_object().get("/Subtype") == "/Link"]
         if not 0 <= link_index < len(link_refs):
             raise ValueError(
-                f"Índice de link inválido: {link_index} (a página tem {len(link_refs)} "
-                f"link(s), de 0 a {len(link_refs) - 1})."
+                Message(
+                    "O link {number} não existe: a página tem {count} link(s).",
+                    number=link_index + 1,
+                    count=len(link_refs),
+                )
             )
         target_ref = link_refs[link_index]
         remaining = ArrayObject(a for a in annots if a != target_ref)

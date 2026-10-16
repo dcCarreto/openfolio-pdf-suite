@@ -98,3 +98,83 @@ def test_replace_embedded_image_rejects_encrypted_input(make_encrypted_pdf, tmp_
         ReplaceEmbeddedImage().run(
             str(encrypted_path), str(tmp_path / "out.pdf"), page_number=0, image_index=0, new_image_path=str(new_image_path)
         )
+
+
+def _drawn_box(pdf_path, page_index=0):
+    page = PdfReader(str(pdf_path)).pages[page_index]
+    matrices = []
+    page.extract_text(visitor_operand_before=lambda op, args, cm, tm: matrices.append(cm) if op == b"Do" else None)
+    a, _b, _c, d, e, f = matrices[0]
+    return e, f, a, d
+
+
+def test_replacement_with_another_proportion_is_not_distorted(tmp_path):
+    pdf_path = _pdf_with_one_image(tmp_path, size=(200, 100))  # área 2:1
+    new_image_path = tmp_path / "quadrada.png"
+    Image.new("RGB", (80, 80), color=(0, 0, 255)).save(new_image_path)
+    output_path = tmp_path / "out.pdf"
+
+    ReplaceEmbeddedImage().run(pdf_path, str(output_path), page_number=0, image_index=0, new_image_path=str(new_image_path))
+
+    image = PdfReader(str(output_path)).pages[0].images[0].image.convert("RGBA")
+    assert abs(image.width / image.height - 2) < 0.05  # a imagem nova ocupa a área sem esticar
+    assert image.getpixel((image.width // 2, image.height // 2))[:3] == (0, 0, 255)
+    assert image.getpixel((2, image.height // 2))[3] == 0  # sobra transparente nas laterais
+    assert _drawn_box(output_path) == _drawn_box(pdf_path)  # mesma posição e tamanho na página
+
+
+def test_stretch_mode_fills_the_area(tmp_path):
+    pdf_path = _pdf_with_one_image(tmp_path, size=(200, 100))
+    new_image_path = tmp_path / "quadrada.png"
+    Image.new("RGB", (80, 80), color=(0, 0, 255)).save(new_image_path)
+    output_path = tmp_path / "out.pdf"
+
+    ReplaceEmbeddedImage().run(
+        pdf_path, str(output_path), page_number=0, image_index=0, new_image_path=str(new_image_path), fit="stretch"
+    )
+
+    image = PdfReader(str(output_path)).pages[0].images[0].image
+    assert image.size == (80, 80)
+
+
+def test_replacing_an_image_shared_by_other_pages_reports_them(tmp_path):
+    from pypdf import PdfWriter
+
+    from pypdf.generic import NameObject
+
+    single = _pdf_with_one_image(tmp_path)
+    writer = PdfWriter(clone_from=single)
+    first = writer.pages[0]
+    second = writer.add_blank_page(width=float(first.mediabox.width), height=float(first.mediabox.height))
+    second[NameObject("/Resources")] = first.raw_get("/Resources")  # a mesma imagem (mesmo objeto)
+    second[NameObject("/Contents")] = first.raw_get("/Contents")
+    shared = tmp_path / "shared.pdf"
+    writer.write(str(shared))
+    new_image_path = tmp_path / "nova.png"
+    Image.new("RGB", (64, 64), color=(0, 200, 0)).save(new_image_path)
+
+    result = ReplaceEmbeddedImage().run(
+        str(shared), str(tmp_path / "out.pdf"), page_number=0, image_index=0, new_image_path=str(new_image_path)
+    )
+
+    assert result.other_pages == [1]
+
+
+def test_inline_image_has_a_clear_error(tmp_path):
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, NameObject
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=100, height=100)
+    content = DecodedStreamObject()
+    content.set_data(b"q 50 0 0 50 0 0 cm BI /W 2 /H 2 /CS /G /BPC 8 ID \x00\xff\xff\x00 EI Q")
+    page[NameObject("/Contents")] = writer._add_object(content)
+    pdf_path = tmp_path / "inline.pdf"
+    writer.write(str(pdf_path))
+    new_image_path = tmp_path / "nova.png"
+    Image.new("RGB", (4, 4)).save(new_image_path)
+
+    with pytest.raises(ValueError, match="inline"):
+        ReplaceEmbeddedImage().run(
+            str(pdf_path), str(tmp_path / "out.pdf"), page_number=0, image_index=0, new_image_path=str(new_image_path)
+        )

@@ -29,7 +29,14 @@ def test_read_metadata_on_document_without_metadata(make_pdf):
 
     metadata = ReadMetadata().run(str(pdf_path))
 
-    assert metadata == {"title": "", "author": "", "subject": "", "keywords": ""}
+    assert {key: metadata[key] for key in ("title", "author", "subject", "keywords", "creator")} == {
+        "title": "",
+        "author": "",
+        "subject": "",
+        "keywords": "",
+        "creator": "",
+    }
+    assert metadata["created"] is None and metadata["modified"] is None
 
 
 def test_set_metadata_preserves_omitted_fields(make_pdf, tmp_path):
@@ -81,3 +88,30 @@ def test_set_metadata_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
 
     with pytest.raises(EncryptedPDFError):
         SetMetadata().run(str(encrypted_path), str(tmp_path / "out.pdf"), title="X")
+
+
+def test_creator_producer_and_dates(make_pdf, tmp_path):
+    pdf_path = make_pdf("doc.pdf", [(200, 200)])
+    output_path = tmp_path / "out.pdf"
+
+    SetMetadata().run(str(pdf_path), str(output_path), creator="Writer", producer="Gerador X")
+
+    metadata = ReadMetadata().run(str(output_path))
+    assert metadata["creator"] == "Writer" and metadata["producer"] == "Gerador X"
+    assert metadata["modified"] is not None  # a data de modificação passa a ser a de agora
+
+
+def test_xmp_receives_creator_tool_and_producer(make_pdf, tmp_path):
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.xmp import XmpInformation
+
+    pdf_path = make_pdf("doc.pdf", [(200, 200)])
+    writer = PdfWriter(clone_from=str(pdf_path))
+    writer.xmp_metadata = XmpInformation.create()
+    writer.write(str(pdf_path))
+    output_path = tmp_path / "out.pdf"
+
+    SetMetadata().run(str(pdf_path), str(output_path), creator="Writer", producer="Gerador X")
+
+    xmp = PdfReader(str(output_path)).xmp_metadata
+    assert xmp.xmp_creator_tool == "Writer" and xmp.pdf_producer == "Gerador X"
