@@ -61,6 +61,9 @@ _SECTIONS = [
      "ui.pages.split_page", "SplitPage"),
     ("build_pages_icon", "Páginas", "Rotacione, reordene ou remova páginas de um PDF.",
      "ui.pages.pages_page", "PagesPage"),
+    ("build_organize_icon", "Organizar páginas",
+     "Reordene arrastando, gire, duplique, exclua, insira páginas em branco ou extraia páginas.",
+     "ui.pages.organize_page", "OrganizePage"),
     ("build_compress_icon", "Comprimir", "Reduza o tamanho de um arquivo PDF.",
      "ui.pages.compress_page", "CompressPage"),
     ("build_convert_icon", "Converter",
@@ -255,6 +258,8 @@ class MainWindow(QMainWindow):
             _icon, title, subtitle, _module, _class = _SECTIONS[row]
             self.stack.widget(row).setWidget(PageContainer(tr(title), tr(subtitle), page))
             self._pages[row] = page
+            if hasattr(page, "edits_changed"):
+                page.edits_changed.connect(self._update_document_actions)
         return page
 
     def page(self, row: int) -> QWidget:
@@ -289,10 +294,10 @@ class MainWindow(QMainWindow):
         edit_menu = menu_bar.addMenu(tr("Editar"))
         self._undo_action = edit_menu.addAction(tr("Desfazer"))
         self._undo_action.setShortcut("Ctrl+Z")
-        self._undo_action.triggered.connect(self.session.undo)
+        self._undo_action.triggered.connect(self.undo)
         self._redo_action = edit_menu.addAction(tr("Refazer"))
         self._redo_action.setShortcuts(["Ctrl+Y", "Ctrl+Shift+Z"])
-        self._redo_action.triggered.connect(self.session.redo)
+        self._redo_action.triggered.connect(self.redo)
         if hasattr(self, "session"):
             self._update_document_actions()
 
@@ -413,6 +418,7 @@ class MainWindow(QMainWindow):
         self.redaction_state.set_page_active(row == self._redaction_row)
         self.measure_state.set_page_active(row == self._measure_row)
         self.area_pick_state.set_active_page(self._pages.get(row))
+        self._update_document_actions()
 
     def _open_pdf(self):
         path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), start_folder(), "PDF (*.pdf)")
@@ -460,6 +466,26 @@ class MainWindow(QMainWindow):
 
     # -- documento de trabalho ------------------------------------------------------
 
+    def _page_with_edits(self):
+        """A aba aberta, se ela tem mudanças próprias a desfazer antes das do documento
+        (a grade de Organizar páginas)."""
+        page = self._pages.get(self.sidebar.currentRow()) if hasattr(self, "sidebar") else None
+        return page if hasattr(page, "undo_edit") else None
+
+    def undo(self):
+        editor = self._page_with_edits()
+        if editor is not None and editor.can_undo_edit():
+            editor.undo_edit()
+        else:
+            self.session.undo()
+
+    def redo(self):
+        editor = self._page_with_edits()
+        if editor is not None and editor.can_redo_edit():
+            editor.redo_edit()
+        else:
+            self.session.redo()
+
     def _update_document_actions(self):
         """Habilita salvar/desfazer/refazer conforme o histórico, com o nome da operação, e
         põe o arquivo (com "*" se alterado) no título da janela."""
@@ -467,11 +493,15 @@ class MainWindow(QMainWindow):
             return
         busy = self._tasks.is_busy()
         has_document = self.session.path() is not None
-        undo_label, redo_label = self.session.undo_label(), self.session.redo_label()
+        editor = self._page_with_edits()
+        grid_undo = editor is not None and editor.can_undo_edit()
+        grid_redo = editor is not None and editor.can_redo_edit()
+        undo_label = tr("edição na grade") if grid_undo else self.session.undo_label()
+        redo_label = tr("edição na grade") if grid_redo else self.session.redo_label()
         self._undo_action.setText(tr("Desfazer {operation}").format(operation=undo_label) if undo_label else tr("Desfazer"))
         self._redo_action.setText(tr("Refazer {operation}").format(operation=redo_label) if redo_label else tr("Refazer"))
-        self._undo_action.setEnabled(self.session.can_undo() and not busy)
-        self._redo_action.setEnabled(self.session.can_redo() and not busy)
+        self._undo_action.setEnabled((grid_undo or self.session.can_undo()) and not busy)
+        self._redo_action.setEnabled((grid_redo or self.session.can_redo()) and not busy)
         self._save_action.setEnabled(has_document and self.session.is_modified() and not busy)
         self._save_as_action.setEnabled(has_document and not busy)
         self._print_action.setEnabled(has_document and not busy)

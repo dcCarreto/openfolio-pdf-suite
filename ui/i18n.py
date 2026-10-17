@@ -1452,4 +1452,27 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'O autor deste PDF não permite imprimi-lo. Para imprimir, use "Remover senha" em Proteger informando a senha de permissões.': (
         'The author of this PDF does not allow printing it. To print, use "Remove password" in Protect with the permissions password.'
     ),
+    'Organizar páginas': 'Organize pages',
+    'Reordene arrastando, gire, duplique, exclua, insira páginas em branco ou extraia páginas.': (
+        'Reorder by dragging, rotate, duplicate, delete, insert blank pages or extract pages.'
+    ),
+    'Girar à esquerda': 'Rotate left',
+    'Girar à direita': 'Rotate right',
+    'Mover para trás': 'Move back',
+    'Mover para a frente': 'Move forward',
+    'Duplicar': 'Duplicate',
+    'Excluir': 'Delete',
+    'Insere uma página em branco depois da última selecionada, ou no fim.': (
+        'Inserts a blank page after the last selected one, or at the end.'
+    ),
+    'Extrair...': 'Extract...',
+    'Salva as páginas selecionadas em outro arquivo.': 'Saves the selected pages to another file.',
+    'Descartar alterações': 'Discard changes',
+    'Arraste as miniaturas para mudar a ordem; Ctrl ou Shift + clique seleciona várias.': (
+        'Drag the thumbnails to change the order; Ctrl or Shift + click selects several.'
+    ),
+    'Página em branco': 'Blank page',
+    'edição na grade': 'grid edit',
+    'Extrair páginas': 'Extract pages',
+    '{count} página(s) salva(s) em {path}.': '{count} page(s) saved to {path}.',
 }

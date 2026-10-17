@@ -51,6 +51,14 @@ def build_pages_icon() -> QIcon:
     return _build(draw)
 
 
+def build_organize_icon() -> QIcon:
+    def draw(p):
+        for x, y in ((4, 4), (12, 4), (4, 12), (12, 12)):
+            p.drawRoundedRect(QRectF(x, y, 6, 6), 1, 1)
+
+    return _build(draw)
+
+
 def build_compress_icon() -> QIcon:
     def draw(p):
         # seta de cima apontando para baixo

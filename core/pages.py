@@ -1,11 +1,14 @@
-"""Manipulação de páginas: rotação, reordenação, remoção, inserção e substituição.
+"""Manipulação de páginas: rotação, reordenação, remoção, inserção, substituição e a
+montagem feita no editor de páginas (`ArrangePages`).
 
 Os índices recebidos aqui contam a partir de 0; a interface mostra e recebe páginas
 contadas a partir de 1 e converte na passagem. As mensagens de erro falam em páginas
 contadas a partir de 1, como o usuário as vê.
 """
 
-from pypdf import PdfWriter
+import io
+
+from pypdf import PdfReader, PdfWriter
 
 from .base import PDFOperation, open_reader, require_valid_page_index, write_pdf
 from .document import pages_writer
@@ -140,3 +143,72 @@ class ReplacePages(PDFOperation):
             (reader, list(range(end_index, total_pages))),
         ]
         write_pdf(pages_writer(parts, properties_from=reader), output_path)
+
+
+_A4 = (595.0, 842.0)
+
+
+class ArrangePages(PDFOperation):
+    """Monta o documento a partir da lista de páginas do editor de páginas, num passo só.
+
+    Cada item de `layout` é (página de origem, giro): a página de origem conta a partir de
+    0 e pode se repetir (duplicar) ou ser None (página em branco, do tamanho da página
+    anterior na lista); o giro, em graus no sentido horário, soma-se ao que a página já tem.
+    Páginas que não aparecem na lista saem do documento, como em Remover.
+    """
+
+    def run(self, input_path: str, output_path: str, layout: list[tuple[int | None, int]]) -> None:
+        if not layout:
+            raise ValueError("A remoção resultaria em um PDF sem nenhuma página.")
+        reader = open_reader(input_path)
+        total_pages = len(reader.pages)
+        for index, angle in layout:
+            if index is not None:
+                require_valid_page_index(total_pages, index)
+            if angle % 90 != 0:
+                raise ValueError("O ângulo de rotação precisa ser múltiplo de 90 graus.")
+
+        blanks = _blank_pages(reader, layout)
+        parts: list[tuple[PdfReader, list[int]]] = []
+        blank_count = 0
+        for index, _angle in layout:
+            source, page = (reader, index) if index is not None else (blanks, blank_count)
+            blank_count += index is None
+            if parts and parts[-1][0] is source:
+                parts[-1][1].append(page)
+            else:
+                parts.append((source, [page]))
+
+        writer = pages_writer(parts, properties_from=reader)
+        for page, (_index, angle) in zip(writer.pages, layout):
+            if angle % 360:
+                page.rotate(angle)
+        write_pdf(writer, output_path)
+
+
+def _blank_pages(reader: PdfReader, layout: list[tuple[int | None, int]]) -> PdfReader | None:
+    """As páginas em branco da lista, num documento à parte, cada uma do tamanho (como se
+    vê na tela) da página anterior na lista, ou da seguinte se ela for a primeira."""
+    sizes = []
+    real = [item for item in layout if item[0] is not None]
+    previous = real[0] if real else None
+    for item in layout:
+        if item[0] is not None:
+            previous = item
+            continue
+        if previous is None:
+            sizes.append(_A4)
+            continue
+        index, angle = previous
+        page = reader.pages[index]
+        width, height = float(page.mediabox.width), float(page.mediabox.height)
+        sizes.append((height, width) if (page.rotation + angle) % 180 else (width, height))
+    if not sizes:
+        return None
+    writer = PdfWriter()
+    for width, height in sizes:
+        writer.add_blank_page(width, height)
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    buffer.seek(0)
+    return PdfReader(buffer)
