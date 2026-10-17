@@ -42,13 +42,30 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#AppExeName}
+; A tarefa "associatepdf" registra o app em "Abrir com" para .pdf.
+ChangesAssociations=yes
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[CustomMessages]
+brazilianportuguese.AssociatePdf=Mostrar o OpenFolio em "Abrir com" para arquivos PDF
+english.AssociatePdf=Show OpenFolio in "Open with" for PDF files
+brazilianportuguese.PdfFile=Documento PDF
+english.PdfFile=PDF document
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "associatepdf"; Description: "{cm:AssociatePdf}"
+
+[Registry]
+; Entra na lista "Abrir com" do .pdf sem tomar o lugar do leitor padrão do usuário.
+Root: HKA; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: string; ValueName: "OpenFolioPDFSuite.pdf"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associatepdf
+Root: HKA; Subkey: "Software\Classes\OpenFolioPDFSuite.pdf"; ValueType: string; ValueName: ""; ValueData: "{cm:PdfFile}"; Flags: uninsdeletekey; Tasks: associatepdf
+Root: HKA; Subkey: "Software\Classes\OpenFolioPDFSuite.pdf\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName},0"; Tasks: associatepdf
+Root: HKA; Subkey: "Software\Classes\OpenFolioPDFSuite.pdf\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: associatepdf
+Root: HKA; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".pdf"; ValueData: ""; Flags: uninsdeletekey; Tasks: associatepdf
 
 [Files]
 Source: "{#RepoRoot}\dist\OpenFolioPDFSuite\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion

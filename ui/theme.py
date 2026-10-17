@@ -197,6 +197,17 @@ QLabel#pageSubtitle {{
     color: {_TEXT_MUTED};
 }}
 
+QWidget#documentNotice {{
+    background-color: {_ELEVATED};
+    border-bottom: 1px solid {_BORDER};
+}}
+
+QPushButton#pageIndicatorButton {{
+    background: transparent;
+    border: none;
+    padding: 0 4px;
+}}
+
 QListWidget#sidebar {{
     background-color: {_PANEL};
     border: none;

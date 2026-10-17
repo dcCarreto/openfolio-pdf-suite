@@ -102,3 +102,24 @@ def build_search_icon() -> QIcon:
         p.drawLine(QPointF(12.5, 12.5), QPointF(18, 18))
 
     return _build(draw)
+
+
+def build_fit_page_icon() -> QIcon:
+    def draw(p):
+        p.drawRoundedRect(QRectF(6, 3, 10, 16), 1.5, 1.5)
+        p.drawLine(QPointF(11, 6), QPointF(11, 16))
+        p.drawLine(QPointF(11, 6), QPointF(9, 8))
+        p.drawLine(QPointF(11, 6), QPointF(13, 8))
+        p.drawLine(QPointF(11, 16), QPointF(9, 14))
+        p.drawLine(QPointF(11, 16), QPointF(13, 14))
+
+    return _build(draw)
+
+
+def build_rotate_icon() -> QIcon:
+    def draw(p):
+        p.drawArc(QRectF(4, 4, 14, 14), 90 * 16, 270 * 16)
+        p.drawLine(QPointF(11, 4), QPointF(14, 2))
+        p.drawLine(QPointF(11, 4), QPointF(14, 7))
+
+    return _build(draw)

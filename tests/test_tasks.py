@@ -233,7 +233,7 @@ def test_language_change_keeps_the_open_document_and_viewer_state(make_text_pdf)
         assert window.viewer is viewer
         assert viewer._scale == scale
         assert viewer._document is not None
-        assert viewer.page_indicator.text() == "Page 1 of 1"
+        assert viewer.page_indicator.toolTip().startswith("Page 1 of 1")
     finally:
         window.close()
 

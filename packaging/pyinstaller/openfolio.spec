@@ -91,5 +91,15 @@ if sys.platform == "darwin":
             "CFBundleName": "OpenFolio PDF Suite",
             "CFBundleDisplayName": "OpenFolio PDF Suite",
             "NSHighResolutionCapable": True,
+            # Aparece em "Abrir com" para PDFs; o arquivo chega pelo evento FileOpen do Qt
+            # (ver ui/app_events.py).
+            "CFBundleDocumentTypes": [
+                {
+                    "CFBundleTypeName": "PDF",
+                    "CFBundleTypeRole": "Editor",
+                    "LSHandlerRank": "Alternate",
+                    "LSItemContentTypes": ["com.adobe.pdf"],
+                }
+            ],
         },
     )

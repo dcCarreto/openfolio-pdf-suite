@@ -47,11 +47,26 @@ servidor nenhum e sem paywall. Tudo roda localmente, na sua máquina.
 </p>
 
 A navegação é feita por uma barra lateral com ícone e descrição de cada ferramenta. No centro
-fica o visualizador — sempre visível, com miniaturas, zoom, rolagem contínua ou página única e
-busca de texto — e é nele que você desenha as anotações e marca as áreas de redação
-diretamente sobre a página. Se o PDF estiver protegido por senha, o próprio visualizador pede
-a senha na hora de abrir. À direita, cada seção tem seus próprios campos de entrada/saída e
-botão de ação — o campo de saída já vem com um nome sugerido a partir do arquivo de entrada.
+fica o visualizador — sempre visível, com miniaturas, marcadores e anexos ao lado, zoom
+(também com Ctrl + roda do mouse), ajuste à largura ou à página, rotação da visualização,
+rolagem contínua ou página única, busca que destaca todas as ocorrências e seleção de texto
+com Ctrl+C. É nele que você desenha as anotações, marca as áreas de redação e posiciona o que
+as ferramentas pedem (a área de um texto novo, de um link, de um campo de formulário, do corte
+ou do selo da assinatura), arrastando sobre a página. Um aviso no topo indica quando o PDF está
+protegido, assinado, tem formulário ou camadas. Se o PDF estiver protegido por senha, o próprio
+visualizador pede a senha na hora de abrir.
+
+O documento aberto é um documento de trabalho: as ferramentas aplicam o resultado nele, cada
+operação pode ser desfeita (Ctrl+Z) e refeita (Ctrl+Y), e nada vai para o arquivo original
+até você usar **Arquivo > Salvar** (ou Salvar como). O título da janela mostra um "*" enquanto
+houver alterações não salvas, e o app pergunta antes de fechar ou trocar de documento. Para
+gravar o resultado de uma ferramenta direto em outro arquivo, use "Procurar..." no campo de
+saída dela. Páginas selecionadas nas miniaturas (Ctrl ou Shift + clique) podem ser usadas como
+entrada da aba Páginas.
+
+Dá para abrir um PDF arrastando-o para a janela, pelo menu **Arquivo > Abrir recente**, ou
+pelo "Abrir com" do sistema (no Windows, o instalador oferece incluir o OpenFolio nessa lista).
+O app lembra o idioma, a última pasta usada e os arquivos recentes.
 
 As operações rodam em segundo plano: a janela continua respondendo, a barra de status mostra
 o andamento e o botão "Cancelar" interrompe a operação sem deixar arquivo pela metade. Os
@@ -312,15 +327,19 @@ ui/              Interface gráfica (PySide6)
                        construída na primeira vez em que é aberta)
   theme.py             Tema escuro único, inspirado no macOS
   icon.py              Ícone da aplicação (renderizado a partir de assets/logo.svg)
-  document_session.py  Sessão compartilhada do PDF aberto no visualizador
+  document_session.py  Documento de trabalho: arquivo do usuário, versões, desfazer/refazer
+  area_pick_state.py   Marcação de áreas no visualizador para as ferramentas
+  preferences.py       Arquivos recentes, última pasta e idioma entre sessões
+  app_events.py        Arquivos vindos da linha de comando, do "Abrir com" e de arrastar
+  errors.py            Mensagens de erro para o usuário, com detalhes técnicos à parte
   annotation_state.py  Estado compartilhado da ferramenta de anotações
   redaction_state.py   Estado compartilhado da ferramenta de redação
   page_ranges.py       Leitura de listas de páginas digitadas ("1-3, 5, 8-")
   tasks.py             Execução das operações numa thread de trabalho, uma por vez
   diagnostics.py       Log em arquivo e tratamento global de exceções
   widget_state.py      Preserva o que foi preenchido nas abas ao trocar de idioma
-  area_pick_state.py   Marcação de áreas no visualizador para a edição de texto
-  viewer/              Visualizador central: renderização, miniaturas, busca, zoom
+  viewer/              Visualizador central: renderização, painel lateral (miniaturas,
+                       marcadores, anexos), busca, zoom, seleção de texto
   pages/               Uma classe de página por ferramenta (MergePage, CompressPage, ...)
   widgets/             Widgets reutilizáveis (FilePicker, FileListEditor, PageContainer)
 

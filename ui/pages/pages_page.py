@@ -6,6 +6,7 @@ de `core/pages.py` acontece em `ui/page_ranges.py`.
 
 from PySide6.QtWidgets import (
     QComboBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -19,7 +20,8 @@ from PySide6.QtWidgets import (
 from core.base import READ, open_reader
 from core.pages import InsertPages, RemovePages, ReorderPages, ReplacePages, RotatePages
 from ui.i18n import error_text, tr
-from ui.page_ranges import parse_page_ranges
+from ui.page_ranges import format_page_ranges, parse_page_ranges
+from ui.widgets.current_page import with_current_page_button
 from ui.tasks import run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -72,12 +74,15 @@ class PagesPage(QWidget):
         self.replace_end_spin = QSpinBox()
         self.replace_end_spin.setRange(1, 100000)
 
+        self._selection_buttons: list[QPushButton] = []
         self.params_stack = QStackedWidget()
         self.params_stack.addWidget(self._build_rotate_widget())
         self.params_stack.addWidget(self._build_simple_widget(tr("Nova ordem:"), self.reorder_edit))
         self.params_stack.addWidget(
-            self._build_simple_widget(tr("Páginas a remover:"), self.remove_edit)
+            self._build_simple_widget(tr("Páginas a remover:"), self.remove_edit, selection=True)
         )
+        session.page_selection_changed.connect(self._update_selection_buttons)
+        self._update_selection_buttons()
         self.params_stack.addWidget(self._build_insert_widget())
         self.params_stack.addWidget(self._build_replace_widget())
 
@@ -101,16 +106,36 @@ class PagesPage(QWidget):
         layout.addWidget(QLabel(tr("Ângulo:")))
         layout.addWidget(self.rotate_angle_combo)
         layout.addWidget(QLabel(tr("Páginas a rotacionar:")))
-        layout.addWidget(self.rotate_pages_edit)
+        layout.addLayout(self._with_selection_button(self.rotate_pages_edit))
         return widget
 
-    def _build_simple_widget(self, label_text: str, field: QLineEdit) -> QWidget:
+    def _build_simple_widget(self, label_text: str, field: QLineEdit, selection: bool = False) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(QLabel(label_text))
-        layout.addWidget(field)
+        if selection:
+            layout.addLayout(self._with_selection_button(field))
+        else:
+            layout.addWidget(field)
         return widget
+
+    def _with_selection_button(self, field: QLineEdit) -> QHBoxLayout:
+        """Campo de páginas com o botão que o preenche com as páginas selecionadas nas
+        miniaturas (Ctrl/Shift+clique)."""
+        button = QPushButton(tr("Usar seleção"))
+        button.setToolTip(tr("Preenche com as páginas selecionadas nas miniaturas (Ctrl ou Shift + clique)."))
+        button.clicked.connect(lambda: field.setText(format_page_ranges(self.session.selected_pages())))
+        self._selection_buttons.append(button)
+        row = QHBoxLayout()
+        row.addWidget(field, 1)
+        row.addWidget(button)
+        return row
+
+    def _update_selection_buttons(self):
+        has_selection = bool(self.session.selected_pages())
+        for button in self._selection_buttons:
+            button.setEnabled(has_selection)
 
     def _build_insert_widget(self) -> QWidget:
         widget = QWidget()
@@ -119,7 +144,7 @@ class PagesPage(QWidget):
         layout.addWidget(QLabel(tr("PDF com as páginas a inserir:")))
         layout.addWidget(self.insert_source_picker)
         layout.addWidget(QLabel(tr("Inserir antes da página (total + 1 = no fim):")))
-        layout.addWidget(self.insert_at_spin)
+        layout.addLayout(with_current_page_button(self.insert_at_spin, self.session))
         return widget
 
     def _build_replace_widget(self) -> QWidget:
@@ -132,7 +157,18 @@ class PagesPage(QWidget):
         layout.addWidget(self.replace_start_spin)
         layout.addWidget(QLabel(tr("Até a página (inclusive):")))
         layout.addWidget(self.replace_end_spin)
+        selection_button = QPushButton(tr("Usar seleção"))
+        selection_button.setToolTip(tr("Da primeira à última página selecionada nas miniaturas."))
+        selection_button.clicked.connect(self._use_selection_for_replace)
+        self._selection_buttons.append(selection_button)
+        layout.addWidget(selection_button)
         return widget
+
+    def _use_selection_for_replace(self):
+        pages = self.session.selected_pages()
+        if pages:
+            self.replace_start_spin.setValue(pages[0] + 1)
+            self.replace_end_spin.setValue(pages[-1] + 1)
 
     def _on_operation_changed(self, index: int):
         self.params_stack.setCurrentIndex(index)

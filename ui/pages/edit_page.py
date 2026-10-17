@@ -1,6 +1,7 @@
 """Aba de edição: substituir imagens embutidas, "editar" texto (cobrir e reescrever) e
 gerenciar links (hyperlinks)."""
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -29,11 +31,16 @@ from ui.area_pick_state import AreaPickState
 from ui.i18n import tr, tr_message
 from ui.tasks import call, call_with_progress, run_task
 from ui.widgets.color_combo import ColorCombo
+from ui.widgets.current_page import with_current_page_button
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 _MODES = ["Substituir imagem", "Editar texto", "Adicionar link", "Listar links", "Remover link"]
 _EDIT_TEXT_MODE = 1
+_ADD_LINK_MODE = 2
+_REMOVE_LINK_MODE = 4
+# Modos em que o arrasto no visualizador marca uma área (ou escolhe o link a remover).
+_PICK_MODES = (_EDIT_TEXT_MODE, _ADD_LINK_MODE, _REMOVE_LINK_MODE)
 _EDIT_FONTS = [("sans", "Sem serifa"), ("sans-bold", "Sem serifa, negrito"), ("mono", "Monoespaçada")]
 _TEXT_COLUMN = 5
 
@@ -70,13 +77,26 @@ class EditPage(QWidget):
 
     def _on_mode_changed(self, index: int):
         self.stack.setCurrentIndex(index)
-        self.area_pick_state.set_mode_active(index == _EDIT_TEXT_MODE)
+        self.area_pick_state.set_wanted(self, index in _PICK_MODES)
         self._publish_areas()
 
-    def showEvent(self, event):
-        super().showEvent(event)
-        self.area_pick_state.set_mode_active(self.mode_combo.currentIndex() == _EDIT_TEXT_MODE)
-        self._publish_areas()
+    def _on_area_picked(self, page_index: int, left: float, bottom: float, right: float, top: float):
+        if self.area_pick_state.owner() is not self:
+            return
+        mode = self.mode_combo.currentIndex()
+        if mode == _EDIT_TEXT_MODE:
+            self._add_edit_text_row(page_index + 1, (left, bottom, right, top))
+            self.edit_text_editor.setFocus()
+        elif mode == _REMOVE_LINK_MODE:
+            self._select_link_at(page_index, ((left + right) / 2, (bottom + top) / 2))
+        elif mode == _ADD_LINK_MODE:
+            self.link_page_spin.setValue(page_index + 1)
+            for spin, value in zip(
+                (self.link_left_spin, self.link_bottom_spin, self.link_right_spin, self.link_top_spin),
+                (left, bottom, right, top),
+            ):
+                spin.setValue(value)
+            self._publish_areas()
 
     # ---- Substituir imagem --------------------------------------------------
 
@@ -88,6 +108,8 @@ class EditPage(QWidget):
         list_button = QPushButton(tr("Listar imagens"))
         list_button.clicked.connect(self._list_images)
         self.images_list = QListWidget()
+        self.images_list.setToolTip(tr("Clique numa imagem para escolhê-la."))
+        self.images_list.currentItemChanged.connect(self._on_image_chosen)
 
         self.image_page_spin = QSpinBox()
         self.image_page_spin.setRange(1, 9999)
@@ -135,10 +157,12 @@ class EditPage(QWidget):
                 self.images_list.addItem(tr("Nenhuma imagem embutida encontrada."))
                 return
             for image in images:
-                self.images_list.addItem(
+                item = QListWidgetItem(
                     f"{tr('Página')} {image.page_index + 1} — #{image.image_index + 1} — "
                     f"{image.name} ({image.width}x{image.height})"
                 )
+                item.setData(Qt.ItemDataRole.UserRole, (image.page_index, image.image_index))
+                self.images_list.addItem(item)
 
         run_task(
             self,
@@ -147,6 +171,13 @@ class EditPage(QWidget):
             on_success=done,
             error_message=tr("Falha ao listar imagens: {error}"),
         )
+
+    def _on_image_chosen(self, item, _previous=None):
+        data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if data:
+            page_index, image_index = data
+            self.image_page_spin.setValue(page_index + 1)
+            self.image_index_spin.setValue(image_index + 1)
 
     def _replace_image(self):
         input_path = self.session.path()
@@ -287,10 +318,6 @@ class EditPage(QWidget):
             self.edit_text_table.removeRow(row)
             self._publish_areas()
 
-    def _on_area_picked(self, page_index: int, left: float, bottom: float, right: float, top: float):
-        self._add_edit_text_row(page_index + 1, (left, bottom, right, top))
-        self.edit_text_editor.setFocus()
-
     def _on_edit_row_selected(self, row: int, _column: int, _previous_row: int, _previous_column: int):
         item = self.edit_text_table.item(row, _TEXT_COLUMN) if row >= 0 else None
         self.edit_text_editor.blockSignals(True)
@@ -328,10 +355,24 @@ class EditPage(QWidget):
         return areas
 
     def _publish_areas(self):
-        if not hasattr(self, "edit_text_table"):
+        if not hasattr(self, "remove_links_list"):
+            return  # ainda construindo os painéis
+        if self.mode_combo.currentIndex() == _REMOVE_LINK_MODE:
+            links = self._loaded_links
+            selected = self.remove_links_list.currentRow()
+            self.area_pick_state.set_areas(
+                self, [(link.page_index, link.rect) for link in links], selected if selected >= 0 else None
+            )
+            return
+        if self.mode_combo.currentIndex() == _ADD_LINK_MODE:
+            rect = tuple(
+                spin.value()
+                for spin in (self.link_left_spin, self.link_bottom_spin, self.link_right_spin, self.link_top_spin)
+            )
+            self.area_pick_state.set_areas(self, [(self.link_page_spin.value() - 1, rect)], 0)
             return
         row = self.edit_text_table.currentRow()
-        self.area_pick_state.set_areas(self._table_areas(), row if row >= 0 else None)
+        self.area_pick_state.set_areas(self, self._table_areas(), row if row >= 0 else None)
 
     def _apply_edit_text(self):
         input_path = self.session.path()
@@ -408,6 +449,8 @@ class EditPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
+        hint = QLabel(tr("Arraste no visualizador para marcar a área do link, ou ajuste os valores abaixo."))
+        hint.setWordWrap(True)
         self.link_page_spin = QSpinBox()
         self.link_page_spin.setRange(1, 9999)
 
@@ -432,7 +475,10 @@ class EditPage(QWidget):
         self.link_target_page_spin = QSpinBox()
         self.link_target_page_spin.setRange(1, 9999)
         self.link_target_stack.addWidget(self.link_url_edit)
-        self.link_target_stack.addWidget(self.link_target_page_spin)
+        target_page_widget = QWidget()
+        target_page_widget.setLayout(with_current_page_button(self.link_target_page_spin, self.session))
+        target_page_widget.layout().setContentsMargins(0, 0, 0, 0)
+        self.link_target_stack.addWidget(target_page_widget)
 
         self.add_link_output_picker = FilePicker(
             mode="save", suggested_source=self.session.path, suggested_suffix="com_link"
@@ -440,9 +486,12 @@ class EditPage(QWidget):
         add_button = QPushButton(tr("Adicionar link"))
         add_button.clicked.connect(self._add_link)
 
+        layout.addWidget(hint)
         layout.addWidget(QLabel(tr("Página:")))
         layout.addWidget(self.link_page_spin)
         layout.addWidget(QLabel(tr("Esquerda / Base / Direita / Topo (pontos PDF):")))
+        for spin in (self.link_page_spin, self.link_left_spin, self.link_bottom_spin, self.link_right_spin, self.link_top_spin):
+            spin.valueChanged.connect(self._publish_areas)
         for spin in (self.link_left_spin, self.link_bottom_spin, self.link_right_spin, self.link_top_spin):
             layout.addWidget(spin)
         layout.addWidget(QLabel(tr("Destino:")))
@@ -547,8 +596,13 @@ class EditPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        note = QLabel(tr('Use "Listar links" para descobrir a página e o número do link a remover.'))
+        note = QLabel(tr("Clique num link da lista, ou arraste sobre ele no visualizador, para escolher o link a remover."))
         note.setWordWrap(True)
+        load_button = QPushButton(tr("Listar links"))
+        load_button.clicked.connect(self._load_links_to_remove)
+        self.remove_links_list = QListWidget()
+        self.remove_links_list.currentRowChanged.connect(self._on_link_to_remove_chosen)
+        self._loaded_links = []
 
         self.remove_link_page_spin = QSpinBox()
         self.remove_link_page_spin.setRange(1, 9999)
@@ -562,6 +616,8 @@ class EditPage(QWidget):
         remove_button.clicked.connect(self._remove_link)
 
         layout.addWidget(note)
+        layout.addWidget(load_button)
+        layout.addWidget(self.remove_links_list)
         layout.addWidget(QLabel(tr("Página:")))
         layout.addWidget(self.remove_link_page_spin)
         layout.addWidget(QLabel(tr("Número do link na página:")))
@@ -570,6 +626,48 @@ class EditPage(QWidget):
         layout.addWidget(self.remove_link_output_picker)
         layout.addWidget(remove_button)
         return widget
+
+    def _load_links_to_remove(self):
+        input_path = self.session.path()
+        if not input_path:
+            QMessageBox.warning(self, tr("Remover link"), tr("Abra um PDF para começar."))
+            return
+
+        def done(links):
+            self._loaded_links = list(links)
+            self.remove_links_list.blockSignals(True)
+            self.remove_links_list.clear()
+            for link in links:
+                self.remove_links_list.addItem(
+                    f"{tr('Página')} {link.page_index + 1} — #{link.link_index + 1} — {tr_message(link.target)}"
+                )
+            self.remove_links_list.blockSignals(False)
+            if not links:
+                QMessageBox.information(self, tr("Remover link"), tr("Nenhum link encontrado."))
+            self._publish_areas()
+
+        run_task(
+            self,
+            tr("Listar links"),
+            call(ListLinks().run, input_path),
+            on_success=done,
+            error_message=tr("Falha ao listar links: {error}"),
+        )
+
+    def _on_link_to_remove_chosen(self, row: int):
+        if 0 <= row < len(self._loaded_links):
+            link = self._loaded_links[row]
+            self.remove_link_page_spin.setValue(link.page_index + 1)
+            self.remove_link_index_spin.setValue(link.link_index + 1)
+        self._publish_areas()
+
+    def _select_link_at(self, page_index: int, point: tuple[float, float]) -> None:
+        x, y = point
+        for row, link in enumerate(self._loaded_links):
+            left, bottom, right, top = link.rect
+            if link.page_index == page_index and min(left, right) <= x <= max(left, right) and min(bottom, top) <= y <= max(bottom, top):
+                self.remove_links_list.setCurrentRow(row)
+                return
 
     def _remove_link(self):
         input_path = self.session.path()
@@ -592,6 +690,9 @@ class EditPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
+            self._loaded_links = []
+            self.remove_links_list.clear()
+            self._publish_areas()
             QMessageBox.information(self, tr("Remover link"), tr("Link removido com sucesso."))
 
         run_task(

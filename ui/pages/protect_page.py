@@ -54,7 +54,7 @@ class ProtectPage(QWidget):
 
         suffix = "protegido" if kind == "Proteger" else "sem_senha"
         output_picker = FilePicker(
-            mode="save", suggested_source=self.session.path, suggested_suffix=suffix
+            mode="save", suggested_source=self.session.path, suggested_suffix=suffix, working_copy=False
         )
         password_edit = QLineEdit()
         password_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -113,7 +113,7 @@ class ProtectPage(QWidget):
         instructions.setWordWrap(True)
 
         self.perm_output_picker = FilePicker(
-            mode="save", suggested_source=self.session.path, suggested_suffix="restrito"
+            mode="save", suggested_source=self.session.path, suggested_suffix="restrito", working_copy=False
         )
         self.perm_user_password_edit = QLineEdit()
         self.perm_user_password_edit.setEchoMode(QLineEdit.EchoMode.Password)

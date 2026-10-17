@@ -1350,4 +1350,95 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'A sanitização não conseguiu remover: {problems}. O arquivo não foi salvo.': (
         'Sanitization could not remove: {problems}. The file was not saved.'
     ),
+    # Etapa 5: experiência de uso
+    'Salvar como...': 'Save as...',
+    'Abrir recente': 'Open recent',
+    'Limpar lista': 'Clear list',
+    'Nenhum arquivo recente': 'No recent files',
+    'Desfazer': 'Undo',
+    'Refazer': 'Redo',
+    'Desfazer {operation}': 'Undo {operation}',
+    'Refazer {operation}': 'Redo {operation}',
+    'Documento salvo.': 'Document saved.',
+    'Alterações não salvas': 'Unsaved changes',
+    '"{name}" tem alterações que não foram salvas. Salvar antes?': (
+        '"{name}" has unsaved changes. Save first?'
+    ),
+    'Não foi possível salvar o arquivo: {error}': 'Could not save the file: {error}',
+    'No documento': 'In the document',
+    'Aplicar o resultado ao documento aberto (Ctrl+Z desfaz)': (
+        'Apply the result to the open document (Ctrl+Z undoes)'
+    ),
+    'No documento aberto (Ctrl+Z desfaz)': 'In the open document (Ctrl+Z undoes)',
+    'O resultado é aplicado ao documento aberto. Use Arquivo > Salvar para gravar.': (
+        'The result is applied to the open document. Use File > Save to write it.'
+    ),
+    'Arraste no visualizador a área que deve ficar; as margens são calculadas a partir dela.': (
+        'Drag over the viewer the area to keep; the margins are computed from it.'
+    ),
+    'Clique numa imagem para escolhê-la.': 'Click an image to choose it.',
+    'Arraste no visualizador para marcar a área do link, ou ajuste os valores abaixo.': (
+        'Drag over the viewer to mark the link area, or adjust the values below.'
+    ),
+    'Clique num link da lista, ou arraste sobre ele no visualizador, para escolher o link a remover.': (
+        'Click a link in the list, or drag over it in the viewer, to choose the link to remove.'
+    ),
+    'Arraste no visualizador para marcar onde o campo fica, ou ajuste os valores (pontos PDF).': (
+        'Drag over the viewer to mark where the field goes, or adjust the values (PDF points).'
+    ),
+    'Selecione uma opção na tabela e arraste no visualizador para marcar onde ela fica.': (
+        'Select an option in the table and drag over the viewer to mark where it goes.'
+    ),
+    'Usar seleção': 'Use selection',
+    'Preenche com as páginas selecionadas nas miniaturas (Ctrl ou Shift + clique).': (
+        'Fills in the pages selected in the thumbnails (Ctrl or Shift + click).'
+    ),
+    'Área marcada no visualizador': 'Area marked in the viewer',
+    'Para escolher o lugar exato do selo, arraste no visualizador.': (
+        'To choose the exact place of the stamp, drag over the viewer.'
+    ),
+    'Arraste no visualizador para marcar a área do selo.': 'Drag over the viewer to mark the stamp area.',
+    'A área do selo é pequena demais: marque pelo menos 20 x 10 pontos.': (
+        'The stamp area is too small: mark at least 20 x 10 points.'
+    ),
+    'Ir para a página... (Ctrl+G)': 'Go to page... (Ctrl+G)',
+    'Ir para a página': 'Go to page',
+    'Página (1 a {total}):': 'Page (1 to {total}):',
+    'Ajustar à página (Ctrl+0)': 'Fit page (Ctrl+0)',
+    'Girar a visualização (o arquivo não muda)': 'Rotate the view (the file does not change)',
+    'Painel lateral (miniaturas, marcadores, anexos)': 'Side panel (thumbnails, bookmarks, attachments)',
+    'Miniaturas (Ctrl ou Shift + clique seleciona várias)': (
+        'Thumbnails (Ctrl or Shift + click selects several)'
+    ),
+    'Duplo clique para salvar o anexo': 'Double-click to save the attachment',
+    'Salvar anexo': 'Save attachment',
+    'Não foi possível salvar o anexo: {error}': 'Could not save the attachment: {error}',
+    '(sem título)': '(untitled)',
+    'Página {page}': 'Page {page}',
+    'Verificar as assinaturas na aba Assinatura': 'Verify the signatures in the Signature tab',
+    'Assinado digitalmente ({count} assinatura(s)). Alterar o documento invalida a assinatura.': (
+        'Digitally signed ({count} signature(s)). Changing the document invalidates the signature.'
+    ),
+    'Tem formulário ({count} campo(s)).': 'Has a form ({count} field(s)).',
+    'Tem camadas (veja a aba Camadas).': 'Has layers (see the Layers tab).',
+    'Protegido por senha.': 'Password-protected.',
+    'O autor restringiu alterações ou cópia (senha de permissões).': (
+        'The author restricted changes or copying (permissions password).'
+    ),
+    'Ocorreu um erro inesperado.': 'An unexpected error occurred.',
+    'Não há espaço livre no disco para gravar o arquivo.': 'There is no free disk space to write the file.',
+    'Memória insuficiente para concluir a operação. Feche outros programas ou use um arquivo menor.': (
+        'Not enough memory to finish the operation. Close other programs or use a smaller file.'
+    ),
+    'O PDF parece estar corrompido ou não é um PDF válido.': (
+        'The PDF seems to be corrupted or is not a valid PDF.'
+    ),
+    'O arquivo não foi encontrado: {name}': 'The file was not found: {name}',
+    'Sem permissão para usar o arquivo {name}. Se ele estiver aberto em outro programa, feche-o e tente de novo.': (
+        'No permission to use the file {name}. If it is open in another program, close it and try again.'
+    ),
+    'Clique numa camada para escolhê-la.': 'Click a layer to choose it.',
+    'Da primeira à última página selecionada nas miniaturas.': 'From the first to the last page selected in the thumbnails.',
+    'Página atual': 'Current page',
+    'Usar a página que está no visualizador': 'Use the page shown in the viewer',
 }

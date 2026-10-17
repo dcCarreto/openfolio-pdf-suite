@@ -15,7 +15,8 @@ from PySide6.QtWidgets import (
 from core.annotations import AddAnnotations, ExportAnnotationsCSV
 from ui.annotation_state import AnnotationState, DEFAULT_COLOR
 from ui.document_session import DocumentSession
-from ui.i18n import error_text, tr
+from ui.errors import show_error
+from ui.i18n import tr
 from ui.tasks import call, run_task
 from ui.stamp_library import StampLibrary
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -211,9 +212,7 @@ class AnnotationsPage(QWidget):
         try:
             self._stamp_library.add_stamp(name, text, color=self.annotation_state.active_color())
         except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Anotações"), tr("Falha ao salvar carimbo: {error}").format(error=error_text(exc))
-            )
+            show_error(self, tr("Anotações"), tr("Falha ao salvar carimbo: {error}"), exc)
             return
 
         self.new_stamp_name_edit.clear()

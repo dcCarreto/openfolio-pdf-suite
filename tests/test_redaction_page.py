@@ -36,7 +36,7 @@ def _build_page_with_pending_rect(tmp_path):
     redaction_state.add_pending(RedactionRect(page_index=0, left=0, bottom=0, right=100, top=100))
 
     page = RedactionPage(session, redaction_state)
-    page.redact_output_picker._path = str(tmp_path / "out.pdf")
+    page.redact_output_picker.restore((str(tmp_path / "out.pdf"), session.source_path(), False))
     return page
 
 

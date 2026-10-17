@@ -12,7 +12,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.base import READ, open_reader
 from core.crop import CropPages, ScalePages
+from core.geometry import PageGeometry
+from ui.area_pick_state import AreaPickState
 from ui.i18n import tr
 from ui.tasks import call, run_task
 from ui.page_sizes import CUSTOM_SIZE_LABEL, PAGE_SIZES
@@ -25,9 +28,12 @@ _SIZE_LABELS = [*PAGE_SIZES.keys(), CUSTOM_SIZE_LABEL]
 class CropPage(QWidget):
     """Permite cortar margens ou redimensionar as páginas de um PDF."""
 
-    def __init__(self, session, parent=None):
+    def __init__(self, session, area_pick_state: AreaPickState | None = None, parent=None):
         super().__init__(parent)
         self.session = session
+        self.area_pick_state = area_pick_state or AreaPickState()
+        self.area_pick_state.area_picked.connect(self._on_area_picked)
+        self._crop_page = 0
 
         self.source_bar = DocumentSourceBar(session)
 
@@ -45,6 +51,7 @@ class CropPage(QWidget):
         layout.addWidget(QLabel(tr("Operação:")))
         layout.addWidget(self.mode_combo)
         layout.addWidget(self.stack)
+        self._on_mode_changed(self.mode_combo.currentIndex())
 
     def _build_crop_panel(self) -> QWidget:
         widget = QWidget()
@@ -60,6 +67,11 @@ class CropPage(QWidget):
         self.right_spin = self._margin_spin()
         self.top_spin = self._margin_spin()
 
+        for spin in (self.left_spin, self.bottom_spin, self.right_spin, self.top_spin):
+            spin.valueChanged.connect(self._publish_area)
+        crop_hint = QLabel(tr("Arraste no visualizador a área que deve ficar; as margens são calculadas a partir dela."))
+        crop_hint.setWordWrap(True)
+
         margins_layout = QFormLayout()
         margins_layout.addRow(tr("Esquerda:"), self.left_spin)
         margins_layout.addRow(tr("Baixo:"), self.bottom_spin)
@@ -71,6 +83,7 @@ class CropPage(QWidget):
 
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.crop_output_picker)
+        layout.addWidget(crop_hint)
         layout.addWidget(QLabel(tr("Margens a cortar (pontos):")))
         layout.addLayout(margins_layout)
         layout.addWidget(apply_button)
@@ -128,6 +141,54 @@ class CropPage(QWidget):
 
     def _on_mode_changed(self, index: int):
         self.stack.setCurrentIndex(index)
+        self.area_pick_state.set_wanted(self, index == 0)
+        self._publish_area()
+
+    def _page_geometry(self, page_index: int) -> PageGeometry | None:
+        path = self.session.path()
+        if not path:
+            return None
+        try:
+            reader = open_reader(path, purpose=READ)
+            return PageGeometry.from_pypdf_page(reader.pages[page_index])
+        except Exception:
+            return None
+
+    def _on_area_picked(self, page_index: int, left: float, bottom: float, right: float, top: float):
+        """A área que deve ficar vira as quatro margens (na orientação da tela, como o
+        corte as aplica)."""
+        if self.area_pick_state.owner() is not self:
+            return
+        geometry = self._page_geometry(page_index)
+        if geometry is None:
+            return
+        v_left, v_bottom, v_right, v_top = geometry.user_rect_to_visual((left, bottom, right, top))
+        self._crop_page = page_index
+        for spin, value in (
+            (self.left_spin, v_left),
+            (self.bottom_spin, v_bottom),
+            (self.right_spin, geometry.width - v_right),
+            (self.top_spin, geometry.height - v_top),
+        ):
+            spin.blockSignals(True)
+            spin.setValue(max(0.0, value))
+            spin.blockSignals(False)
+        self._publish_area()
+
+    def _publish_area(self):
+        if not hasattr(self, "top_spin"):
+            return
+        geometry = self._page_geometry(self._crop_page)
+        if geometry is None:
+            self.area_pick_state.set_areas(self, [])
+            return
+        visual = (
+            self.left_spin.value(),
+            self.bottom_spin.value(),
+            geometry.width - self.right_spin.value(),
+            geometry.height - self.top_spin.value(),
+        )
+        self.area_pick_state.set_areas(self, [(self._crop_page, geometry.visual_rect_to_user(visual))], 0)
 
     def _crop(self):
         input_path = self.session.path()

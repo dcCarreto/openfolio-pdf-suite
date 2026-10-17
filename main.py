@@ -6,6 +6,7 @@ import sys
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
+from ui.app_events import FileOpenFilter, pdf_paths_from_arguments
 from ui.diagnostics import install_exception_hooks, setup_logging
 from ui.main_window import APP_VERSION, MainWindow
 from ui.theme import apply_theme
@@ -25,6 +26,13 @@ def main():
     apply_theme(app)
     window = MainWindow(settings=QSettings())
     window.show()
+
+    # "Abrir com" / duplo clique num PDF: o arquivo chega como argumento (Windows, Linux)
+    # ou como evento FileOpen (macOS).
+    file_open_filter = FileOpenFilter(window.session.open)
+    app.installEventFilter(file_open_filter)
+    for path in pdf_paths_from_arguments(sys.argv[1:])[:1]:
+        window.session.open(path)
     sys.exit(app.exec())
 
 

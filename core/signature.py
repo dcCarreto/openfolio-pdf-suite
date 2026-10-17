@@ -158,9 +158,14 @@ class SignDocument(PDFOperation):
         pfx_password: str | None = None,
         test_common_name: str | None = None,
         test_email: str | None = None,
+        box: tuple[float, float, float, float] | None = None,
     ) -> None:
-        if position not in _POSITIONS:
+        """`box` (left, bottom, right, top no espaço do usuário), se informado, é a área do
+        selo marcada no visualizador e substitui `position`."""
+        if box is None and position not in _POSITIONS:
             raise ValueError(f"Posição inválida: {position}")
+        if box is not None and (box[2] - box[0] < 20 or box[3] - box[1] < 10):
+            raise ValueError("A área do selo é pequena demais: marque pelo menos 20 x 10 pontos.")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             if pfx_path:
@@ -174,7 +179,8 @@ class SignDocument(PDFOperation):
 
             reader = open_reader(input_path)
             require_valid_page_index(len(reader.pages), page_index)
-            box = _stamp_box(reader.pages[page_index], position)
+            if box is None:
+                box = _stamp_box(reader.pages[page_index], position)
             field_name = _unique_field_name(reader)
             stamp_style = stamp.TextStampStyle(
                 stamp_text="Assinado digitalmente por %(signer)s\n%(ts)s"

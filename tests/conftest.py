@@ -95,3 +95,12 @@ def make_text_pdf(tmp_path):
         return path
 
     return _make_text_pdf
+
+
+@pytest.fixture(autouse=True)
+def _no_modal_dialogs(monkeypatch):
+    """Um diálogo modal aberto por `exec()` travaria a suíte (no modo offscreen ninguém o
+    fecha): os testes que querem conferir um diálogo o substituem explicitamente."""
+    from PySide6.QtWidgets import QMessageBox
+
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: QMessageBox.StandardButton.Ok)

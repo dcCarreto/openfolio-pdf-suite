@@ -9,6 +9,18 @@ import re
 _TOKEN = re.compile(r"^\s*(\d+)\s*(?:-\s*(\d*)\s*)?$")
 
 
+def format_page_ranges(pages: list[int]) -> str:
+    """Páginas (a partir de 0) no formato que `parse_page_ranges` lê, contadas a partir de
+    1 e agrupadas em intervalos: [0, 1, 2, 4] -> "1-3, 5"."""
+    groups: list[list[int]] = []
+    for page in sorted(set(pages)):
+        if groups and page == groups[-1][1] + 1:
+            groups[-1][1] = page
+        else:
+            groups.append([page, page])
+    return ", ".join(f"{a + 1}" if a == b else f"{a + 1}-{b + 1}" for a, b in groups)
+
+
 def parse_page_ranges(text: str, total_pages: int | None = None) -> list[int]:
     """Converte "1-3, 5, 8-" em índices a partir de 0, na ordem digitada.
 

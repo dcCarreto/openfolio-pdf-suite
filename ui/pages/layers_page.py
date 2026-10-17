@@ -31,6 +31,9 @@ class LayersPage(QWidget):
         list_button = QPushButton(tr("Listar camadas"))
         list_button.clicked.connect(self._list_layers)
         self.layers_list = QListWidget()
+        self.layers_list.setToolTip(tr("Clique numa camada para escolhê-la."))
+        self.layers_list.currentRowChanged.connect(self._on_layer_chosen)
+        self._layer_indexes: list[int] = []
 
         self.layer_index_spin = QSpinBox()
         self.layer_index_spin.setRange(1, 9999)
@@ -56,8 +59,13 @@ class LayersPage(QWidget):
         layout.addWidget(self.output_picker)
         layout.addWidget(apply_button)
 
+    def _on_layer_chosen(self, row: int):
+        if 0 <= row < len(self._layer_indexes):
+            self.layer_index_spin.setValue(self._layer_indexes[row] + 1)
+
     def _list_layers(self):
         input_path = self.session.path()
+        self._layer_indexes = []
         self.layers_list.clear()
         if not input_path:
             QMessageBox.warning(self, tr("Camadas"), tr("Abra um PDF para começar."))
@@ -69,6 +77,7 @@ class LayersPage(QWidget):
             if not layers:
                 self.layers_list.addItem(tr("Este PDF não tem camadas (Optional Content Groups)."))
                 return
+            self._layer_indexes = [layer.index for layer in layers]
             for layer in layers:
                 status = tr("visível") if layer.visible else tr("oculta")
                 self.layers_list.addItem(f"#{layer.index + 1} — {layer.name} — {status}")

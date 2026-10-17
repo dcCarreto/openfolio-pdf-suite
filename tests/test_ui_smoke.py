@@ -100,7 +100,7 @@ def test_main_window_has_menu_bar_and_status_bar():
     window = MainWindow()
 
     menu_titles = [action.text() for action in window.menuBar().actions()]
-    assert menu_titles == ["Arquivo", "Ajuda"]
+    assert menu_titles == ["Arquivo", "Editar", "Ajuda"]
     assert window.statusBar().currentMessage() != ""
 
     window.close()

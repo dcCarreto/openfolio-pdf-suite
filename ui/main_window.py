@@ -2,6 +2,7 @@
 
 import importlib
 import logging
+from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QSettings, QSize, Qt
 from PySide6.QtGui import QGuiApplication
@@ -22,12 +23,15 @@ from PySide6.QtWidgets import (
 
 from ui import i18n, sidebar_icons
 from ui.annotation_state import AnnotationState
+from ui.app_events import pdf_paths_from_mime
 from ui.area_pick_state import AreaPickState
 from ui.document_session import DocumentSession
 from ui.flags import build_br_flag_icon, build_us_flag_icon
+from ui.errors import show_error
 from ui.i18n import tr
 from ui.icon import build_app_icon
 from ui.measure_state import MeasureState
+from ui.preferences import Preferences, start_folder, use_preferences
 from ui.redaction_state import RedactionState
 from ui.tasks import task_manager
 from ui.theme import apply_dark_titlebar
@@ -37,6 +41,9 @@ from ui.widgets.page_container import PageContainer
 from ui.widgets.task_status import TaskStatus
 
 APP_VERSION = "0.2.0"
+
+# Abas que marcam áreas arrastando no visualizador (ver ui/area_pick_state.py).
+_AREA_PICK_PAGES = {"EditPage", "FormFieldsPage", "CropPage", "SignaturePage"}
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +135,11 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("OpenFolio PDF Suite")
         self.setWindowIcon(build_app_icon())
         self._settings = settings
+        self._preferences = Preferences(settings)
+        use_preferences(self._preferences)
+        saved_language = self._preferences.language()
+        if saved_language in (i18n.PT_BR, i18n.EN_US) and saved_language != i18n.get_language():
+            i18n.set_language(saved_language)  # antes de montar a interface, que usa tr()
 
         # Sobrevivem à troca de idioma: o documento aberto, as marcações pendentes e o
         # visualizador (com zoom, página e modo de exibição) não são reconstruídos.
@@ -142,7 +154,6 @@ class MainWindow(QMainWindow):
         self._annotations_row = self._row_of["AnnotationsPage"]
         self._redaction_row = self._row_of["RedactionPage"]
         self._measure_row = self._row_of["MeasurePage"]
-        self._edit_row = self._row_of["EditPage"]
         self._pages: dict[int, QWidget] = {}  # linha -> aba já construída
 
         self._build_ui()
@@ -153,7 +164,13 @@ class MainWindow(QMainWindow):
         i18n.install_qt_translator(QApplication.instance())
         i18n.language_changed.changed.connect(self._on_language_changed)
         self._tasks.started.connect(self._on_task_started)
+        self._tasks.started.connect(self.session.note_operation)
         self._tasks.finished.connect(self._on_task_finished)
+        self.session.set_discard_confirmation(self._confirm_discard_changes)
+        self.setAcceptDrops(True)  # soltar um PDF na janela abre o documento
+        self.session.history_changed.connect(self._update_document_actions)
+        self.session.path_changed.connect(self._remember_opened_document)
+        self._update_document_actions()
 
     # -- montagem ------------------------------------------------------------
 
@@ -182,6 +199,7 @@ class MainWindow(QMainWindow):
             area_pick_state=self.area_pick_state,
         )
         self.viewer.setMinimumWidth(_VIEWER_MIN_WIDTH)
+        self.viewer.verify_signatures_requested.connect(self._verify_signatures)
 
         # Divisores arrastáveis no lugar das larguras fixas: a janela cabe em 1280x720
         # (notebook com escala de 150%) e o usuário escolhe quanto espaço dá ao documento.
@@ -223,8 +241,8 @@ class MainWindow(QMainWindow):
             return page_class(self.session, self.redaction_state)
         if row == self._measure_row:
             return page_class(self.session, self.measure_state)
-        if row == self._edit_row:
-            return page_class(self.session, self.area_pick_state)
+        if class_name in _AREA_PICK_PAGES:
+            return page_class(self.session, area_pick_state=self.area_pick_state)
         return page_class(self.session)
 
     def _ensure_page(self, row: int) -> QWidget:
@@ -249,10 +267,29 @@ class MainWindow(QMainWindow):
         open_action = file_menu.addAction(tr("Abrir PDF..."))
         open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self._open_pdf)
+        self._save_action = file_menu.addAction(tr("Salvar"))
+        self._save_action.setShortcut("Ctrl+S")
+        self._save_action.triggered.connect(self.save_document)
+        self._save_as_action = file_menu.addAction(tr("Salvar como..."))
+        self._save_as_action.setShortcut("Ctrl+Shift+S")
+        self._save_as_action.triggered.connect(self.save_document_as)
+        self._recent_menu = file_menu.addMenu(tr("Abrir recente"))
+        self._recent_menu.aboutToShow.connect(self._fill_recent_menu)
+        self._recent_menu.setEnabled(bool(self._preferences.recent_files()))
         file_menu.addSeparator()
         quit_action = file_menu.addAction(tr("Sair"))
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
+
+        edit_menu = menu_bar.addMenu(tr("Editar"))
+        self._undo_action = edit_menu.addAction(tr("Desfazer"))
+        self._undo_action.setShortcut("Ctrl+Z")
+        self._undo_action.triggered.connect(self.session.undo)
+        self._redo_action = edit_menu.addAction(tr("Refazer"))
+        self._redo_action.setShortcuts(["Ctrl+Y", "Ctrl+Shift+Z"])
+        self._redo_action.triggered.connect(self.session.redo)
+        if hasattr(self, "session"):
+            self._update_document_actions()
 
         help_menu = menu_bar.addMenu(tr("Ajuda"))
         about_action = help_menu.addAction(tr("Sobre o OpenFolio PDF Suite"))
@@ -336,6 +373,7 @@ class MainWindow(QMainWindow):
         o que estava preenchido nelas (ver `ui/widget_state.py`).
         """
         i18n.install_qt_translator(QApplication.instance())
+        self._preferences.set_language(i18n.get_language())
         for row, (_icon, title, _subtitle, _module, _class) in enumerate(_SECTIONS):
             self.sidebar.item(row).setText(tr(title))
 
@@ -348,6 +386,7 @@ class MainWindow(QMainWindow):
             restore_state(new_page, state)
             if old_container is not None:
                 old_container.deleteLater()
+        self.area_pick_state.set_active_page(self._pages.get(self.sidebar.currentRow()))
 
         self.viewer.retranslate()
         self.task_status.retranslate()
@@ -368,12 +407,128 @@ class MainWindow(QMainWindow):
         self.annotation_state.set_page_active(row == self._annotations_row)
         self.redaction_state.set_page_active(row == self._redaction_row)
         self.measure_state.set_page_active(row == self._measure_row)
-        self.area_pick_state.set_page_active(row == self._edit_row)
+        self.area_pick_state.set_active_page(self._pages.get(row))
 
     def _open_pdf(self):
-        path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), "", "PDF (*.pdf)")
+        path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), start_folder(), "PDF (*.pdf)")
         if path:
             self.session.open(path)
+
+    def _remember_opened_document(self):
+        if self.session.last_change() == "document" and self.session.source_path():
+            self._preferences.add_recent_file(self.session.source_path())
+            self._recent_menu.setEnabled(True)
+
+    def _fill_recent_menu(self):
+        self._recent_menu.clear()
+        recent = self._preferences.recent_files()
+        for path in recent:
+            action = self._recent_menu.addAction(Path(path).name)
+            action.setToolTip(path)
+            action.setStatusTip(path)
+            action.triggered.connect(lambda _checked=False, p=path: self.session.open(p))
+        if recent:
+            self._recent_menu.addSeparator()
+            clear_action = self._recent_menu.addAction(tr("Limpar lista"))
+            clear_action.triggered.connect(self._clear_recent_files)
+        else:
+            empty = self._recent_menu.addAction(tr("Nenhum arquivo recente"))
+            empty.setEnabled(False)
+
+    def _clear_recent_files(self):
+        self._preferences.clear_recent_files()
+        self._recent_menu.setEnabled(False)
+
+    # -- arrastar e soltar -----------------------------------------------------------
+
+    def dragEnterEvent(self, event):
+        if pdf_paths_from_mime(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        paths = pdf_paths_from_mime(event.mimeData())
+        if paths:
+            event.acceptProposedAction()
+            self.session.open(paths[0])
+
+    # -- documento de trabalho ------------------------------------------------------
+
+    def _update_document_actions(self):
+        """Habilita salvar/desfazer/refazer conforme o histórico, com o nome da operação, e
+        põe o arquivo (com "*" se alterado) no título da janela."""
+        if not hasattr(self, "_undo_action"):
+            return
+        busy = self._tasks.is_busy()
+        has_document = self.session.path() is not None
+        undo_label, redo_label = self.session.undo_label(), self.session.redo_label()
+        self._undo_action.setText(tr("Desfazer {operation}").format(operation=undo_label) if undo_label else tr("Desfazer"))
+        self._redo_action.setText(tr("Refazer {operation}").format(operation=redo_label) if redo_label else tr("Refazer"))
+        self._undo_action.setEnabled(self.session.can_undo() and not busy)
+        self._redo_action.setEnabled(self.session.can_redo() and not busy)
+        self._save_action.setEnabled(has_document and self.session.is_modified() and not busy)
+        self._save_as_action.setEnabled(has_document and not busy)
+
+        source = self.session.source_path()
+        if source:
+            marker = " *" if self.session.is_modified() else ""
+            self.setWindowTitle(f"{Path(source).name}{marker} — OpenFolio PDF Suite")
+        else:
+            self.setWindowTitle("OpenFolio PDF Suite")
+
+    def save_document(self) -> bool:
+        """Grava o documento de trabalho no arquivo do usuário. Devolve False se falhar."""
+        if self.session.path() is None:
+            return True
+        try:
+            self.session.save()
+        except OSError as exc:
+            show_error(self, tr("Salvar"), tr("Não foi possível salvar o arquivo: {error}"), exc)
+            return False
+        self.statusBar().showMessage(tr("Documento salvo."), 5000)
+        return True
+
+    def save_document_as(self) -> bool:
+        if self.session.path() is None:
+            return True
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr("Salvar como"), start_folder(self.session.source_path()), "PDF (*.pdf)"
+        )
+        if not path:
+            return False
+        try:
+            self.session.save_as(path)
+            self._preferences.add_recent_file(path)
+        except OSError as exc:
+            show_error(self, tr("Salvar"), tr("Não foi possível salvar o arquivo: {error}"), exc)
+            return False
+        self.statusBar().showMessage(tr("Documento salvo."), 5000)
+        return True
+
+    def _confirm_discard_changes(self) -> bool:
+        """Antes de trocar ou fechar um documento com alterações: salvar, descartar ou
+        cancelar. Devolve True para seguir."""
+        name = Path(self.session.source_path() or "").name
+        answer = QMessageBox.question(
+            self,
+            tr("Alterações não salvas"),
+            tr('"{name}" tem alterações que não foram salvas. Salvar antes?').format(name=name),
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        if answer == QMessageBox.StandardButton.Save:
+            return self.save_document()
+        return answer == QMessageBox.StandardButton.Discard
+
+    def _verify_signatures(self):
+        """O botão "Verificar" do aviso de documento assinado: abre a aba Assinatura no modo
+        de verificação e verifica o documento aberto."""
+        row = self._row_of["SignaturePage"]
+        self.sidebar.setCurrentRow(row)
+        page = self._ensure_page(row)
+        page.mode_combo.setCurrentIndex(1)
+        page._apply_verify()
 
     def _show_about(self):
         QMessageBox.about(
@@ -393,10 +548,12 @@ class MainWindow(QMainWindow):
         self.stack.setEnabled(False)
         self._language_switcher.setEnabled(False)
         self.statusBar().clearMessage()
+        self._update_document_actions()
 
     def _on_task_finished(self, outcome: str):
         self.stack.setEnabled(True)
         self._language_switcher.setEnabled(True)
+        self._update_document_actions()
         if outcome == "cancelled":
             self.statusBar().showMessage(tr("Operação cancelada: nada foi gravado."), 8000)
         elif outcome == "ok":
@@ -419,5 +576,10 @@ class MainWindow(QMainWindow):
             # fica pela metade. Espera ela sair antes de fechar.
             if not self._tasks.wait(30_000):
                 logger.warning("A operação não terminou a tempo ao fechar a janela")
+        if self.session.is_modified() and not self._confirm_discard_changes():
+            event.ignore()
+            return
         self._save_layout()
+        self.viewer.close_document()
+        self.session.discard_temporary_files()
         super().closeEvent(event)

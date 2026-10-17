@@ -31,6 +31,7 @@ from core.form_fields import (
     ListFormFields,
     RadioOption,
 )
+from ui.area_pick_state import AreaPickState
 from ui.i18n import tr
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -44,6 +45,8 @@ _FIELD_TYPE_VALUES = {
     "Lista suspensa": "dropdown",
     "Lista de seleção": "listbox",
 }
+_ADD_FIELD_MODE = 0
+_RADIO_MODE = 1
 _MODES = [
     "Adicionar campo",
     "Adicionar grupo de opções",
@@ -60,9 +63,11 @@ class FormFieldsPage(QWidget):
     """Permite adicionar campos de formulário interativos a um PDF, listar os já
     existentes, exportar/importar os dados preenchidos, e achatar o formulário."""
 
-    def __init__(self, session, parent=None):
+    def __init__(self, session, area_pick_state: AreaPickState | None = None, parent=None):
         super().__init__(parent)
         self.session = session
+        self.area_pick_state = area_pick_state or AreaPickState()
+        self.area_pick_state.area_picked.connect(self._on_area_picked)
 
         self.source_bar = DocumentSourceBar(session)
 
@@ -86,9 +91,61 @@ class FormFieldsPage(QWidget):
         layout.addWidget(QLabel(tr("Modo:")))
         layout.addWidget(self.mode_combo)
         layout.addWidget(self.stack)
+        self._on_mode_changed(self.mode_combo.currentIndex())
 
     def _on_mode_changed(self, index: int):
         self.stack.setCurrentIndex(index)
+        self.area_pick_state.set_wanted(self, index in (_ADD_FIELD_MODE, _RADIO_MODE))
+        self._publish_areas()
+
+    # ---- Posição pelo visualizador -----------------------------------------
+
+    def _on_area_picked(self, page_index: int, left: float, bottom: float, right: float, top: float):
+        if self.area_pick_state.owner() is not self:
+            return
+        if self.mode_combo.currentIndex() == _ADD_FIELD_MODE:
+            self.page_spin.setValue(page_index + 1)
+            self.x_spin.setValue(left)
+            self.y_spin.setValue(bottom)
+            self.width_spin.setValue(max(1.0, right - left))
+            self.height_spin.setValue(max(1.0, top - bottom))
+        else:
+            # Grupo de opções: a área marca a opção selecionada (ou a próxima sem posição).
+            row = self.radio_table.currentRow()
+            if row < 0:
+                row = next(
+                    (r for r in range(self.radio_table.rowCount()) if self.radio_table.item(r, 2).text() in ("", "0")),
+                    -1,
+                )
+            if row < 0:
+                self._add_radio_row()
+                row = self.radio_table.rowCount() - 1
+            for column, value in ((1, str(page_index + 1)), (2, f"{left:.1f}"), (3, f"{bottom:.1f}")):
+                self.radio_table.item(row, column).setText(value)
+            if row + 1 < self.radio_table.rowCount():
+                self.radio_table.setCurrentCell(row + 1, 0)
+        self._publish_areas()
+
+    def _publish_areas(self):
+        if not hasattr(self, "radio_table"):
+            return  # ainda construindo os painéis
+        if self.mode_combo.currentIndex() == _ADD_FIELD_MODE:
+            left, bottom = self.x_spin.value(), self.y_spin.value()
+            rect = (left, bottom, left + self.width_spin.value(), bottom + self.height_spin.value())
+            self.area_pick_state.set_areas(self, [(self.page_spin.value() - 1, rect)], 0)
+            return
+        size = self.radio_size_spin.value()
+        areas = []
+        for row in range(self.radio_table.rowCount()):
+            try:
+                page = int(self.radio_table.item(row, 1).text()) - 1
+                x, y = float(self.radio_table.item(row, 2).text()), float(self.radio_table.item(row, 3).text())
+            except (AttributeError, ValueError):
+                areas.append((-1, (0.0, 0.0, 0.0, 0.0)))
+                continue
+            areas.append((page, (x, y, x + size, y + size)))
+        current = self.radio_table.currentRow()
+        self.area_pick_state.set_areas(self, areas, current if current >= 0 else None)
 
     # ---- Adicionar campo -------------------------------------------------
 
@@ -130,6 +187,11 @@ class FormFieldsPage(QWidget):
             tr("Aplica-se apenas aos tipos lista suspensa e lista de seleção")
         )
 
+        for spin in (self.page_spin, self.x_spin, self.y_spin, self.width_spin, self.height_spin):
+            spin.valueChanged.connect(self._publish_areas)
+        position_hint = QLabel(tr("Arraste no visualizador para marcar onde o campo fica, ou ajuste os valores (pontos PDF)."))
+        position_hint.setWordWrap(True)
+
         position_layout = QFormLayout()
         position_layout.addRow(tr("Página:"), self.page_spin)
         position_layout.addRow("X:", self.x_spin)
@@ -148,6 +210,7 @@ class FormFieldsPage(QWidget):
         layout.addWidget(self.name_edit)
         layout.addWidget(QLabel(tr("Tipo:")))
         layout.addWidget(self.type_combo)
+        layout.addWidget(position_hint)
         layout.addLayout(position_layout)
         layout.addLayout(size_layout)
         layout.addWidget(self.checked_box)
@@ -231,6 +294,11 @@ class FormFieldsPage(QWidget):
         self.radio_table.setHorizontalHeaderLabels(
             [tr("Valor"), tr("Página"), "X", "Y"]
         )
+        self.radio_table.itemChanged.connect(lambda _item: self._publish_areas())
+        self.radio_table.currentCellChanged.connect(lambda *_args: self._publish_areas())
+        self.radio_size_spin.valueChanged.connect(self._publish_areas)
+        radio_hint = QLabel(tr("Selecione uma opção na tabela e arraste no visualizador para marcar onde ela fica."))
+        radio_hint.setWordWrap(True)
 
         add_row_button = QPushButton(tr("Adicionar opção"))
         add_row_button.clicked.connect(self._add_radio_row)
@@ -248,6 +316,7 @@ class FormFieldsPage(QWidget):
         layout.addWidget(self.radio_output_picker)
         layout.addWidget(QLabel(tr("Nome do campo:")))
         layout.addWidget(self.radio_name_edit)
+        layout.addWidget(radio_hint)
         layout.addWidget(self.radio_table)
         layout.addLayout(row_buttons_layout)
         layout.addWidget(QLabel(tr("Tamanho:")))

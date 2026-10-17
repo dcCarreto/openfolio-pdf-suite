@@ -6,7 +6,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from pypdf import PdfReader
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from ui.document_session import DocumentSession
 from ui.tasks import wait_for_tasks
@@ -144,12 +144,99 @@ def test_save_picker_suggests_a_new_file_and_follows_the_open_document(tmp_path)
     session.open(str(first))
     picker = FilePicker(mode="save", suggested_source=session.path)
 
+    # Padrão: o resultado vai para o documento aberto, numa versão nova (Ctrl+Z desfaz).
+    assert picker.applies_to_document()
+    assert session.is_version_path(picker.path())
+
+    picker._apply_to_document = False  # "salvar em outro arquivo"
     assert picker.path() == str(tmp_path / "contrato_editado (2).pdf")  # não sobrescreve
 
     picker._path = str(tmp_path / "escolhido.pdf")
-    picker._path_source = session.path()
+    picker._path_source = session.source_path()
     assert picker.path() == str(tmp_path / "escolhido.pdf")
 
     session.open(str(second))  # outro documento: a escolha antiga não vale mais
     assert picker.path() == str(tmp_path / "outro_editado.pdf")
     assert picker.path_edit.text() == str(tmp_path / "outro_editado.pdf")
+
+
+def test_format_page_ranges_groups_consecutive_pages():
+    from ui.page_ranges import format_page_ranges
+
+    assert format_page_ranges([0, 1, 2, 4, 7, 8]) == "1-3, 5, 8-9"
+    assert format_page_ranges([]) == ""
+    assert parse_page_ranges(format_page_ranges([3, 0, 1]), 5) == [0, 1, 3]
+
+
+def test_thumbnail_selection_fills_the_pages_field(tmp_path):
+    from pypdf import PdfWriter
+
+    from ui.annotation_state import AnnotationState
+    from ui.pages.pages_page import PagesPage
+    from ui.redaction_state import RedactionState
+    from ui.viewer.pdf_viewer import PdfViewer
+
+    _app()
+    path = tmp_path / "doc.pdf"
+    writer = PdfWriter()
+    for _ in range(5):
+        writer.add_blank_page(width=200, height=200)
+    writer.write(str(path))
+    session = DocumentSession()
+    viewer = PdfViewer(session, AnnotationState(), RedactionState())
+    page = PagesPage(session)
+    session.open(str(path))
+    thumbnails = viewer.thumbnail_list
+
+    for row in (0, 1, 3):
+        thumbnails.item(row).setSelected(True)
+    assert session.selected_pages() == [0, 1, 3]
+
+    viewer._show_single_page(4)  # navegar não desfaz a seleção de várias páginas
+    assert session.selected_pages() == [0, 1, 3]
+
+    page.operation_combo.setCurrentIndex(2)  # Remover
+    button = page._selection_buttons[1]  # o do campo "Páginas a remover"
+    assert button.isEnabled()
+    button.click()
+    assert page.remove_edit.text() == "1-2, 4"
+
+
+def test_current_page_button_uses_the_page_in_the_viewer(tmp_path):
+    from pypdf import PdfWriter
+
+    from ui.annotation_state import AnnotationState
+    from ui.pages.bookmarks_page import BookmarksPage
+    from ui.redaction_state import RedactionState
+    from ui.viewer.pdf_viewer import PdfViewer
+
+    _app()
+    path = tmp_path / "doc.pdf"
+    writer = PdfWriter()
+    for _ in range(5):
+        writer.add_blank_page(width=200, height=200)
+    writer.write(str(path))
+    session = DocumentSession()
+    viewer = PdfViewer(session, AnnotationState(), RedactionState())
+    page = BookmarksPage(session)
+    session.open(str(path))
+    viewer._show_single_page(3)
+
+    button = next(b for b in page.findChildren(QPushButton) if b.text() == "Página atual")
+    button.click()
+
+    assert page.page_spin.value() == 4
+
+
+def test_clicking_a_layer_chooses_it(tmp_path):
+    from ui.pages.layers_page import LayersPage
+
+    _app()
+    page = LayersPage(DocumentSession())
+    page._layer_indexes = [0, 1, 2]
+    for name in ("a", "b", "c"):
+        page.layers_list.addItem(name)
+
+    page.layers_list.setCurrentRow(2)
+
+    assert page.layer_index_spin.value() == 3

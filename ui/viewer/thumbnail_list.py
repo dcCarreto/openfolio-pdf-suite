@@ -1,8 +1,8 @@
 """Painel de miniaturas de página do visualizador."""
 
-from PySide6.QtCore import QPoint, QSize, QTimer, Signal
+from PySide6.QtCore import QItemSelectionModel, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPixmap
-from PySide6.QtWidgets import QListView, QListWidget, QListWidgetItem
+from PySide6.QtWidgets import QAbstractItemView, QListView, QListWidget, QListWidgetItem
 
 from core.progress import PDFIUM_LOCK
 from ui.i18n import tr
@@ -21,6 +21,7 @@ class ThumbnailList(QListWidget):
     """
 
     page_selected = Signal(int)
+    pages_selected = Signal(list)  # páginas selecionadas (Ctrl/Shift+clique), a partir de 0
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -35,9 +36,13 @@ class ThumbnailList(QListWidget):
         self.setUniformItemSizes(True)
         self.setSpacing(6)
         self.setIconSize(_ICON_SIZE)
-        self.setGridSize(QSize(132, 156))
-        self.setFixedWidth(150)
+        self.setGridSize(QSize(120, 156))
+        # A largura vem do painel lateral (ui/viewer/side_panel.py); a coluna é uma só.
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.currentRowChanged.connect(self._on_row_changed)
+        # Ctrl/Shift+clique seleciona várias páginas, que as ferramentas usam como entrada.
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.itemSelectionChanged.connect(self._on_selection_changed)
 
         self._document = None
         self._pending: set[int] = set()
@@ -112,10 +117,23 @@ class ThumbnailList(QListWidget):
             self._timer.stop()
 
     def select_page(self, index: int) -> None:
+        """Marca a página atual (navegação pelo visualizador). Com várias páginas
+        selecionadas pelo usuário, a seleção dele não é desfeita."""
         if 0 <= index < self.count():
+            command = (
+                QItemSelectionModel.SelectionFlag.NoUpdate
+                if len(self.selectedItems()) > 1
+                else QItemSelectionModel.SelectionFlag.ClearAndSelect
+            )
             self.blockSignals(True)
-            self.setCurrentRow(index)
+            self.setCurrentRow(index, command)
             self.blockSignals(False)
+
+    def selected_pages(self) -> list[int]:
+        return sorted(self.row(item) for item in self.selectedItems())
+
+    def _on_selection_changed(self) -> None:
+        self.pages_selected.emit(self.selected_pages())
 
     def _on_row_changed(self, row: int) -> None:
         if row >= 0:

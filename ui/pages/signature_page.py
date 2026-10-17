@@ -23,18 +23,28 @@ from core.signature import (
     SignDocument,
 )
 from ui import i18n
+from ui.area_pick_state import AreaPickState
 from ui.i18n import tr, tr_message
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
-_POSITION_LABELS = ["Inferior direito", "Inferior esquerdo", "Superior direito", "Superior esquerdo"]
+_POSITION_LABELS = [
+    "Inferior direito",
+    "Inferior esquerdo",
+    "Superior direito",
+    "Superior esquerdo",
+    "Área marcada no visualizador",
+]
 _POSITION_VALUES = {
     "Inferior direito": "bottom-right",
     "Inferior esquerdo": "bottom-left",
     "Superior direito": "top-right",
     "Superior esquerdo": "top-left",
+    "Área marcada no visualizador": "custom",
 }
+_CUSTOM_POSITION = len(_POSITION_LABELS) - 1
+_SIGN_MODE = 0
 
 _VERDICT_LABELS = {
     VERDICT_VALID: "VÁLIDA",
@@ -125,9 +135,12 @@ class SignaturePage(QWidget):
     """Permite assinar digitalmente um PDF (selo visível + CMS/PKCS#7) ou verificar as
     assinaturas já presentes em um PDF assinado."""
 
-    def __init__(self, session, parent=None):
+    def __init__(self, session, area_pick_state: AreaPickState | None = None, parent=None):
         super().__init__(parent)
         self.session = session
+        self.area_pick_state = area_pick_state or AreaPickState()
+        self.area_pick_state.area_picked.connect(self._on_area_picked)
+        self._stamp_area: tuple[int, tuple[float, float, float, float]] | None = None
 
         self.mode_combo = QComboBox()
         self.mode_combo.addItems([tr("Assinar"), tr("Verificar assinatura")])
@@ -141,6 +154,16 @@ class SignaturePage(QWidget):
         layout.addWidget(QLabel(tr("Modo:")))
         layout.addWidget(self.mode_combo)
         layout.addWidget(self.stack)
+        self.area_pick_state.set_wanted(self, True)
+
+    def _on_area_picked(self, page_index: int, left: float, bottom: float, right: float, top: float):
+        if self.area_pick_state.owner() is not self:
+            return
+        self._stamp_area = (page_index, (left, bottom, right, top))
+        if 0 <= page_index < self.page_combo.count():
+            self.page_combo.setCurrentIndex(page_index)
+        self.position_combo.setCurrentIndex(_CUSTOM_POSITION)
+        self.area_pick_state.set_areas(self, [self._stamp_area], 0)
 
     def _build_sign_panel(self) -> QWidget:
         widget = QWidget()
@@ -166,9 +189,11 @@ class SignaturePage(QWidget):
 
         self.position_combo = QComboBox()
         self.position_combo.addItems([tr(label) for label in _POSITION_LABELS])
+        position_hint = QLabel(tr("Para escolher o lugar exato do selo, arraste no visualizador."))
+        position_hint.setWordWrap(True)
 
         self.sign_output_picker = FilePicker(
-            mode="save", suggested_source=self.session.path, suggested_suffix="assinado"
+            mode="save", suggested_source=self.session.path, suggested_suffix="assinado", working_copy=False
         )
         sign_button = QPushButton(tr("Assinar"))
         sign_button.clicked.connect(self._apply_sign)
@@ -184,6 +209,7 @@ class SignaturePage(QWidget):
         layout.addWidget(self.page_combo)
         layout.addWidget(QLabel(tr("Posição do selo:")))
         layout.addWidget(self.position_combo)
+        layout.addWidget(position_hint)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.sign_output_picker)
         layout.addWidget(sign_button)
@@ -249,6 +275,7 @@ class SignaturePage(QWidget):
         return widget
 
     def _on_mode_changed(self, index: int):
+        self.area_pick_state.set_wanted(self, index == _SIGN_MODE)
         self.stack.setCurrentIndex(index)
 
     def _on_cert_mode_changed(self, index: int):
@@ -292,6 +319,12 @@ class SignaturePage(QWidget):
             "page_index": self.page_combo.currentIndex(),
             "position": position,
         }
+        if position == "custom":
+            if self._stamp_area is None:
+                QMessageBox.warning(self, tr("Assinar"), tr("Arraste no visualizador para marcar a área do selo."))
+                return
+            kwargs["page_index"], kwargs["box"] = self._stamp_area
+            kwargs["position"] = "bottom-right"  # ignorada quando há `box`
 
         if self.cert_mode_combo.currentIndex() == 0:
             pfx_path = self.pfx_picker.path()

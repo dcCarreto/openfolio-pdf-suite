@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 from core.bookmarks import AddBookmarks
 from ui.i18n import tr
 from ui.tasks import call, run_task
+from ui.widgets.current_page import with_current_page_button
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -47,7 +48,7 @@ class BookmarksPage(QWidget):
 
         page_row = QHBoxLayout()
         page_row.addWidget(QLabel(tr("Página:")))
-        page_row.addWidget(self.page_spin)
+        page_row.addLayout(with_current_page_button(self.page_spin, session), 1)
         page_row.addWidget(add_button)
 
         add_row = QVBoxLayout()

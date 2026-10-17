@@ -116,6 +116,20 @@ class ExtractAttachments(PDFOperation):
         return output_paths
 
 
+class SaveAttachment(PDFOperation):
+    """Grava um anexo (o primeiro com esse nome) em `output_path`, escolhido pelo usuário
+    num diálogo — usado pelo painel de anexos do visualizador."""
+
+    def run(self, input_path: str, name: str, output_path: str) -> str:
+        reader = open_reader(input_path, purpose=READ)
+        contents = reader.attachments.get(name)
+        if not contents:
+            raise ValueError(Message('Nenhum anexo chamado "{name}" foi encontrado neste PDF.', name=name))
+        with atomic_output(output_path) as temp_path:
+            Path(temp_path).write_bytes(contents[0])
+        return output_path
+
+
 def _embedded_file_entries(document) -> list[tuple[object, object]]:
     names = document.root_object.get("/Names")
     names = names.get_object() if names is not None else None

@@ -3,7 +3,8 @@
 from PySide6.QtWidgets import QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from core.metadata import ReadMetadata, SetMetadata
-from ui.i18n import error_text, tr
+from ui.errors import show_error
+from ui.i18n import tr
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -72,9 +73,7 @@ class MetadataPage(QWidget):
         try:
             self._apply_metadata_fields(ReadMetadata().run(input_path))
         except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Metadados"), tr("Falha ao ler metadados: {error}").format(error=error_text(exc))
-            )
+            show_error(self, tr("Metadados"), tr("Falha ao ler metadados: {error}"), exc)
 
     def _auto_load(self):
         input_path = self.session.path()

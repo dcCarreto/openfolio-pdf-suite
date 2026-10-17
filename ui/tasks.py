@@ -24,7 +24,8 @@ from PySide6.QtWidgets import QMessageBox, QWidget
 
 from core.base import EncryptedPDFError
 from core.progress import OperationCancelled, Progress
-from ui.i18n import error_text, tr
+from ui.errors import show_error
+from ui.i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +210,7 @@ def run_task(
             on_error(exc)
             return
         template = error_message or tr("Falha ao processar: {error}")
-        QMessageBox.critical(parent, title, template.format(error=error_text(exc)))
+        show_error(parent, title, template, exc)
 
     return manager.start(title, fn, on_success=on_success, on_error=handle_error)
 

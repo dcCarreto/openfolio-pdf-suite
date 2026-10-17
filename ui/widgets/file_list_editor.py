@@ -1,4 +1,10 @@
-"""Widget reutilizável: lista de arquivos que o usuário pode adicionar, remover e reordenar."""
+"""Widget reutilizável: lista de arquivos que o usuário pode adicionar, remover e reordenar.
+
+Arquivos arrastados do explorador para a lista entram nela (só os do tipo aceito pelo filtro).
+"""
+
+import re
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -10,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.i18n import tr
+from ui.preferences import remember_folder_of, start_folder
 
 
 class FileListEditor(QWidget):
@@ -19,6 +26,8 @@ class FileListEditor(QWidget):
         super().__init__(parent)
         self._dialog_caption = dialog_caption
         self._file_filter = file_filter
+        self._extensions = {ext.lower() for ext in re.findall(r"\*(\.\w+)", file_filter)}
+        self.setAcceptDrops(True)
 
         self.list_widget = QListWidget()
 
@@ -50,7 +59,9 @@ class FileListEditor(QWidget):
         layout.addLayout(buttons_row_2)
 
     def _add(self):
-        paths, _ = QFileDialog.getOpenFileNames(self, self._dialog_caption, "", self._file_filter)
+        paths, _ = QFileDialog.getOpenFileNames(self, self._dialog_caption, start_folder(), self._file_filter)
+        if paths:
+            remember_folder_of(paths[0])
         for path in paths:
             self.list_widget.addItem(path)
 
@@ -66,6 +77,28 @@ class FileListEditor(QWidget):
         item = self.list_widget.takeItem(row)
         self.list_widget.insertItem(new_row, item)
         self.list_widget.setCurrentRow(new_row)
+
+    def _dropped_paths(self, mime_data) -> list[str]:
+        if mime_data is None or not mime_data.hasUrls():
+            return []
+        paths = [str(Path(url.toLocalFile())) for url in mime_data.urls() if url.isLocalFile()]
+        return [path for path in paths if Path(path).is_file() and Path(path).suffix.lower() in self._extensions]
+
+    def dragEnterEvent(self, event):
+        if self._dropped_paths(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        self.dragEnterEvent(event)
+
+    def dropEvent(self, event):
+        paths = self._dropped_paths(event.mimeData())
+        for path in paths:
+            self.list_widget.addItem(path)
+        if paths:
+            event.acceptProposedAction()
 
     def paths(self) -> list[str]:
         return [self.list_widget.item(i).text() for i in range(self.list_widget.count())]

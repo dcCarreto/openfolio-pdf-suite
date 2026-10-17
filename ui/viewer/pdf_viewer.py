@@ -1,19 +1,20 @@
 """Widget central: visualizador de PDF com miniaturas, zoom, página única/rolagem
 contínua e busca de texto."""
 
+import dataclasses
 import time
 
 import pypdfium2 as pdfium
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QButtonGroup,
     QFileDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QStackedWidget,
@@ -23,12 +24,14 @@ from PySide6.QtWidgets import (
 
 from core.annotations import AnnotationSpec, spec_rect
 from core.base import known_password, remember_password
+from core.document_info import document_notices
 from core.geometry import PageGeometry
 from core.progress import PDFIUM_LOCK
 from core.redaction import RedactionRect
 from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
-from ui.i18n import error_text, tr
+from ui.errors import show_error
+from ui.i18n import tr, tr_message
 from ui.area_pick_state import AreaPickState
 from ui.measure_state import MeasureState, format_distance
 from ui.redaction_state import RedactionState
@@ -36,13 +39,16 @@ from ui.viewer.page_canvas import PageCanvas
 from ui.viewer.render import logical_size, render_page
 from ui.viewer.search import DocumentSearch
 from ui.viewer.search_bar import SearchBar
+from ui.viewer.side_panel import DocumentSidePanel
 from ui.viewer.thumbnail_list import ThumbnailList
 from ui.viewer.viewer_icons import (
     build_continuous_page_icon,
+    build_fit_page_icon,
     build_fit_width_icon,
     build_next_page_icon,
     build_open_icon,
     build_prev_page_icon,
+    build_rotate_icon,
     build_search_icon,
     build_single_page_icon,
     build_thumbnails_icon,
@@ -54,7 +60,9 @@ _MIN_SCALE = 0.3
 _MAX_SCALE = 4.0
 _ZOOM_STEP = 0.15
 _DEFAULT_SCALE = 1.2
-_HIGHLIGHT_COLOR = QColor(255, 235, 59, 110)
+_HIGHLIGHT_COLOR = QColor(255, 235, 59, 110)  # outras ocorrências da busca
+_CURRENT_MATCH_COLOR = QColor(255, 152, 0, 150)  # a ocorrência atual
+_TEXT_SELECTION_COLOR = QColor(33, 150, 243, 90)
 _DRAWING_TOOLS = ("highlight", "underline", "strikeout", "note", "ink", "stamp")
 # Rolagem contínua: páginas a mais de N alturas de tela da área visível têm a imagem
 # descartada (voltam a ser renderizadas se o usuário rolar até elas). Antes nenhuma página
@@ -66,6 +74,8 @@ _SEARCH_SLICE_SECONDS = 0.03
 
 class PdfViewer(QWidget):
     """Mostra o PDF atualmente aberto na sessão compartilhada; não edita nada."""
+
+    verify_signatures_requested = Signal()
 
     def __init__(
         self,
@@ -83,7 +93,8 @@ class PdfViewer(QWidget):
         self.measure_state = measure_state or MeasureState()
         self.area_pick_state = area_pick_state or AreaPickState()
         self._document = None
-        self._geometries: dict[int, PageGeometry] = {}
+        self._geometries: dict[int, PageGeometry] = {}  # geometria do arquivo, sem a rotação da tela
+        self._view_rotation = 0  # "girar a visualização": só na tela, o arquivo não muda
         self._scale = _DEFAULT_SCALE
         self._continuous = False
         self._show_thumbnails = True
@@ -100,6 +111,12 @@ class PdfViewer(QWidget):
         self._ink_preview_base: QPixmap | None = None
         self._redaction_drag_start_pdf: tuple[float, float] | None = None
         self._area_drag_start_pdf: tuple[float, float] | None = None
+        # Seleção de texto (sem ferramenta ativa): início do arrasto, página e trecho
+        # selecionado (índices de caractere do pdfium) com os retângulos dele.
+        self._selection_start_pdf: tuple[float, float] | None = None
+        self._selection_base: QPixmap | None = None
+        self._text_selection: tuple[int, int, int] | None = None
+        self._selection_rects: list = []
         self._measure_drag_start_pdf: tuple[float, float] | None = None
         self._measure_preview_base: QPixmap | None = None
         self._translatable_tooltips: list[tuple[QWidget, str]] = []
@@ -113,6 +130,23 @@ class PdfViewer(QWidget):
 
         self._build_ui()
         QShortcut(QKeySequence("Ctrl+F"), self, activated=self._toggle_search)
+        # Navegação pelo teclado com o foco no visualizador (os campos das abas continuam
+        # recebendo as teclas normalmente).
+        for keys, handler in (
+            (("PgDown", "Right"), self._go_next),
+            (("PgUp", "Left"), self._go_prev),
+            (("Home",), self._go_first),
+            (("End",), self._go_last),
+            (("Ctrl+G",), self._ask_go_to_page),
+            (("Ctrl+=", "Ctrl++"), self._zoom_in),
+            (("Ctrl+-",), self._zoom_out),
+            (("Ctrl+0",), self._fit_page),
+            (("Ctrl+C",), self.copy_selected_text),
+        ):
+            for key in keys:
+                shortcut = QShortcut(QKeySequence(key), self, activated=handler)
+                shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self.scroll_area.viewport().installEventFilter(self)
 
         session.path_changed.connect(self._reload)
         annotation_state.tool_changed.connect(self._on_markup_state_changed)
@@ -146,6 +180,21 @@ class PdfViewer(QWidget):
         self.search_bar.closed.connect(self._close_search)
         layout.addWidget(self.search_bar)
 
+        # Aviso sobre o documento aberto (protegido, assinado, com formulário ou camadas).
+        self.notice_bar = QWidget()
+        self.notice_bar.setObjectName("documentNotice")
+        notice_layout = QHBoxLayout(self.notice_bar)
+        notice_layout.setContentsMargins(10, 4, 10, 4)
+        self.notice_label = QLabel()
+        self.notice_label.setWordWrap(True)
+        self.verify_button = QPushButton(tr("Verificar"))
+        self.verify_button.setToolTip(tr("Verificar as assinaturas na aba Assinatura"))
+        self.verify_button.clicked.connect(self.verify_signatures_requested)
+        notice_layout.addWidget(self.notice_label, 1)
+        notice_layout.addWidget(self.verify_button)
+        self.notice_bar.hide()
+        layout.addWidget(self.notice_bar)
+
         body = QWidget()
         body_layout = QHBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
@@ -153,8 +202,11 @@ class PdfViewer(QWidget):
 
         self.thumbnail_list = ThumbnailList()
         self.thumbnail_list.page_selected.connect(self._on_thumbnail_selected)
-        self.thumbnail_list.hide()
-        body_layout.addWidget(self.thumbnail_list)
+        self.thumbnail_list.pages_selected.connect(self.session.set_selected_pages)
+        self.side_panel = DocumentSidePanel(self.thumbnail_list)
+        self.side_panel.page_requested.connect(self._go_to_page)
+        self.side_panel.hide()
+        body_layout.addWidget(self.side_panel)
 
         self.content_stack = QStackedWidget()
         self.content_stack.addWidget(self._build_empty_state())
@@ -194,6 +246,11 @@ class PdfViewer(QWidget):
         self._empty_open_button.setText(tr("Abrir PDF..."))
         self.search_bar.retranslate()
         self.thumbnail_list.retranslate()
+        self.side_panel.retranslate()
+        self.verify_button.setText(tr("Verificar"))
+        self.verify_button.setToolTip(tr("Verificar as assinaturas na aba Assinatura"))
+        if getattr(self, "_notices", None) is not None:
+            self.notice_label.setText("  ·  ".join(tr_message(message) for message in self._notices.messages))
         self._update_page_indicator()
 
     def _build_toolbar(self) -> QWidget:
@@ -206,17 +263,24 @@ class PdfViewer(QWidget):
         open_button = self._tool_button(build_open_icon(), "Abrir PDF...")
         open_button.clicked.connect(self._browse_open)
         layout.addWidget(open_button)
-        layout.addSpacing(10)
+        layout.addSpacing(4)
 
         prev_button = self._tool_button(build_prev_page_icon(), "Página anterior")
         prev_button.clicked.connect(self._go_prev)
         next_button = self._tool_button(build_next_page_icon(), "Próxima página")
         next_button.clicked.connect(self._go_next)
-        self.page_indicator = QLabel()
+        # Clicar no indicador (ou Ctrl+G) pede o número da página para ir direto a ela.
+        self.page_indicator = QPushButton()
+        self.page_indicator.setObjectName("pageIndicatorButton")
+        self.page_indicator.setFlat(True)
+        self.page_indicator.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.page_indicator.setToolTip(tr("Ir para a página... (Ctrl+G)"))
+        self._translatable_tooltips.append((self.page_indicator, "Ir para a página... (Ctrl+G)"))
+        self.page_indicator.clicked.connect(self._ask_go_to_page)
         layout.addWidget(prev_button)
         layout.addWidget(self.page_indicator)
         layout.addWidget(next_button)
-        layout.addSpacing(10)
+        layout.addSpacing(4)
 
         zoom_out_button = self._tool_button(build_zoom_out_icon(), "Diminuir zoom")
         zoom_out_button.clicked.connect(self._zoom_out)
@@ -224,12 +288,18 @@ class PdfViewer(QWidget):
         zoom_in_button.clicked.connect(self._zoom_in)
         fit_width_button = self._tool_button(build_fit_width_icon(), "Ajustar à largura")
         fit_width_button.clicked.connect(self._fit_width)
+        fit_page_button = self._tool_button(build_fit_page_icon(), "Ajustar à página (Ctrl+0)")
+        fit_page_button.clicked.connect(self._fit_page)
+        rotate_button = self._tool_button(build_rotate_icon(), "Girar a visualização (o arquivo não muda)")
+        rotate_button.clicked.connect(self._rotate_view)
         self._zoom_label = QLabel(f"{int(self._scale * 100)}%")
         layout.addWidget(zoom_out_button)
         layout.addWidget(self._zoom_label)
         layout.addWidget(zoom_in_button)
         layout.addWidget(fit_width_button)
-        layout.addSpacing(10)
+        layout.addWidget(fit_page_button)
+        layout.addWidget(rotate_button)
+        layout.addSpacing(4)
 
         self.single_page_button = self._tool_button(build_single_page_icon(), "Página única")
         self.single_page_button.setCheckable(True)
@@ -246,9 +316,9 @@ class PdfViewer(QWidget):
         self._mode_group.addButton(self.continuous_button)
         layout.addWidget(self.single_page_button)
         layout.addWidget(self.continuous_button)
-        layout.addSpacing(10)
+        layout.addSpacing(4)
 
-        self.thumbnails_button = self._tool_button(build_thumbnails_icon(), "Miniaturas")
+        self.thumbnails_button = self._tool_button(build_thumbnails_icon(), "Painel lateral (miniaturas, marcadores, anexos)")
         self.thumbnails_button.setCheckable(True)
         self.thumbnails_button.setChecked(True)
         self.thumbnails_button.clicked.connect(self._toggle_thumbnails)
@@ -266,6 +336,9 @@ class PdfViewer(QWidget):
             zoom_out_button,
             zoom_in_button,
             fit_width_button,
+            fit_page_button,
+            rotate_button,
+            self.page_indicator,
             self.single_page_button,
             self.continuous_button,
             self.thumbnails_button,
@@ -295,8 +368,20 @@ class PdfViewer(QWidget):
         if path:
             self.session.open(path)
 
+    def close_document(self):
+        """Fecha o documento no pdfium (ao fechar a janela): no Windows, um arquivo aberto
+        não pode ser apagado, e as versões temporárias do documento precisam sair."""
+        if self._document is not None:
+            self.thumbnail_list.clear_document()
+            with PDFIUM_LOCK:
+                self._document.close()
+            self._document = None
+
     def _reload(self):
         path = self.session.path()
+        # Uma versão nova do mesmo documento (operação, desfazer, refazer) mantém a página
+        # em que o usuário estava; outro documento começa na primeira.
+        keep_page = self._current_page if self.session.last_change() == "version" else 0
         self._geometries = {}
         self._stop_search()
         self._pending_scroll = None
@@ -316,10 +401,15 @@ class PdfViewer(QWidget):
             return
 
         self._document = document
+        self._text_selection, self._selection_rects = None, []
+        if self.session.last_change() != "version":
+            self._view_rotation = 0  # outro documento começa sem rotação da tela
         self._search = DocumentSearch(self._document)
         self._matches = []
         self._current_match = -1
-        self._current_page = 0
+        self._current_page = min(keep_page, max(self._page_count() - 1, 0))
+        if self._continuous and self._current_page:
+            self._pending_scroll = (self._current_page, 0.0)
         self.search_bar.hide()
         self.annotation_state.clear_pending()
         self.redaction_state.clear_pending()
@@ -327,13 +417,24 @@ class PdfViewer(QWidget):
 
         self._set_document_controls_enabled(True)
         self.thumbnail_list.load_document(self._document)
-        self.thumbnail_list.setVisible(self._show_thumbnails)
+        self.side_panel.load(path)
+        self.side_panel.setVisible(self._show_thumbnails)
+        self._update_notices(path)
         self.content_stack.setCurrentIndex(1)
         self._rebuild_canvas()
 
+    def _update_notices(self, path: str):
+        notices = document_notices(path)
+        self._notices = notices
+        self.notice_label.setText("  ·  ".join(tr_message(message) for message in notices.messages))
+        self.verify_button.setVisible(notices.signature_count > 0)
+        self.notice_bar.setVisible(bool(notices.messages))
+
     def _show_empty_state(self):
         self.content_stack.setCurrentIndex(0)
-        self.thumbnail_list.hide()
+        self.side_panel.clear()
+        self.side_panel.hide()
+        self.notice_bar.hide()
         self._set_document_controls_enabled(False)
         self._update_page_indicator()
 
@@ -369,13 +470,7 @@ class PdfViewer(QWidget):
                 return document
             except pdfium.PdfiumError as exc:
                 if exc.err_code != pdfium.raw.FPDF_ERR_PASSWORD:
-                    QMessageBox.critical(
-                        self,
-                        tr("Abrir PDF"),
-                        tr("Não foi possível abrir o PDF (pode estar corrompido): {error}").format(
-                            error=exc
-                        ),
-                    )
+                    show_error(self, tr("Abrir PDF"), tr("Não foi possível abrir o PDF: {error}"), exc)
                     return None
 
                 prompt = (
@@ -391,9 +486,7 @@ class PdfViewer(QWidget):
                 password = entered
                 prompted = True
             except Exception as exc:
-                QMessageBox.critical(
-                    self, tr("Abrir PDF"), tr("Não foi possível abrir o PDF: {error}").format(error=error_text(exc))
-                )
+                show_error(self, tr("Abrir PDF"), tr("Não foi possível abrir o PDF: {error}"), exc)
                 return None
 
     # -- renderização --------------------------------------------------------
@@ -435,8 +528,8 @@ class PdfViewer(QWidget):
         self._update_page_indicator()
 
     def _make_placeholder_label(self, index: int) -> QLabel:
-        with PDFIUM_LOCK:
-            width_pt, height_pt = self._document.get_page_size(index)
+        geometry = self._geometry(index)
+        width_pt, height_pt = geometry.width, geometry.height
         label = QLabel()
         label.setFixedSize(max(1, int(width_pt * self._scale)), max(1, int(height_pt * self._scale)))
         label.setStyleSheet("background-color: white;")
@@ -445,17 +538,32 @@ class PdfViewer(QWidget):
     def _render_with_overlays(self, index: int) -> QPixmap:
         with PDFIUM_LOCK:
             page = self._document[index]
-            pixmap = render_page(page, self._scale, self.devicePixelRatioF())
+            pixmap = render_page(page, self._scale, self.devicePixelRatioF(), rotation=self._view_rotation)
             page.close()
         pixmap = self._with_highlight(pixmap, index)
         pixmap = self._with_pending_annotations(pixmap, index)
         pixmap = self._with_pending_redactions(pixmap, index)
         pixmap = self._with_picked_areas(pixmap, index)
+        pixmap = self._with_text_selection(pixmap, index)
         return self._with_measure_overlay(pixmap, index)
+
+    def _with_text_selection(self, pixmap: QPixmap, page_index: int) -> QPixmap:
+        if self._text_selection is None or self._text_selection[0] != page_index or not self._selection_rects:
+            return pixmap
+        result = QPixmap(pixmap)
+        painter = QPainter(result)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(_TEXT_SELECTION_COLOR)
+        for rect in self._selection_rects:
+            painter.drawRect(self._user_rect_to_screen(page_index, rect))
+        painter.end()
+        return result
 
     def _show_single_page(self, index: int):
         if self._document is None or not (0 <= index < self._page_count()):
             return
+        if self._text_selection is not None and self._text_selection[0] != index:
+            self._text_selection, self._selection_rects = None, []
         self._current_page = index
         pixmap = self._render_with_overlays(index)
         self._page_labels[0].setPixmap(pixmap)
@@ -472,19 +580,20 @@ class PdfViewer(QWidget):
         self._rendered_pages.discard(index)
 
     def _with_highlight(self, pixmap: QPixmap, page_index: int) -> QPixmap:
-        if not (0 <= self._current_match < len(self._matches)):
-            return pixmap
-        match = self._matches[self._current_match]
-        if match.page_index != page_index:
+        """Todas as ocorrências da busca na página, e a atual em destaque (antes só a atual
+        aparecia)."""
+        on_page = [(n, m) for n, m in enumerate(self._matches) if m.page_index == page_index]
+        if not on_page:
             return pixmap
 
         highlighted = QPixmap(pixmap)
         painter = QPainter(highlighted)
-        painter.setBrush(_HIGHLIGHT_COLOR)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRect(
-            self._user_rect_to_screen(page_index, (match.left, match.bottom, match.right, match.top))
-        )
+        for number, match in on_page:
+            painter.setBrush(_CURRENT_MATCH_COLOR if number == self._current_match else _HIGHLIGHT_COLOR)
+            painter.drawRect(
+                self._user_rect_to_screen(page_index, (match.left, match.bottom, match.right, match.top))
+            )
         painter.end()
         return highlighted
 
@@ -493,7 +602,8 @@ class PdfViewer(QWidget):
     # A conversão de/para pixels passa sempre pela geometria da página, que considera
     # /Rotate e CropBox (ver core/geometry.py).
 
-    def _geometry(self, page_index: int) -> PageGeometry:
+    def _page_geometry(self, page_index: int) -> PageGeometry:
+        """A geometria da página como está no arquivo."""
         geometry = self._geometries.get(page_index)
         if geometry is None:
             with PDFIUM_LOCK:
@@ -502,6 +612,15 @@ class PdfViewer(QWidget):
                 page.close()
             self._geometries[page_index] = geometry
         return geometry
+
+    def _geometry(self, page_index: int) -> PageGeometry:
+        """A geometria da página como aparece na tela, com a rotação da visualização somada
+        à `/Rotate` da página: toda conversão entre tela e PDF passa por aqui, então cliques,
+        marcações e destaques continuam no lugar com a página girada."""
+        geometry = self._page_geometry(page_index)
+        if not self._view_rotation:
+            return geometry
+        return dataclasses.replace(geometry, rotation=(geometry.rotation + self._view_rotation) % 360)
 
     def _user_rect_to_screen(self, page_index: int, rect) -> QRectF:
         return QRectF(*self._geometry(page_index).user_rect_to_screen(rect, self._scale))
@@ -718,12 +837,19 @@ class PdfViewer(QWidget):
         return index, min(1.0, max(0.0, (value - self._page_tops[index]) / height))
 
     def _update_page_indicator(self):
+        self.session.set_current_page(self._current_page)
         if self._document is None:
             self.page_indicator.setText("")
             return
-        self.page_indicator.setText(
+        # Curto na barra ("3 / 12"), completo na dica: a barra precisa caber no visualizador
+        # mesmo com a janela em 1280 px.
+        text = f"{self._current_page + 1} / {self._page_count()}"
+        self.page_indicator.setText(text)
+        self.page_indicator.setToolTip(
             tr("Página {current} de {total}").format(current=self._current_page + 1, total=self._page_count())
+            + " — " + tr("Ir para a página... (Ctrl+G)")
         )
+        self.page_indicator.setFixedWidth(self.page_indicator.fontMetrics().horizontalAdvance(text) + 16)
 
     # -- navegação e zoom -----------------------------------------------------
 
@@ -741,6 +867,72 @@ class PdfViewer(QWidget):
             self._scroll_to_page(min(last, self._current_page + 1))
         else:
             self._show_single_page(min(last, self._current_page + 1))
+
+    def _go_first(self):
+        self._go_to_page(0)
+
+    def _go_last(self):
+        if self._document is not None:
+            self._go_to_page(self._page_count() - 1)
+
+    def _go_to_page(self, index: int):
+        if self._document is None:
+            return
+        index = max(0, min(self._page_count() - 1, index))
+        if self._continuous:
+            self._scroll_to_page(index)
+        else:
+            self._show_single_page(index)
+
+    def _ask_go_to_page(self):
+        if self._document is None:
+            return
+        number, ok = QInputDialog.getInt(
+            self,
+            tr("Ir para a página"),
+            tr("Página (1 a {total}):").format(total=self._page_count()),
+            self._current_page + 1,
+            1,
+            self._page_count(),
+        )
+        if ok:
+            self._go_to_page(number - 1)
+
+    def _fit_page(self):
+        """Zoom para a página inteira caber na área visível."""
+        if self._document is None:
+            return
+        geometry = self._geometry(self._current_page)
+        if geometry.width <= 0 or geometry.height <= 0:
+            return
+        viewport = self.scroll_area.viewport()
+        scale = min((viewport.width() - 24) / geometry.width, (viewport.height() - 24) / geometry.height)
+        self._scale = max(_MIN_SCALE, min(_MAX_SCALE, scale))
+        self._apply_zoom()
+
+    def _rotate_view(self):
+        """Gira a página na tela em 90° (para ler um escaneado de lado); o arquivo não muda
+        — para girar de verdade, use a aba Páginas."""
+        if self._document is None:
+            return
+        self._view_rotation = (self._view_rotation + 90) % 360
+        page = self._current_page
+        self._rebuild_canvas()
+        self._go_to_page(page)
+
+    def eventFilter(self, watched, event):
+        # Ctrl + roda do mouse: zoom (como nos leitores de PDF), em vez de rolar.
+        if (
+            event.type() == QEvent.Type.Wheel
+            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+            and self._document is not None
+        ):
+            if event.angleDelta().y() > 0:
+                self._zoom_in()
+            elif event.angleDelta().y() < 0:
+                self._zoom_out()
+            return True
+        return super().eventFilter(watched, event)
 
     def _apply_zoom(self):
         self._zoom_label.setText(f"{int(self._scale * 100)}%")
@@ -765,8 +957,7 @@ class PdfViewer(QWidget):
     def _fit_width(self):
         if self._document is None:
             return
-        with PDFIUM_LOCK:
-            width_pt, _ = self._document.get_page_size(self._current_page)
+        width_pt = self._geometry(self._current_page).width
         if width_pt <= 0:
             return
         viewport_width = self.scroll_area.viewport().width() - 24
@@ -785,7 +976,7 @@ class PdfViewer(QWidget):
 
     def _toggle_thumbnails(self, checked: bool):
         self._show_thumbnails = checked
-        self.thumbnail_list.setVisible(checked and self._document is not None)
+        self.side_panel.setVisible(checked and self._document is not None)
 
     def _on_thumbnail_selected(self, index: int):
         if self._continuous:
@@ -867,12 +1058,19 @@ class PdfViewer(QWidget):
         self._jump_to_match(self._current_match)
 
     def _jump_to_match(self, match_index: int):
+        """Vai até a ocorrência — a posição dela na página, não só a página."""
         match = self._matches[match_index]
         if self._continuous:
             self._scroll_to_page(match.page_index)
             self._render_page_into_label(match.page_index, self._page_labels[match.page_index])
         else:
             self._show_single_page(match.page_index)
+        self._refresh_current_render()
+        rect = self._user_rect_to_screen(match.page_index, (match.left, match.bottom, match.right, match.top))
+        label = self._page_labels[match.page_index if self._continuous else 0]
+        offset = label.pixmap_offset() if isinstance(label, PageCanvas) else QPointF(0, 0)
+        center = label.mapTo(self.scroll_area.widget(), (rect.center() + offset).toPoint())
+        self.scroll_area.ensureVisible(center.x(), center.y(), 60, 80)
 
     def _refresh_current_render(self):
         if self._document is None:
@@ -911,8 +1109,8 @@ class PdfViewer(QWidget):
         if self.redaction_state.is_page_active() or self.area_pick_state.is_page_active():
             canvas.setCursor(Qt.CursorShape.CrossCursor)
             return
-        if not self.annotation_state.is_page_active():
-            canvas.setCursor(Qt.CursorShape.ArrowCursor)
+        if not self.annotation_state.is_page_active() or self.annotation_state.active_tool() is None:
+            canvas.setCursor(Qt.CursorShape.IBeamCursor)  # arrastar seleciona texto
             return
         tool = self.annotation_state.active_tool()
         if tool in _DRAWING_TOOLS:
@@ -950,7 +1148,10 @@ class PdfViewer(QWidget):
         if self.area_pick_state.is_page_active():
             self._area_drag_start_pdf = self._widget_point_to_pdf(self._current_page, x, y)
             return
-        if not self.annotation_state.is_page_active():
+        if self._text_selection_enabled():
+            self._clear_text_selection()
+            self._selection_start_pdf = self._widget_point_to_pdf(self._current_page, x, y)
+            self._selection_base = QPixmap(self._page_labels[0].pixmap())
             return
         tool = self.annotation_state.active_tool()
         if self._document is None or tool is None:
@@ -979,6 +1180,9 @@ class PdfViewer(QWidget):
             return
 
     def _on_canvas_moved(self, x: float, y: float):
+        if self._selection_start_pdf is not None:
+            self._update_text_selection(self._widget_point_to_pdf(self._current_page, x, y))
+            return
         if self.measure_state.is_page_active() and self._measure_drag_start_pdf is not None:
             if self._measure_preview_base is None:
                 return
@@ -1007,6 +1211,11 @@ class PdfViewer(QWidget):
         self._page_labels[0].setPixmap(preview)
 
     def _on_canvas_released(self, x: float, y: float):
+        if self._selection_start_pdf is not None:
+            self._update_text_selection(self._widget_point_to_pdf(self._current_page, x, y))
+            self._selection_start_pdf = None
+            self._selection_base = None
+            return
         if self.measure_state.is_page_active():
             if self._measure_drag_start_pdf is not None:
                 page_index = self._current_page
@@ -1056,6 +1265,72 @@ class PdfViewer(QWidget):
         if tool in ("highlight", "underline", "strikeout") and self._drag_start_pdf is not None:
             self._finish_text_markup(page_index, self._drag_start_pdf, pdf_point, tool)
             self._drag_start_pdf = None
+
+    # -- seleção de texto (M11) ---------------------------------------------------
+
+    def _text_selection_enabled(self) -> bool:
+        """Sem ferramenta de marcação ativa, arrastar na página seleciona texto."""
+        if self._document is None or self._continuous:
+            return False
+        if self.measure_state.is_page_active() or self.redaction_state.is_page_active():
+            return False
+        if self.area_pick_state.is_page_active():
+            return False
+        return not self.annotation_state.is_page_active() or self.annotation_state.active_tool() is None
+
+    def _update_text_selection(self, end_pdf):
+        page_index = self._current_page
+        with PDFIUM_LOCK:
+            page = self._document[page_index]
+            textpage = page.get_textpage()
+            try:
+                start_index = textpage.get_index(*self._selection_start_pdf, 6, 6)
+                end_index = textpage.get_index(end_pdf[0], end_pdf[1], 6, 6)
+                if start_index is None or end_index is None or start_index < 0 or end_index < 0:
+                    self._text_selection, self._selection_rects = None, []
+                else:
+                    lo, hi = sorted((start_index, end_index))
+                    count = hi - lo + 1
+                    self._text_selection = (page_index, lo, count)
+                    self._selection_rects = [textpage.get_rect(i) for i in range(textpage.count_rects(lo, count))]
+            finally:
+                textpage.close()
+                page.close()
+        base = self._selection_base or self._page_labels[0].pixmap()
+        if base is None:
+            return
+        preview = QPixmap(base)
+        painter = QPainter(preview)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(_TEXT_SELECTION_COLOR)
+        for rect in self._selection_rects:
+            painter.drawRect(self._user_rect_to_screen(page_index, rect))
+        painter.end()
+        self._page_labels[0].setPixmap(preview)
+
+    def _clear_text_selection(self):
+        had_selection = self._text_selection is not None
+        self._text_selection, self._selection_rects = None, []
+        if had_selection and not self._continuous and self._page_labels:
+            self._show_single_page(self._current_page)
+
+    def selected_text(self) -> str:
+        if self._text_selection is None or self._document is None:
+            return ""
+        page_index, start, count = self._text_selection
+        with PDFIUM_LOCK:
+            page = self._document[page_index]
+            textpage = page.get_textpage()
+            try:
+                return textpage.get_text_range(start, count)
+            finally:
+                textpage.close()
+                page.close()
+
+    def copy_selected_text(self):
+        text = self.selected_text()
+        if text:
+            QApplication.clipboard().setText(text)
 
     def _finish_text_markup(self, page_index: int, start_pdf, end_pdf, tool: str):
         with PDFIUM_LOCK:
@@ -1109,7 +1384,7 @@ class PdfViewer(QWidget):
                     color=self.annotation_state.active_color(),
                     position=pdf_point,
                     text=text.strip(),
-                    rotation=self._geometry(page_index).rotation,
+                    rotation=self._page_geometry(page_index).rotation,
                 )
             )
 
@@ -1121,7 +1396,7 @@ class PdfViewer(QWidget):
                 color=self.annotation_state.active_color(),
                 position=pdf_point,
                 text=self.annotation_state.stamp_text(),
-                rotation=self._geometry(page_index).rotation,
+                rotation=self._page_geometry(page_index).rotation,
             )
         )
 
