@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QSettings, QSize, Qt
 from PySide6.QtGui import QGuiApplication
+from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -32,8 +33,9 @@ from ui.i18n import tr
 from ui.icon import build_app_icon
 from ui.measure_state import MeasureState
 from ui.preferences import Preferences, start_folder, use_preferences
+from ui.printing import page_count_for_printing, pages_to_print, print_pages
 from ui.redaction_state import RedactionState
-from ui.tasks import task_manager
+from ui.tasks import run_task, task_manager
 from ui.theme import apply_dark_titlebar
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.widget_state import capture_state, restore_state
@@ -273,6 +275,9 @@ class MainWindow(QMainWindow):
         self._save_as_action = file_menu.addAction(tr("Salvar como..."))
         self._save_as_action.setShortcut("Ctrl+Shift+S")
         self._save_as_action.triggered.connect(self.save_document_as)
+        self._print_action = file_menu.addAction(tr("Imprimir..."))
+        self._print_action.setShortcut("Ctrl+P")
+        self._print_action.triggered.connect(self.print_document)
         self._recent_menu = file_menu.addMenu(tr("Abrir recente"))
         self._recent_menu.aboutToShow.connect(self._fill_recent_menu)
         self._recent_menu.setEnabled(bool(self._preferences.recent_files()))
@@ -469,6 +474,7 @@ class MainWindow(QMainWindow):
         self._redo_action.setEnabled(self.session.can_redo() and not busy)
         self._save_action.setEnabled(has_document and self.session.is_modified() and not busy)
         self._save_as_action.setEnabled(has_document and not busy)
+        self._print_action.setEnabled(has_document and not busy)
 
         source = self.session.source_path()
         if source:
@@ -520,6 +526,39 @@ class MainWindow(QMainWindow):
         if answer == QMessageBox.StandardButton.Save:
             return self.save_document()
         return answer == QMessageBox.StandardButton.Discard
+
+    def print_document(self):
+        """Arquivo > Imprimir: diálogo do sistema e impressão em segundo plano."""
+        path = self.session.path()
+        if path is None:
+            return
+        try:
+            page_count = page_count_for_printing(path)
+        except Exception as exc:  # noqa: BLE001 — protegido, restrito ou corrompido
+            show_error(self, tr("Imprimir"), "{error}", exc)
+            return
+        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        printer.setDocName(Path(self.session.source_path() or path).name)
+        dialog = QPrintDialog(printer, self)
+        dialog.setMinMax(1, page_count)
+        dialog.setOption(QPrintDialog.PrintDialogOption.PrintCurrentPage, True)
+        dialog.setOption(QPrintDialog.PrintDialogOption.PrintSelection, bool(self.session.selected_pages()))
+        if dialog.exec():
+            self.start_printing(printer, page_count)
+
+    def start_printing(self, printer: QPrinter, page_count: int) -> bool:
+        """Imprime as páginas escolhidas no diálogo (separado dele para os testes)."""
+        path = self.session.path()
+        pages = pages_to_print(printer, page_count, self.session.current_page(), self.session.selected_pages())
+        return run_task(
+            self,
+            tr("Imprimir"),
+            lambda progress: print_pages(path, printer, pages, progress),
+            on_success=lambda count: self.statusBar().showMessage(
+                tr("{count} página(s) enviada(s) para a impressora.").format(count=count), 8000
+            ),
+            error_message=tr("Não foi possível imprimir: {error}"),
+        )
 
     def _verify_signatures(self):
         """O botão "Verificar" do aviso de documento assinado: abre a aba Assinatura no modo

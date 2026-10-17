@@ -1441,4 +1441,15 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Da primeira à última página selecionada nas miniaturas.': 'From the first to the last page selected in the thumbnails.',
     'Página atual': 'Current page',
     'Usar a página que está no visualizador': 'Use the page shown in the viewer',
+    # Etapa 6: novas funcionalidades
+    'Imprimir...': 'Print...',
+    'Imprimir': 'Print',
+    'Imprimindo páginas': 'Printing pages',
+    '{count} página(s) enviada(s) para a impressora.': '{count} page(s) sent to the printer.',
+    'Não foi possível imprimir: {error}': 'Could not print: {error}',
+    'Não foi possível iniciar a impressão.': 'Could not start printing.',
+    'Nenhuma página escolhida para imprimir.': 'No pages chosen to print.',
+    'O autor deste PDF não permite imprimi-lo. Para imprimir, use "Remover senha" em Proteger informando a senha de permissões.': (
+        'The author of this PDF does not allow printing it. To print, use "Remove password" in Protect with the permissions password.'
+    ),
 }

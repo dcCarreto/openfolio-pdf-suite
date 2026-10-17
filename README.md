@@ -66,7 +66,10 @@ entrada da aba Páginas.
 
 Dá para abrir um PDF arrastando-o para a janela, pelo menu **Arquivo > Abrir recente**, ou
 pelo "Abrir com" do sistema (no Windows, o instalador oferece incluir o OpenFolio nessa lista).
-O app lembra o idioma, a última pasta usada e os arquivos recentes.
+O app lembra o idioma, a última pasta usada e os arquivos recentes. **Arquivo > Imprimir**
+(Ctrl+P) imprime o documento de trabalho inteiro, um intervalo, a página atual ou as páginas
+selecionadas nas miniaturas, com anotações e campos preenchidos, ajustando cada página ao
+papel; PDFs cujo autor proibiu a impressão não são impressos.
 
 As operações rodam em segundo plano: a janela continua respondendo, a barra de status mostra
 o andamento e o botão "Cancelar" interrompe a operação sem deixar arquivo pela metade. Os
@@ -332,6 +335,7 @@ ui/              Interface gráfica (PySide6)
   preferences.py       Arquivos recentes, última pasta e idioma entre sessões
   app_events.py        Arquivos vindos da linha de comando, do "Abrir com" e de arrastar
   errors.py            Mensagens de erro para o usuário, com detalhes técnicos à parte
+  printing.py          Impressão do documento (render do pdfium enviado à impressora)
   annotation_state.py  Estado compartilhado da ferramenta de anotações
   redaction_state.py   Estado compartilhado da ferramenta de redação
   page_ranges.py       Leitura de listas de páginas digitadas ("1-3, 5, 8-")

@@ -32,6 +32,7 @@ class RestrictedPDFError(EncryptedPDFError):
 READ = "read"  # só lê a estrutura ou renderiza, como um leitor de PDF
 EXTRACT = "extract"  # copia conteúdo para fora do documento (texto, imagens)
 MODIFY = "modify"  # gera um PDF novo a partir deste
+PRINT = "print"  # imprime o documento
 
 _LOCKED_MESSAGE = (
     "Este PDF está protegido por senha. Abra-o no visualizador (que pede a senha) para usá-lo "
@@ -50,6 +51,10 @@ _PROTECTED_MODIFY_MESSAGE = (
 _EXTRACT_DENIED_MESSAGE = (
     "O autor deste PDF não permite copiar o conteúdo dele (texto e imagens). Para extrair, "
     'use "Remover senha" em Proteger informando a senha de permissões.'
+)
+_PRINT_DENIED_MESSAGE = (
+    "O autor deste PDF não permite imprimi-lo. Para imprimir, use \"Remover senha\" em "
+    "Proteger informando a senha de permissões."
 )
 
 _known_passwords: dict[str, str] = {}
@@ -83,7 +88,7 @@ def open_reader(input_path: str, *, purpose: str = MODIFY) -> PdfReader:
       Se não der, `EncryptedPDFError`.
     - `READ` (listar, verificar, renderizar) funciona sempre que o PDF abre.
     - `EXTRACT` respeita a permissão de cópia definida pelo autor, a menos que a senha
-      conhecida seja a de proprietário.
+      conhecida seja a de proprietário. `PRINT` faz o mesmo com a permissão de impressão.
     - `MODIFY` é recusado com `RestrictedPDFError`: o pypdf gravaria a saída sem a
       proteção, e uma ferramenta de edição não deve remover proteção sem o usuário pedir.
       A mensagem aponta o caminho certo ("Remover senha" em Proteger).
@@ -106,10 +111,12 @@ def open_reader(input_path: str, *, purpose: str = MODIFY) -> PdfReader:
 
     if purpose == MODIFY:
         raise RestrictedPDFError(_PROTECTED_MODIFY_MESSAGE if password else _RESTRICTED_MODIFY_MESSAGE)
-    if purpose == EXTRACT and access != PasswordType.OWNER_PASSWORD:
+    if purpose in (EXTRACT, PRINT) and access != PasswordType.OWNER_PASSWORD:
         permissions = reader.user_access_permissions
-        if permissions is not None and not permissions & UserAccessPermissions.EXTRACT:
+        if purpose == EXTRACT and permissions is not None and not permissions & UserAccessPermissions.EXTRACT:
             raise RestrictedPDFError(_EXTRACT_DENIED_MESSAGE)
+        if purpose == PRINT and permissions is not None and not permissions & UserAccessPermissions.PRINT:
+            raise RestrictedPDFError(_PRINT_DENIED_MESSAGE)
     return reader
 
 
