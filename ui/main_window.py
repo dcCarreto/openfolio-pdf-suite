@@ -123,6 +123,9 @@ _SECTIONS = [
     ("build_compare_icon", "Comparar",
      "Compare duas versões de um PDF: diff de texto por página ou diff visual.",
      "ui.pages.compare_page", "ComparePage"),
+    ("build_batch_icon", "Processar em lote",
+     "Aplique a mesma operação (comprimir, OCR, marca d'água, numerar, proteger, PDF/A) a todos os PDFs de uma pasta.",
+     "ui.pages.batch_page", "BatchPage"),
 ]
 
 _SIDEBAR_WIDTH = 210

@@ -68,6 +68,15 @@ def build_fill_sign_icon() -> QIcon:
     return _build(draw)
 
 
+def build_batch_icon() -> QIcon:
+    def draw(p):
+        # três páginas empilhadas
+        for offset in (0, 3, 6):
+            p.drawRect(QRectF(3 + offset, 9 - offset, 10, 12))
+
+    return _build(draw)
+
+
 def build_compress_icon() -> QIcon:
     def draw(p):
         # seta de cima apontando para baixo

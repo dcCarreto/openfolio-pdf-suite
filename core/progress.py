@@ -54,6 +54,11 @@ class Progress:
         if self._cancel_event.is_set():
             raise OperationCancelled()
 
+    def silent(self) -> "Progress":
+        """Mesmo cancelamento, sem informar andamento: para cada arquivo de um lote, cujo
+        andamento é o do lote."""
+        return Progress(cancel_event=self._cancel_event)
+
     def update(self, done: int, total: int, message: str = "") -> None:
         self.check()
         if self._callback is not None:

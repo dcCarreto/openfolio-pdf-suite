@@ -132,6 +132,7 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | ✒️ Assinatura digital | Assina um PDF com selo visível e assinatura criptográfica de verdade (CMS/PKCS#7), usando um certificado .pfx real ou um certificado de teste gerado na hora. A verificação mostra se o conteúdo assinado está íntegro, se algo foi alterado depois da assinatura e se o certificado é confiável |
 | ♿ Acessibilidade | Verifica um subconjunto de PDF/UA (idioma, título, árvore de estrutura, texto alternativo em figuras, ordem de tabulação, descrição dos campos) e corrige idioma, título e ordem de tabulação — não tagueia automaticamente, pelo risco de gerar uma estrutura malformada |
 | 🆚 Comparar | Compara duas versões de um PDF: diff de texto por página, ou diff visual (imagem por página destacando em vermelho o que mudou) |
+| 🗂️ Processar em lote | Aplica a mesma operação (comprimir, OCR, marca d'água, numerar páginas, proteger com senha ou converter para PDF/A-2b) a todos os PDFs de uma pasta. Os resultados vão para outra pasta, com o sufixo da operação no nome e sem sobrescrever nada; um arquivo que falha não interrompe os outros, e ao final a tabela e um relatório em CSV mostram o resultado de cada arquivo |
 
 ## Demonstração
 
