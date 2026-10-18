@@ -45,7 +45,7 @@ from ui.widgets.task_status import TaskStatus
 APP_VERSION = "0.2.0"
 
 # Abas que marcam áreas arrastando no visualizador (ver ui/area_pick_state.py).
-_AREA_PICK_PAGES = {"EditPage", "FormFieldsPage", "CropPage", "SignaturePage"}
+_AREA_PICK_PAGES = {"EditPage", "FormFieldsPage", "CropPage", "SignaturePage", "FillSignPage"}
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +111,9 @@ _SECTIONS = [
     ("build_redaction_icon", "Redigir/Sanitizar",
      "Apague definitivamente áreas de um PDF ou remova metadados, JavaScript e anexos.",
      "ui.pages.redaction_page", "RedactionPage"),
+    ("build_fill_sign_icon", "Preencher e assinar",
+     "Coloque texto, data, assinatura desenhada ou em imagem e iniciais na página, sem certificado.",
+     "ui.pages.fill_sign_page", "FillSignPage"),
     ("build_signature_icon", "Assinatura digital",
      "Assine um PDF com selo visível e assinatura criptográfica, ou verifique uma assinatura existente.",
      "ui.pages.signature_page", "SignaturePage"),

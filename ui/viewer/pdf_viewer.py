@@ -117,6 +117,7 @@ class PdfViewer(QWidget):
         self._ink_preview_base: QPixmap | None = None
         self._redaction_drag_start_pdf: tuple[float, float] | None = None
         self._area_drag_start_pdf: tuple[float, float] | None = None
+        self._area_preview_base: QPixmap | None = None
         # Seleção de texto (sem ferramenta ativa): início do arrasto, página e trecho
         # selecionado (índices de caractere do pdfium) com os retângulos dele.
         self._selection_start_pdf: tuple[float, float] | None = None
@@ -718,14 +719,33 @@ class PdfViewer(QWidget):
         painter = QPainter(result)
         for number, rect in areas:
             color = QColor("#ff5252") if number == selected else QColor("#2f80ed")
-            painter.setPen(QPen(color, 2, Qt.PenStyle.DashLine))
-            painter.setBrush(QColor(color.red(), color.green(), color.blue(), 40))
-            screen_rect = self._user_rect_to_screen(page_index, rect)
-            painter.drawRect(screen_rect)
-            painter.setPen(color)
-            painter.drawText(screen_rect.adjusted(3, 2, 0, 0), str(number + 1))
+            self._paint_picked_area(painter, page_index, rect, number, color)
         painter.end()
         return result
+
+    @staticmethod
+    def _drag_rect(start_pdf, end_pdf) -> tuple[float, float, float, float]:
+        (x1, y1), (x2, y2) = start_pdf, end_pdf
+        return (min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2))
+
+    def _paint_picked_area(self, painter: QPainter, page_index: int, rect, number: int | None, color: QColor):
+        """Uma área marcada (ou sendo arrastada, com `number` None): o conteúdo que a aba
+        desenhar e o contorno tracejado, numerado."""
+        screen_rect = self._user_rect_to_screen(page_index, rect).normalized()
+        preview = self.area_pick_state.preview()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(color.red(), color.green(), color.blue(), 15 if preview else 40))
+        painter.drawRect(screen_rect)
+        if preview is not None:
+            painter.save()
+            preview(painter, screen_rect, number)
+            painter.restore()
+        painter.setPen(QPen(color, 2, Qt.PenStyle.DashLine))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(screen_rect)
+        if number is not None:
+            painter.setPen(color)
+            painter.drawText(screen_rect.adjusted(3, 2, 0, 0), str(number + 1))
 
     def _on_picked_areas_changed(self):
         """Mostra a página da área escolhida na tabela da aba Editar."""
@@ -1161,6 +1181,7 @@ class PdfViewer(QWidget):
             return
         if self.area_pick_state.is_page_active():
             self._area_drag_start_pdf = self._widget_point_to_pdf(self._current_page, x, y)
+            self._area_preview_base = QPixmap(self._page_labels[0].pixmap())
             return
         if self._text_selection_enabled():
             widget = self._form_widget_at(self._current_page, self._widget_point_to_pdf(self._current_page, x, y))
@@ -1198,6 +1219,15 @@ class PdfViewer(QWidget):
             return
 
     def _on_canvas_moved(self, x: float, y: float):
+        if self._area_drag_start_pdf is not None and self._area_preview_base is not None:
+            # A área acompanha o mouse, já com o conteúdo no tamanho em que vai ficar.
+            preview = QPixmap(self._area_preview_base)
+            painter = QPainter(preview)
+            rect = self._drag_rect(self._area_drag_start_pdf, self._widget_point_to_pdf(self._current_page, x, y))
+            self._paint_picked_area(painter, self._current_page, rect, None, QColor("#2f80ed"))
+            painter.end()
+            self._page_labels[0].setPixmap(preview)
+            return
         if self._selection_start_pdf is not None:
             self._update_text_selection(self._widget_point_to_pdf(self._current_page, x, y))
             return
@@ -1254,12 +1284,12 @@ class PdfViewer(QWidget):
         if self.area_pick_state.is_page_active():
             if self._area_drag_start_pdf is not None:
                 end_pdf = self._widget_point_to_pdf(self._current_page, x, y)
-                (x1, y1), (x2, y2) = self._area_drag_start_pdf, end_pdf
+                left, bottom, right, top = self._drag_rect(self._area_drag_start_pdf, end_pdf)
                 self._area_drag_start_pdf = None
-                left, right = sorted((x1, x2))
-                bottom, top = sorted((y1, y2))
+                self._area_preview_base = None
                 if right - left >= 2 and top - bottom >= 2:
                     self.area_pick_state.pick(self._current_page, (left, bottom, right, top))
+                self._refresh_current_render()  # tira a prévia do arrasto
             return
 
         tool = self.annotation_state.active_tool()

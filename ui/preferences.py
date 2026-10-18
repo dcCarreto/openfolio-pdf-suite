@@ -1,4 +1,5 @@
-"""Preferências do usuário guardadas entre sessões: arquivos recentes, última pasta e idioma.
+"""Preferências do usuário guardadas entre sessões: arquivos recentes, última pasta, idioma
+e a assinatura e as iniciais do "Preencher e assinar".
 
 Ficam no mesmo QSettings da geometria da janela. Sem QSettings (testes), as preferências
 vivem só na memória do processo.
@@ -62,6 +63,16 @@ class Preferences:
 
     def set_language(self, language: str) -> None:
         self._set("ui/language", language)
+
+    # -- assinatura e iniciais (A04) ----------------------------------------------
+
+    def saved_image(self, kind: str) -> bytes:
+        """PNG/JPEG guardado para `kind` ("signature" ou "initials"), ou b"" se não houver."""
+        value = self._get(f"fill_sign/{kind}")
+        return bytes(value) if value else b""
+
+    def set_saved_image(self, kind: str, data: bytes) -> None:
+        self._set(f"fill_sign/{kind}", data)
 
 
 _current = Preferences()

@@ -27,6 +27,7 @@ class AreaPickState(QObject):
         self._active_page = None
         self._wanted: set[int] = set()
         self._areas: dict[int, tuple[list[Area], int | None]] = {}
+        self._previews: dict[int, object] = {}
 
     # -- quem recebe a área ---------------------------------------------------------
 
@@ -52,6 +53,7 @@ class AreaPickState(QObject):
     def _forget(self, key: int) -> None:
         self._wanted.discard(key)
         self._areas.pop(key, None)
+        self._previews.pop(key, None)
 
     def owner(self):
         """A aba que recebe o próximo arrasto (None se nenhuma)."""
@@ -84,6 +86,16 @@ class AreaPickState(QObject):
         self._areas[id(page)] = (list(areas), selected)
         if page is self.owner():
             self.areas_changed.emit()
+
+    def set_preview(self, page, paint) -> None:
+        """Como desenhar o conteúdo das áreas da aba: `paint(painter, retângulo na tela,
+        número da área)`, com número None para a área que está sendo arrastada. Sem isso, o
+        visualizador desenha só o contorno."""
+        self._previews[id(page)] = paint
+
+    def preview(self):
+        owner = self.owner()
+        return self._previews.get(id(owner)) if owner is not None else None
 
     def _update(self, change) -> None:
         before = self.owner()

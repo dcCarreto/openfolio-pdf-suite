@@ -59,6 +59,15 @@ def build_organize_icon() -> QIcon:
     return _build(draw)
 
 
+def build_fill_sign_icon() -> QIcon:
+    def draw(p):
+        # rabisco de assinatura sobre a linha
+        p.drawPolyline(QPolygonF([QPointF(3, 14), QPointF(7, 7), QPointF(9, 14), QPointF(13, 8), QPointF(15, 13), QPointF(19, 10)]))
+        p.drawLine(QPointF(3, 18), QPointF(19, 18))
+
+    return _build(draw)
+
+
 def build_compress_icon() -> QIcon:
     def draw(p):
         # seta de cima apontando para baixo
