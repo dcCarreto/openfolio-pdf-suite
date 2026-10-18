@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
-from pypdf.generic import ArrayObject, BooleanObject, DictionaryObject, NameObject, read_object
+from pypdf.generic import ArrayObject, BooleanObject, DictionaryObject, NameObject, StreamObject, read_object
 from reportlab.pdfgen import canvas
 
 from .base import READ, PDFOperation, atomic_output, open_reader, require_valid_page_index, write_pdf
@@ -294,9 +294,8 @@ _FLAG_PUSHBUTTON = 1 << 16
 _FLAG_COMBO = 1 << 17
 
 
-def _describe_field_type(field) -> str:
-    field_type = field.field_type
-    flags = int(field.flags or 0)
+def _describe_field_type(field_type, flags) -> str:
+    flags = int(flags or 0)
     if field_type == "/Tx":
         return "text"
     if field_type == "/Btn":
@@ -323,12 +322,132 @@ class ListFormFields(PDFOperation):
         return [
             FormFieldInfo(
                 name=name,
-                field_type=_describe_field_type(field),
+                field_type=_describe_field_type(field.field_type, field.flags),
                 value="" if field.value is None else str(field.value),
             )
             for name, field in fields.items()
             if field.field_type is not None
         ]
+
+
+_FLAG_READ_ONLY = 1
+
+
+@dataclass
+class FormWidget:
+    """Um widget de campo numa página, como o visualizador precisa para preenchê-lo."""
+
+    page_index: int
+    name: str  # nome completo do campo
+    field_type: str  # como em FormFieldInfo
+    rect: tuple[float, float, float, float]  # espaço do usuário do PDF
+    value: str
+    on_state: str = ""  # caixa de seleção/opção: o estado "ligado" deste widget ("/Yes", "/M")
+    options: list[tuple[str, str]] = field(default_factory=list)  # lista: (valor, texto)
+    read_only: bool = False
+
+
+def _inherited(node, key: str):
+    """Valor de `key` no widget ou no primeiro campo-pai que o tenha (/FT, /Ff, /V, /Opt)."""
+    visited: set[int] = set()
+    while node is not None and id(node) not in visited:
+        visited.add(id(node))
+        if key in node:
+            return node[key]
+        parent = node.get("/Parent")
+        node = parent.get_object() if parent is not None else None
+    return None
+
+
+def _page_widgets(page):
+    for annotation in page["/Annots"] if "/Annots" in page else []:
+        annotation = annotation.get_object()
+        if annotation.get("/Subtype") == "/Widget":
+            yield annotation
+
+
+def _appearance_states(widget) -> list[str]:
+    appearance = widget.get("/AP")
+    normal = appearance.get_object().get("/N") if appearance is not None else None
+    normal = normal.get_object() if normal is not None else None
+    # Num campo de texto /N é a própria aparência (um stream), não um dicionário de estados.
+    if not isinstance(normal, DictionaryObject) or isinstance(normal, StreamObject):
+        return []
+    return [str(key) for key in normal]
+
+
+def _choice_options(widget) -> list[tuple[str, str]]:
+    options = []
+    for option in _inherited(widget, "/Opt") or []:
+        option = option.get_object()
+        if isinstance(option, ArrayObject) and len(option) >= 2:
+            options.append((str(option[0]), str(option[1])))
+        else:
+            options.append((str(option), str(option)))
+    return options
+
+
+class ListFormWidgets(PDFOperation):
+    """Os widgets preenchíveis de cada página (texto, caixa de seleção, opção e listas),
+    com posição e valor atual. Botões e assinaturas ficam de fora."""
+
+    def run(self, input_path: str) -> list[FormWidget]:
+        reader = open_reader(input_path, purpose=READ)
+        if "/AcroForm" not in reader.trailer["/Root"]:
+            return []
+        widgets = []
+        for page_index, page in enumerate(reader.pages):
+            for widget in _page_widgets(page):
+                flags = int(_inherited(widget, "/Ff") or 0)
+                field_type = _describe_field_type(_inherited(widget, "/FT"), flags)
+                name = _qualified_name(widget)
+                if field_type not in ("text", "checkbox", "radio", "dropdown", "listbox") or not name:
+                    continue
+                value = _inherited(widget, "/V")
+                left, bottom, right, top = (float(v) for v in widget["/Rect"])
+                states = [state for state in _appearance_states(widget) if state != "/Off"]
+                widgets.append(
+                    FormWidget(
+                        page_index=page_index,
+                        name=name,
+                        field_type=field_type,
+                        rect=(min(left, right), min(bottom, top), max(left, right), max(bottom, top)),
+                        value="" if value is None else str(value),
+                        on_state=states[0] if states else "",
+                        options=_choice_options(widget),
+                        read_only=bool(flags & _FLAG_READ_ONLY),
+                    )
+                )
+        return widgets
+
+
+class FillFormFields(PDFOperation):
+    """Grava valores nos campos, pelo nome completo. Caixas de seleção e opções recebem o
+    estado ("/Yes", "/Off", "/M"); os outros campos, o texto ou o valor da opção, com a
+    aparência refeita pelo pypdf."""
+
+    def run(self, input_path: str, output_path: str, values: dict[str, str]) -> None:
+        writer = PdfWriter(clone_from=open_reader(input_path))
+        texts = {}
+        for page in writer.pages:
+            for widget in _page_widgets(page):
+                name = _qualified_name(widget)
+                if name not in values:
+                    continue
+                if _inherited(widget, "/FT") != "/Btn":
+                    texts[name] = values[name]
+                    continue
+                # O pypdf grava o /V de um grupo de opções como texto, não como nome; aqui
+                # cada widget liga só se tiver a aparência desse estado.
+                state = values[name]
+                widget[NameObject("/AS")] = NameObject(state if state in _appearance_states(widget) else "/Off")
+                field_node = widget
+                while "/T" not in field_node:
+                    field_node = field_node["/Parent"].get_object()
+                field_node[NameObject("/V")] = NameObject(state)
+        if texts:
+            writer.update_page_form_field_values(None, texts, auto_regenerate=False)
+        write_pdf(writer, output_path)
 
 
 class ExportFormDataCSV(PDFOperation):

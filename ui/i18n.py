@@ -1419,7 +1419,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Assinado digitalmente ({count} assinatura(s)). Alterar o documento invalida a assinatura.': (
         'Digitally signed ({count} signature(s)). Changing the document invalidates the signature.'
     ),
-    'Tem formulário ({count} campo(s)).': 'Has a form ({count} field(s)).',
+    'Tem formulário ({count} campo(s)): clique num campo para preencher.': 'Has a form ({count} field(s)): click a field to fill it in.',
     'Tem camadas (veja a aba Camadas).': 'Has layers (see the Layers tab).',
     'Protegido por senha.': 'Password-protected.',
     'O autor restringiu alterações ou cópia (senha de permissões).': (
@@ -1475,4 +1475,5 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'edição na grade': 'grid edit',
     'Extrair páginas': 'Extract pages',
     '{count} página(s) salva(s) em {path}.': '{count} page(s) saved to {path}.',
+    'Preencher formulário': 'Fill form',
 }

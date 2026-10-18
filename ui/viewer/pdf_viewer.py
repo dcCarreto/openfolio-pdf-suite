@@ -1,5 +1,5 @@
 """Widget central: visualizador de PDF com miniaturas, zoom, página única/rolagem
-contínua e busca de texto."""
+contínua, busca de texto e preenchimento de formulários."""
 
 import dataclasses
 import time
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
     QScrollArea,
     QStackedWidget,
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
 from core.annotations import AnnotationSpec, spec_rect
 from core.base import known_password, remember_password
 from core.document_info import document_notices
+from core.form_fields import FillFormFields, FormWidget, ListFormWidgets
 from core.geometry import PageGeometry
 from core.progress import PDFIUM_LOCK
 from core.redaction import RedactionRect
@@ -35,6 +37,7 @@ from ui.i18n import tr, tr_message
 from ui.area_pick_state import AreaPickState
 from ui.measure_state import MeasureState, format_distance
 from ui.redaction_state import RedactionState
+from ui.tasks import run_task
 from ui.viewer.page_canvas import PageCanvas
 from ui.viewer.render import logical_size, render_page
 from ui.viewer.search import DocumentSearch
@@ -63,6 +66,7 @@ _DEFAULT_SCALE = 1.2
 _HIGHLIGHT_COLOR = QColor(255, 235, 59, 110)  # outras ocorrências da busca
 _CURRENT_MATCH_COLOR = QColor(255, 152, 0, 150)  # a ocorrência atual
 _TEXT_SELECTION_COLOR = QColor(33, 150, 243, 90)
+_FORM_FIELD_COLOR = QColor(100, 149, 237, 45)  # campos preenchíveis, como nos leitores de PDF
 _DRAWING_TOOLS = ("highlight", "underline", "strikeout", "note", "ink", "stamp")
 # Rolagem contínua: páginas a mais de N alturas de tela da área visível têm a imagem
 # descartada (voltam a ser renderizadas se o usuário rolar até elas). Antes nenhuma página
@@ -73,7 +77,9 @@ _SEARCH_SLICE_SECONDS = 0.03
 
 
 class PdfViewer(QWidget):
-    """Mostra o PDF atualmente aberto na sessão compartilhada; não edita nada."""
+    """Mostra o PDF atualmente aberto na sessão compartilhada. A única edição feita aqui é
+    preencher os campos de formulário (página única, sem ferramenta ativa): cada campo
+    preenchido vira uma versão do documento, que Ctrl+Z desfaz e "Salvar" grava."""
 
     verify_signatures_requested = Signal()
 
@@ -119,6 +125,8 @@ class PdfViewer(QWidget):
         self._selection_rects: list = []
         self._measure_drag_start_pdf: tuple[float, float] | None = None
         self._measure_preview_base: QPixmap | None = None
+        self._form_widgets: list[FormWidget] = []
+        self._field_editor: tuple[QLineEdit, FormWidget] | None = None
         self._translatable_tooltips: list[tuple[QWidget, str]] = []
         # Rolagem contínua: (página, fração da altura dela) a mostrar no topo assim que o
         # layout novo existir (depois de zoom ou troca de modo).
@@ -382,6 +390,8 @@ class PdfViewer(QWidget):
         # Uma versão nova do mesmo documento (operação, desfazer, refazer) mantém a página
         # em que o usuário estava; outro documento começa na primeira.
         keep_page = self._current_page if self.session.last_change() == "version" else 0
+        self._finish_field_edit(commit=False)
+        self._form_widgets = []
         self._geometries = {}
         self._stop_search()
         self._pending_scroll = None
@@ -420,6 +430,7 @@ class PdfViewer(QWidget):
         self.side_panel.load(path)
         self.side_panel.setVisible(self._show_thumbnails)
         self._update_notices(path)
+        self._form_widgets = self._load_form_widgets(path)
         self.content_stack.setCurrentIndex(1)
         self._rebuild_canvas()
 
@@ -492,6 +503,7 @@ class PdfViewer(QWidget):
     # -- renderização --------------------------------------------------------
 
     def _rebuild_canvas(self):
+        self._finish_field_edit()
         self._rendered_pages = set()
         self._page_labels = []
         self._page_tops = []
@@ -540,6 +552,7 @@ class PdfViewer(QWidget):
             page = self._document[index]
             pixmap = render_page(page, self._scale, self.devicePixelRatioF(), rotation=self._view_rotation)
             page.close()
+        pixmap = self._with_form_fields(pixmap, index)
         pixmap = self._with_highlight(pixmap, index)
         pixmap = self._with_pending_annotations(pixmap, index)
         pixmap = self._with_pending_redactions(pixmap, index)
@@ -564,6 +577,7 @@ class PdfViewer(QWidget):
             return
         if self._text_selection is not None and self._text_selection[0] != index:
             self._text_selection, self._selection_rects = None, []
+        self._finish_field_edit()  # o editor fica sobre a página: grava antes de trocá-la
         self._current_page = index
         pixmap = self._render_with_overlays(index)
         self._page_labels[0].setPixmap(pixmap)
@@ -1149,6 +1163,10 @@ class PdfViewer(QWidget):
             self._area_drag_start_pdf = self._widget_point_to_pdf(self._current_page, x, y)
             return
         if self._text_selection_enabled():
+            widget = self._form_widget_at(self._current_page, self._widget_point_to_pdf(self._current_page, x, y))
+            if widget is not None:
+                self._edit_form_widget(widget)
+                return
             self._clear_text_selection()
             self._selection_start_pdf = self._widget_point_to_pdf(self._current_page, x, y)
             self._selection_base = QPixmap(self._page_labels[0].pixmap())
@@ -1409,3 +1427,101 @@ class PdfViewer(QWidget):
             if left <= x <= right and bottom <= y <= top:
                 self.annotation_state.remove_pending(spec)
                 return
+
+    # -- formulários (A02) ---------------------------------------------------------
+
+    def _load_form_widgets(self, path: str) -> list[FormWidget]:
+        try:
+            return ListFormWidgets().run(path)
+        except Exception:
+            return []  # um formulário malformado não impede de ver o PDF
+
+    def _with_form_fields(self, pixmap: QPixmap, page_index: int) -> QPixmap:
+        widgets = [w for w in self._form_widgets if w.page_index == page_index and not w.read_only]
+        if self._continuous or not widgets:
+            return pixmap
+        result = QPixmap(pixmap)
+        painter = QPainter(result)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(_FORM_FIELD_COLOR)
+        for widget in widgets:
+            painter.drawRect(self._user_rect_to_screen(page_index, widget.rect))
+        painter.end()
+        return result
+
+    def _form_widget_at(self, page_index: int, pdf_point) -> FormWidget | None:
+        x, y = pdf_point
+        for widget in reversed(self._form_widgets):
+            left, bottom, right, top = widget.rect
+            if widget.page_index == page_index and not widget.read_only and left <= x <= right and bottom <= y <= top:
+                return widget
+        return None
+
+    def _edit_form_widget(self, widget: FormWidget):
+        if widget.field_type == "checkbox":
+            checked = widget.value not in ("", "/Off")
+            self._fill_form_fields({widget.name: "/Off" if checked else (widget.on_state or "/Yes")})
+        elif widget.field_type == "radio":
+            if widget.on_state and widget.value != widget.on_state:
+                self._fill_form_fields({widget.name: widget.on_state})
+        elif widget.field_type in ("dropdown", "listbox"):
+            value = self._choose_option(widget)
+            if value is not None and value != widget.value:
+                self._fill_form_fields({widget.name: value})
+        else:
+            self._open_field_editor(widget)
+
+    def _field_screen_rect(self, widget: FormWidget) -> QRectF:
+        canvas = self._page_labels[0]
+        rect = self._user_rect_to_screen(widget.page_index, widget.rect).normalized()
+        return rect.translated(canvas.pixmap_offset())
+
+    def _choose_option(self, widget: FormWidget) -> str | None:
+        menu = QMenu(self)
+        for value, text in widget.options:
+            action = menu.addAction(text)
+            action.setCheckable(True)
+            action.setChecked(value == widget.value)
+            action.setData(value)
+        canvas = self._page_labels[0]
+        chosen = menu.exec(canvas.mapToGlobal(self._field_screen_rect(widget).bottomLeft().toPoint()))
+        return None if chosen is None else chosen.data()
+
+    def _open_field_editor(self, widget: FormWidget):
+        # shortcut: campo de várias linhas é editado numa linha só; usar um QPlainTextEdit
+        # se aparecerem formulários que dependam de quebras de linha.
+        canvas = self._page_labels[0]
+        rect = self._field_screen_rect(widget)
+        editor = QLineEdit(widget.value, canvas)
+        font = editor.font()
+        font.setPixelSize(max(8, int(min(rect.height() * 0.7, 12 * self._scale))))
+        editor.setFont(font)
+        editor.setGeometry(rect.toAlignedRect())
+        self._field_editor = (editor, widget)
+        editor.editingFinished.connect(self._finish_field_edit)
+        escape = QShortcut(QKeySequence(Qt.Key.Key_Escape), editor)
+        escape.setContext(Qt.ShortcutContext.WidgetShortcut)
+        escape.activated.connect(lambda: self._finish_field_edit(commit=False))
+        editor.show()
+        editor.setFocus()
+        editor.selectAll()
+
+    def _finish_field_edit(self, commit: bool = True):
+        if self._field_editor is None:
+            return
+        (editor, widget), self._field_editor = self._field_editor, None
+        text = editor.text()
+        editor.hide()  # dispara editingFinished de novo, que já não acha editor aberto
+        editor.deleteLater()
+        if commit and text != widget.value:
+            self._fill_form_fields({widget.name: text})
+
+    def _fill_form_fields(self, values: dict[str, str]):
+        input_path = self.session.path()
+        output_path = self.session.new_version_path()
+        run_task(
+            self,
+            tr("Preencher formulário"),
+            lambda _progress: FillFormFields().run(input_path, output_path, values),
+            on_success=lambda _result: self.session.open(output_path),
+        )

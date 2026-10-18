@@ -47,7 +47,7 @@ def document_notices(path: str) -> DocumentNotices:
             Message("Assinado digitalmente ({count} assinatura(s)). Alterar o documento invalida a assinatura.", count=len(signatures))
         )
     if fillable:
-        notices.messages.append(Message("Tem formulário ({count} campo(s)).", count=len(fillable)))
+        notices.messages.append(Message("Tem formulário ({count} campo(s)): clique num campo para preencher.", count=len(fillable)))
     if "/OCProperties" in reader.trailer["/Root"]:
         notices.messages.append(Message("Tem camadas (veja a aba Camadas)."))
     return notices

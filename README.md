@@ -52,8 +52,11 @@ fica o visualizador — sempre visível, com miniaturas, marcadores e anexos ao 
 rolagem contínua ou página única, busca que destaca todas as ocorrências e seleção de texto
 com Ctrl+C. É nele que você desenha as anotações, marca as áreas de redação e posiciona o que
 as ferramentas pedem (a área de um texto novo, de um link, de um campo de formulário, do corte
-ou do selo da assinatura), arrastando sobre a página. Um aviso no topo indica quando o PDF está
-protegido, assinado, tem formulário ou camadas. Se o PDF estiver protegido por senha, o próprio
+ou do selo da assinatura), arrastando sobre a página. Formulários são preenchidos ali mesmo, no
+modo página única: os campos aparecem realçados, e um clique abre o campo de texto, marca a
+caixa ou a opção, ou mostra a lista de opções; cada campo preenchido pode ser desfeito com
+Ctrl+Z. Um aviso no topo indica quando o PDF está protegido, assinado, tem formulário ou
+camadas. Se o PDF estiver protegido por senha, o próprio
 visualizador pede a senha na hora de abrir.
 
 O documento aberto é um documento de trabalho: as ferramentas aplicam o resultado nele, cada
