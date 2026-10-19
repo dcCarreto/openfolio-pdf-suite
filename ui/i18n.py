@@ -600,17 +600,24 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "entire searchable text layer, not just the marked area. The result is checked "
         "before it is saved."
     ),
-    "Ou detecte automaticamente padrões de dado sensível no texto do PDF:": (
-        "Or automatically detect sensitive data patterns in the PDF's text:"
+    "Ou procure um texto para marcar todas as ocorrências (maiúsculas e acentos não "
+    "importam; separe vários com ;):": (
+        "Or search for a text to mark every occurrence (case and accents don't matter; separate "
+        "several with ;):"
     ),
+    "Ex.: Maria da Silva; Rua das Flores": "E.g.: John Smith; Main Street",
+    "E/ou detecte padrões de dado sensível no texto do PDF:": (
+        "And/or detect sensitive data patterns in the PDF's text:"
+    ),
+    "Texto buscado": "Searched text",
     "CPF": "CPF",
     "CNPJ": "CNPJ",
     "Telefone": "Phone",
     "Cartão de crédito": "Credit card",
     "Expressão regular personalizada (opcional)": "Custom regular expression (optional)",
-    "Detectar e marcar": "Detect and mark",
-    "Marque ao menos um padrão ou digite uma expressão regular.": (
-        "Check at least one pattern or enter a regular expression."
+    "Procurar e marcar": "Search and mark",
+    "Digite um texto a procurar, marque um padrão ou digite uma expressão regular.": (
+        "Type a text to search for, check a pattern or enter a regular expression."
     ),
     "Falha ao detectar padrões: {error}": "Failed to detect patterns: {error}",
     "{count} ocorrência(s) encontrada(s), {added} nova(s) marcada(s) para redação. "

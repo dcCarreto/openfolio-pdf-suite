@@ -24,6 +24,7 @@ from core.redaction import (
     RedactionRect,
     SanitizeDocument,
     SanitizeReport,
+    TEXT_KIND,
 )
 from ui.i18n import tr
 from ui.tasks import call, call_with_progress, run_task
@@ -37,7 +38,11 @@ _PATTERN_CHECKBOX_LABELS = [
     ("phone", "Telefone"),
     ("credit_card", "Cartão de crédito"),
 ]
-_KIND_LABELS = {**dict(_PATTERN_CHECKBOX_LABELS), CUSTOM_PATTERN_KIND: "Expressão personalizada"}
+_KIND_LABELS = {
+    **dict(_PATTERN_CHECKBOX_LABELS),
+    CUSTOM_PATTERN_KIND: "Expressão personalizada",
+    TEXT_KIND: "Texto buscado",
+}
 
 
 def describe_redaction_rect(rect: RedactionRect) -> str:
@@ -124,8 +129,18 @@ class RedactionPage(QWidget):
         )
         instructions.setWordWrap(True)
 
+        search_label = QLabel(
+            tr(
+                "Ou procure um texto para marcar todas as ocorrências (maiúsculas e acentos não "
+                "importam; separe vários com ;):"
+            )
+        )
+        search_label.setWordWrap(True)
+        self.search_text_edit = QLineEdit()
+        self.search_text_edit.setPlaceholderText(tr("Ex.: Maria da Silva; Rua das Flores"))
+
         detect_label = QLabel(
-            tr("Ou detecte automaticamente padrões de dado sensível no texto do PDF:")
+            tr("E/ou detecte padrões de dado sensível no texto do PDF:")
         )
         detect_label.setWordWrap(True)
 
@@ -137,8 +152,9 @@ class RedactionPage(QWidget):
         self.custom_pattern_edit = QLineEdit()
         self.custom_pattern_edit.setPlaceholderText(tr("Expressão regular personalizada (opcional)"))
 
-        detect_button = QPushButton(tr("Detectar e marcar"))
+        detect_button = QPushButton(tr("Procurar e marcar"))
         detect_button.clicked.connect(self._detect_patterns)
+        self.search_text_edit.returnPressed.connect(self._detect_patterns)
 
         self.pending_label = QLabel()
         self.pending_list = QListWidget()
@@ -177,6 +193,8 @@ class RedactionPage(QWidget):
         redact_button.clicked.connect(self._apply_redaction)
 
         layout.addWidget(instructions)
+        layout.addWidget(search_label)
+        layout.addWidget(self.search_text_edit)
         layout.addWidget(detect_label)
         for checkbox in self.pattern_checkboxes.values():
             layout.addWidget(checkbox)
@@ -266,16 +284,21 @@ class RedactionPage(QWidget):
 
         kinds = [kind for kind, checkbox in self.pattern_checkboxes.items() if checkbox.isChecked()]
         custom_pattern = self.custom_pattern_edit.text().strip()
-        if not kinds and not custom_pattern:
+        search_text = self.search_text_edit.text().strip()
+        if not kinds and not custom_pattern and not search_text.strip(";"):
             QMessageBox.warning(
                 self,
                 tr("Redigir"),
-                tr("Marque ao menos um padrão ou digite uma expressão regular."),
+                tr("Digite um texto a procurar, marque um padrão ou digite uma expressão regular."),
             )
             return
 
         task = call_with_progress(
-            FindSensitiveData().run, input_path, kinds=kinds, custom_pattern=custom_pattern or None
+            FindSensitiveData().run,
+            input_path,
+            kinds=kinds,
+            custom_pattern=custom_pattern or None,
+            search_text=search_text or None,
         )
 
         def done(rects):

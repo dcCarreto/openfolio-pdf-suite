@@ -112,3 +112,23 @@ def test_format_sanitize_report_lists_only_what_was_removed():
     assert "metadados do documento" in text
     assert "anotação" not in text
     assert format_sanitize_report(SanitizeReport()) == "Nada perigoso foi encontrado no documento."
+
+
+def test_searching_a_text_marks_every_occurrence_for_review(monkeypatch, tmp_path):
+    _app()
+    path_in = tmp_path / "doc.pdf"
+    _make_pdf(path_in)
+    session = DocumentSession()
+    session.open(str(path_in))
+    page = RedactionPage(session, RedactionState())
+    shown = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *args: shown.append(args[2]))
+
+    page.search_text_edit.setText("CONTEUDO")
+    page.search_text_edit.returnPressed.emit()  # Enter no campo também procura
+    assert wait_for_tasks()
+
+    assert [page.pending_list.item(i).text() for i in range(page.pending_list.count())] == [
+        "Página 1 — Texto buscado: conteudo"
+    ]
+    assert shown and "1 ocorrência(s)" in shown[0]

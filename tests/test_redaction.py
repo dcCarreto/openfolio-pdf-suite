@@ -590,3 +590,26 @@ def test_sanitize_keeps_xmp_metadata_only_when_asked(tmp_path):
     removed = tmp_path / "removed.pdf"
     SanitizeDocument().run(str(path_in), str(removed))
     assert b"Titulo XMP" not in removed.read_bytes()
+
+
+def test_find_text_ignores_case_and_accents_and_crosses_lines(tmp_path):
+    path_in = tmp_path / "doc.pdf"
+    _make_pdf_with_text(
+        path_in,
+        ["Contratante: João da Silva", "JOAO DA SILVA assina abaixo, com Maria", "Souza de testemunha"],
+    )
+
+    rects = FindSensitiveData().run(str(path_in), search_text="joao da silva; maria souza;")
+
+    assert [(rect.kind, rect.text) for rect in rects] == [
+        ("text", "João da Silva"),
+        ("text", "JOAO DA SILVA"),
+        ("text", "Maria Souza"),
+        ("text", "Maria Souza"),
+    ]
+    # O nome que quebra de linha vira uma caixa em cada linha, só sobre as palavras dele:
+    # "Maria" fica no fim da segunda linha, "Souza" no começo da terceira.
+    maria, souza = rects[2], rects[3]
+    assert maria.top - maria.bottom < 30 and souza.top - souza.bottom < 30
+    assert maria.bottom > souza.top - 5
+    assert maria.left > souza.right

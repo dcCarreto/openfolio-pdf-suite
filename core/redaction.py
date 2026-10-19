@@ -28,6 +28,7 @@ imagens, camadas ocultas continuam no content stream) — isso é papel da reda�
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 import pypdfium2 as pdfium
@@ -62,6 +63,19 @@ _PATTERNS: dict[str, re.Pattern] = {
 
 PATTERN_KINDS = tuple(_PATTERNS.keys())
 CUSTOM_PATTERN_KIND = "custom"
+TEXT_KIND = "text"  # texto comum buscado pelo usuário (A07)
+
+
+def _fold(text: str) -> str:
+    """Sem acento e sem diferença de maiúsculas, caractere por caractere: o resultado tem o
+    mesmo tamanho do original, então as posições encontradas nele valem no texto do pdfium."""
+    return "".join(unicodedata.normalize("NFD", char)[0].casefold()[0] for char in text)
+
+
+def _text_pattern(term: str) -> re.Pattern:
+    """Busca literal de `term` no texto dobrado por `_fold`; qualquer espaço do termo casa
+    com espaços ou quebra de linha (um nome pode começar numa linha e terminar na outra)."""
+    return re.compile(r"\s+".join(re.escape(_fold(word)) for word in term.split()))
 
 
 @dataclass
@@ -95,9 +109,8 @@ class FindSensitiveData(PDFOperation):
     a uma caixa em coordenadas PDF, do mesmo jeito que `ui/viewer/search.py` já faz para a
     busca de texto simples do visualizador — só que aqui a ocorrência vem de regex, não de
     string literal, então não dá pra usar a busca nativa do pdfium (que não suporta regex).
-    Uma ocorrência que atravessa quebra de linha vira uma única caixa cobrindo as duas
-    linhas: isso apenas redige uma área um pouco maior do que o necessário, nunca menor, o
-    que é o lado seguro do erro para uma ferramenta de redação.
+    Uma ocorrência que atravessa quebra de linha vira uma caixa por linha (antes era uma
+    caixa só cobrindo as linhas inteiras, o que apagava também o texto vizinho).
     """
 
     def run(
@@ -106,7 +119,10 @@ class FindSensitiveData(PDFOperation):
         kinds: list[str] | None = None,
         custom_pattern: str | None = None,
         progress: Progress | None = None,
+        search_text: str | None = None,
     ) -> list[RedactionRect]:
+        """`search_text`: um ou mais textos comuns separados por ";" (maiúsculas e acentos
+        não importam)."""
         progress = ensure_progress(progress)
         open_reader(input_path, purpose=EXTRACT)  # lê o texto: respeita a permissão de cópia
 
@@ -116,6 +132,9 @@ class FindSensitiveData(PDFOperation):
                 patterns.append((CUSTOM_PATTERN_KIND, re.compile(custom_pattern)))
             except re.error as exc:
                 raise ValueError(Message("Expressão regular inválida: {error}", error=exc)) from exc
+        for term in (search_text or "").split(";"):
+            if term.strip():
+                patterns.append((TEXT_KIND, _text_pattern(term)))
         if not patterns:
             return []
 
@@ -142,35 +161,50 @@ def _find_on_page(pdfium_doc, page_index: int, patterns, seen: set[tuple]) -> li
     textpage = page.get_textpage()
     try:
         text = textpage.get_text_range()
+        folded = _fold(text) if any(kind == TEXT_KIND for kind, _pattern in patterns) else ""
         char_count = textpage.count_chars()
         for kind, pattern in patterns:
-            for match in pattern.finditer(text):
+            for match in pattern.finditer(folded if kind == TEXT_KIND else text):
                 start, end = match.start(), min(match.end(), char_count)
                 if start >= end:
                     continue
-                bounds = _union_of_char_boxes(textpage.get_charbox(i) for i in range(start, end))
-                if bounds is None:
-                    continue
-                left, bottom, right, top = bounds
-                key = (page_index, round(left, 2), round(bottom, 2), round(right, 2), round(top, 2))
-                if key in seen:  # dois padrões casando no mesmo trecho
-                    continue
-                seen.add(key)
-                rects.append(
-                    RedactionRect(
-                        page_index,
-                        left - _DETECTION_PADDING,
-                        bottom - _DETECTION_PADDING,
-                        right + _DETECTION_PADDING,
-                        top + _DETECTION_PADDING,
-                        kind=kind,
-                        text=" ".join(match.group(0).split()),
+                for line_start, line_end in _line_spans(text, start, end):
+                    bounds = _union_of_char_boxes(textpage.get_charbox(i) for i in range(line_start, line_end))
+                    if bounds is None:
+                        continue
+                    left, bottom, right, top = bounds
+                    key = (page_index, round(left, 2), round(bottom, 2), round(right, 2), round(top, 2))
+                    if key in seen:  # dois padrões casando no mesmo trecho
+                        continue
+                    seen.add(key)
+                    rects.append(
+                        RedactionRect(
+                            page_index,
+                            left - _DETECTION_PADDING,
+                            bottom - _DETECTION_PADDING,
+                            right + _DETECTION_PADDING,
+                            top + _DETECTION_PADDING,
+                            kind=kind,
+                            text=" ".join(text[start:end].split()),
+                        )
                     )
-                )
     finally:
         textpage.close()
         page.close()
     return rects
+
+
+def _line_spans(text: str, start: int, end: int) -> list[tuple[int, int]]:
+    """O trecho [start, end) dividido nas quebras de linha que o pdfium põe no texto."""
+    spans, line_start = [], start
+    for index in range(start, end):
+        if text[index] in "\r\n":
+            if index > line_start:
+                spans.append((line_start, index))
+            line_start = index + 1
+    if end > line_start:
+        spans.append((line_start, end))
+    return spans
 
 
 def _union_of_char_boxes(boxes) -> Rect | None:
