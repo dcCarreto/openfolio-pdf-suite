@@ -68,6 +68,15 @@ def build_fill_sign_icon() -> QIcon:
     return _build(draw)
 
 
+def build_scan_cleanup_icon() -> QIcon:
+    def draw(p):
+        # página torta e a página endireitada sobre ela
+        p.drawPolygon(QPolygonF([QPointF(4, 6), QPointF(13, 3), QPointF(16, 15), QPointF(7, 18)]))
+        p.drawRect(QRectF(8, 7, 10, 13))
+
+    return _build(draw)
+
+
 def build_batch_icon() -> QIcon:
     def draw(p):
         # três páginas empilhadas
