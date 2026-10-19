@@ -1,5 +1,6 @@
 """Widget reutilizável de seleção de arquivo ou diretório."""
 
+import re
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -143,7 +144,10 @@ class FilePicker(QWidget):
         if not source:
             return ""
         source_path = Path(source)
-        extension = source_path.suffix or ".pdf"
+        # A extensão é a do que vai ser gravado (o filtro), não a da entrada: converter
+        # contrato.docx sugeria contrato_convertido.docx para um PDF.
+        match = re.search(r"\*(\.\w+)", self._file_filter)
+        extension = match.group(1) if match else source_path.suffix or ".pdf"
         base = f"{source_path.stem}_{self._suggested_suffix}"
         candidate = source_path.with_name(f"{base}{extension}")
         counter = 2

@@ -101,8 +101,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Comprimir": "Compress",
     "Reduza o tamanho de um arquivo PDF.": "Reduce the size of a PDF file.",
     "Converter": "Convert",
-    "Converta entre PDF e imagens, documentos do Office (Word/Excel/PowerPoint) e XML.": (
-        "Convert between PDF and images, Office documents (Word/Excel/PowerPoint), and XML."
+    "Converta entre PDF e imagens, Word, Excel, PowerPoint, texto, HTML, Markdown e XML.": (
+        "Convert between PDF and images, Word, Excel, PowerPoint, text, HTML, Markdown and XML."
     ),
     "Marca d'água": "Watermark",
     "Adicione um texto de marca d'água sobre as páginas de um PDF.": (
@@ -1543,4 +1543,14 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Os números são os das páginas antes da limpeza.': 'The numbers are those of the pages before the cleanup.',
     'Analisando as páginas': 'Analyzing the pages',
     'Todas as páginas parecem em branco; nada foi alterado.': 'Every page looks blank; nothing was changed.',
+    'PDF para Word (.docx)': 'PDF to Word (.docx)',
+    'PDF para Excel (.xlsx)': 'PDF to Excel (.xlsx)',
+    'PDF para texto com layout (.txt)': 'PDF to text with layout (.txt)',
+    'HTML, Markdown ou texto para PDF': 'HTML, Markdown or text to PDF',
+    'HTML, Markdown ou texto': 'HTML, Markdown or text',
+    'Arquivo HTML, Markdown ou texto de entrada:': 'Input HTML, Markdown or text file:',
+    'Vai só o texto das páginas: imagens e formatação ficam de fora, e página escaneada precisa de OCR antes.': 'Only the text of the pages goes: images and formatting are left out, and a scanned page needs OCR first.',
+    'Títulos, listas, tabelas, links e imagens locais são mantidos; estilos CSS avançados, scripts e imagens da internet, não.': 'Headings, lists, tables, links and local images are kept; advanced CSS styles, scripts and images from the internet are not.',
+    'Arquivo gerado: {path}': 'File created: {path}',
+    'Páginas sem texto (escaneadas? faça o OCR antes): {pages}': 'Pages without text (scanned? run OCR first): {pages}',
 }

@@ -67,7 +67,7 @@ _SECTIONS = [
     ("build_compress_icon", "Comprimir", "Reduza o tamanho de um arquivo PDF.",
      "ui.pages.compress_page", "CompressPage"),
     ("build_convert_icon", "Converter",
-     "Converta entre PDF e imagens, documentos do Office (Word/Excel/PowerPoint) e XML.",
+     "Converta entre PDF e imagens, Word, Excel, PowerPoint, texto, HTML, Markdown e XML.",
      "ui.pages.convert_page", "ConvertPage"),
     ("build_watermark_icon", "Marca d'água", "Adicione um texto de marca d'água sobre as páginas de um PDF.",
      "ui.pages.watermark_page", "WatermarkPage"),
