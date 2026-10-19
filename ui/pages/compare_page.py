@@ -1,4 +1,7 @@
-"""Aba de comparação: diff de texto e diff visual entre duas versões de um PDF."""
+"""Aba de comparação: diff de texto, diff visual e comparação lado a lado entre duas versões
+de um PDF."""
+
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QComboBox,
@@ -11,25 +14,30 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.compare import CompareText, CompareVisual
+from core.compare import CompareDocuments, CompareText, CompareVisual
 from ui.i18n import tr
 from ui.tasks import call_with_progress, run_task
+from ui.viewer.compare_view import CompareWindow
+from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
 
 class ComparePage(QWidget):
-    """Permite comparar duas versões de um PDF: diff de texto por página, ou diff visual
-    (imagem por página destacando as áreas que mudaram)."""
+    """Permite comparar duas versões de um PDF: lado a lado, com as diferenças de texto
+    destacadas; diff de texto por página; ou diff visual (imagem por página destacando as
+    áreas que mudaram)."""
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
         self.session = session
+        self.compare_window: CompareWindow | None = None
 
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems([tr("Comparar texto"), tr("Comparar visualmente")])
+        self.mode_combo.addItems([tr("Comparar lado a lado"), tr("Comparar texto"), tr("Comparar visualmente")])
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
 
         self.stack = QStackedWidget()
+        self.stack.addWidget(self._build_side_by_side_panel())
         self.stack.addWidget(self._build_text_panel())
         self.stack.addWidget(self._build_visual_panel())
 
@@ -37,6 +45,32 @@ class ComparePage(QWidget):
         layout.addWidget(QLabel(tr("Modo:")))
         layout.addWidget(self.mode_combo)
         layout.addWidget(self.stack)
+
+    def _build_side_by_side_panel(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        hint = QLabel(
+            tr(
+                "Mostra as duas versões lado a lado, com as diferenças de texto destacadas e a "
+                "rolagem sincronizada. O texto comparado é o do documento inteiro: o que só "
+                "passou para outra página não conta como diferença."
+            )
+        )
+        hint.setWordWrap(True)
+        self.side_b_picker = FilePicker(mode="open", file_filter="PDF (*.pdf)")
+        compare_button = QPushButton(tr("Comparar lado a lado"))
+        compare_button.clicked.connect(self._compare_side_by_side)
+
+        layout.addWidget(hint)
+        layout.addWidget(QLabel(tr("A: documento aberto")))
+        layout.addWidget(DocumentSourceBar(self.session))
+        layout.addWidget(QLabel(tr("B: comparar com")))
+        layout.addWidget(self.side_b_picker)
+        layout.addWidget(compare_button)
+        layout.addStretch()
+        return widget
 
     def _build_text_panel(self) -> QWidget:
         widget = QWidget()
@@ -81,6 +115,37 @@ class ComparePage(QWidget):
 
     def _on_mode_changed(self, index: int):
         self.stack.setCurrentIndex(index)
+
+    def _compare_side_by_side(self):
+        path_a = self.session.path()
+        path_b = self.side_b_picker.path()
+        if not path_a or not path_b:
+            QMessageBox.warning(self, tr("Comparar"), tr("Abra o documento A e escolha o PDF B a comparar."))
+            return
+
+        source = self.session.source_path() or path_a
+        title_a = Path(source).name + (" *" if self.session.is_modified() else "")
+
+        def done(diff):
+            if self.compare_window is not None:
+                self.compare_window.close()
+            window = CompareWindow(title_a, path_a, Path(path_b).name, path_b, diff, parent=self)
+            # A janela anterior só é destruída depois: não pode esquecer a nova.
+            window.destroyed.connect(lambda: self._forget_compare_window(window))
+            self.compare_window = window
+            window.show()
+
+        run_task(
+            self,
+            tr("Comparar"),
+            call_with_progress(CompareDocuments().run, path_a, path_b),
+            on_success=done,
+            error_message=tr("Falha ao comparar: {error}"),
+        )
+
+    def _forget_compare_window(self, window):
+        if self.compare_window is window:
+            self.compare_window = None
 
     def _compare_text(self):
         path_a = self.text_a_picker.path()

@@ -166,8 +166,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "Check a subset of PDF/UA and fix the document's language/title."
     ),
     "Comparar": "Compare",
-    "Compare duas versões de um PDF: diff de texto por página ou diff visual.": (
-        "Compare two versions of a PDF: per-page text diff or visual diff."
+    "Compare duas versões de um PDF: lado a lado com as diferenças destacadas, diff de texto por página ou diff visual.": (
+        "Compare two versions of a PDF: side by side with the differences highlighted, per-page text diff or visual diff."
     ),
     # Menu bar / about dialog
     "Arquivo": "File",
@@ -1553,4 +1553,25 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Títulos, listas, tabelas, links e imagens locais são mantidos; estilos CSS avançados, scripts e imagens da internet, não.': 'Headings, lists, tables, links and local images are kept; advanced CSS styles, scripts and images from the internet are not.',
     'Arquivo gerado: {path}': 'File created: {path}',
     'Páginas sem texto (escaneadas? faça o OCR antes): {pages}': 'Pages without text (scanned? run OCR first): {pages}',
+    'Comparar lado a lado': 'Compare side by side',
+    'Mostra as duas versões lado a lado, com as diferenças de texto destacadas e a rolagem sincronizada. O texto comparado é o do documento inteiro: o que só passou para outra página não conta como diferença.': 'Shows both versions side by side, with the text differences highlighted and synchronized scrolling. The text of the whole document is compared: text that only moved to another page does not count as a difference.',
+    'A: documento aberto': 'A: open document',
+    'B: comparar com': 'B: compare with',
+    'Abra o documento A e escolha o PDF B a comparar.': 'Open document A and choose the PDF B to compare.',
+    'Lendo o texto': 'Reading the text',
+    'Comparando o texto': 'Comparing the text',
+    'removido “{a}”': 'removed “{a}”',
+    'incluído “{b}”': 'added “{b}”',
+    '“{a}” → “{b}”': '“{a}” → “{b}”',
+    'Pág. {pages}: {change}': 'P. {pages}: {change}',
+    'Comparação lado a lado — {a} × {b}': 'Side-by-side comparison — {a} × {b}',
+    'Diferença anterior (Shift+F3)': 'Previous difference (Shift+F3)',
+    'Próxima diferença (F3)': 'Next difference (F3)',
+    'Removido de A': 'Removed from A',
+    'Incluído em B': 'Added in B',
+    'Alterado': 'Changed',
+    '{count} diferença(s) no texto.': '{count} difference(s) in the text.',
+    'Nenhuma diferença no texto.': 'No differences in the text.',
+    'Páginas de {side} sem texto (escaneadas? faça o OCR antes): {pages}': 'Pages of {side} without text (scanned? run OCR first): {pages}',
+    'Imagens, formatação e cabeçalhos/rodapés repetidos em todas as páginas não entram na comparação; para eles, use "Comparar visualmente".': 'Images, formatting and headers/footers repeated on every page are not compared; for them, use "Compare visually".',
 }

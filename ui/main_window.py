@@ -124,7 +124,7 @@ _SECTIONS = [
      "Verifique um subconjunto de PDF/UA e corrija idioma/título do documento.",
      "ui.pages.accessibility_page", "AccessibilityPage"),
     ("build_compare_icon", "Comparar",
-     "Compare duas versões de um PDF: diff de texto por página ou diff visual.",
+     "Compare duas versões de um PDF: lado a lado com as diferenças destacadas, diff de texto por página ou diff visual.",
      "ui.pages.compare_page", "ComparePage"),
     ("build_batch_icon", "Processar em lote",
      "Aplique a mesma operação (comprimir, OCR, marca d'água, numerar, proteger, PDF/A) a todos os PDFs de uma pasta.",
