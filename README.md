@@ -124,7 +124,7 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | 🗂️ Camadas | Lista as camadas (Optional Content Groups) de um PDF, inclusive as desligadas por padrão, e alterna a visibilidade padrão de cada uma |
 | 📎 Anexos | Lista, adiciona, remove ou extrai os anexos embutidos de um PDF (a extração nunca grava fora da pasta escolhida, mesmo que o nome do anexo tente) |
 | 🧾 Campos de formulário | Adiciona campos de formulário **interativos** (texto, data, caixa de seleção, lista suspensa, lista de seleção ou grupo de opções) — o PDF resultante é preenchível em qualquer leitor. Também lista campos já existentes, exporta/importa dados preenchidos (CSV, Excel ou FDF) e achata o formulário (Fill & Sign simplificado) |
-| 🖍️ Anotações | Realce, sublinhe, risque, adicione notas, desenhe à mão livre ou carimbe direto sobre a página, no próprio visualizador — com uma biblioteca de carimbos customizados (nome, texto e cor) salva localmente. Cada anotação leva autor e data. Também exporta os comentários já existentes no PDF para CSV ou Excel |
+| 🖍️ Anotações | Realce, sublinhe, risque, adicione notas, desenhe à mão livre ou carimbe direto sobre a página, no próprio visualizador — com uma biblioteca de carimbos customizados (nome, texto e cor) salva localmente. Cada anotação leva autor e data. Lista os comentários já existentes no PDF (escolher um mostra onde ele está), edita texto e autor e remove com popups e respostas; exporta para CSV, Excel ou XFDF e importa XFDF de outros leitores, sem duplicar ao reimportar |
 | 📏 Medição | Mede a distância entre dois pontos de um PDF, arrastando no visualizador central (mm, cm, polegadas ou pontos PDF) |
 | 🔍 OCR | Reconhece o texto de páginas escaneadas (via Tesseract) e gera um PDF pesquisável, com o texto invisível ajustado à largura de cada palavra reconhecida (inclusive em páginas giradas). Aceita vários idiomas ao mesmo tempo, DPI configurável, corrige páginas digitalizadas de lado e também reconhece escaneados que têm um carimbo de texto |
 | 🧹 Limpar escaneados | Remove páginas em branco, endireita páginas tortas (até 5°, girando o conteúdo sem perder qualidade) e corta as margens brancas do documento aberto, numa versão nova que Ctrl+Z desfaz; ao final, diz quais páginas mudaram |
@@ -328,6 +328,7 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
   pdfa.py          Conversão e verificação de PDF/A (perfil de cor em data/icc)
   rasterize.py     Achatamento de página em imagem, com áreas pintadas nos próprios pixels
   annotations.py   Anotações reais (Highlight/Underline/StrikeOut/Ink/Stamp) via pypdf
+  xfdf.py          Exportação e importação de comentários em XFDF
   ocr.py           Reconhecimento de texto (Tesseract) com camada de texto invisível
   redaction.py     Redação real (rasterização + verificação) e sanitização de PDFs
   signature.py     Assinatura digital (pyhanko) e verificação completa das assinaturas

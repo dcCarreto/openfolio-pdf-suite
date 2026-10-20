@@ -160,6 +160,7 @@ class PdfViewer(QWidget):
         session.path_changed.connect(self._reload)
         annotation_state.tool_changed.connect(self._on_markup_state_changed)
         annotation_state.pending_changed.connect(self._refresh_current_render)
+        annotation_state.selection_changed.connect(self._on_comment_selection_changed)
         redaction_state.active_changed.connect(self._on_markup_state_changed)
         redaction_state.pending_changed.connect(self._refresh_current_render)
         redaction_state.selection_changed.connect(self._on_redaction_selection_changed)
@@ -642,7 +643,10 @@ class PdfViewer(QWidget):
 
     def _with_pending_annotations(self, pixmap: QPixmap, page_index: int) -> QPixmap:
         specs = [s for s in self.annotation_state.pending() if s.page_index == page_index]
-        if not specs:
+        comment = self.annotation_state.selected_comment()
+        if comment is not None and (comment[0] != page_index or not self.annotation_state.is_page_active()):
+            comment = None
+        if not specs and comment is None:
             return pixmap
 
         result = QPixmap(pixmap)
@@ -650,6 +654,10 @@ class PdfViewer(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         for spec in specs:
             self._paint_pending_spec(painter, page_index, spec)
+        if comment is not None:
+            painter.setPen(QPen(QColor("#ff5252"), 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(self._user_rect_to_screen(page_index, comment[1]).adjusted(-3, -3, 3, 3))
         painter.end()
         return result
 
@@ -1160,14 +1168,22 @@ class PdfViewer(QWidget):
     def _on_redaction_selection_changed(self):
         """Mostra a página da área de redação escolhida na lista do painel."""
         selected = self.redaction_state.selected()
-        if self._document is None or selected is None or not (0 <= selected.page_index < self._page_count()):
+        self._show_selection_page(selected.page_index if selected is not None else None)
+
+    def _on_comment_selection_changed(self):
+        """Mostra a página do comentário escolhido na lista da aba Anotações."""
+        selected = self.annotation_state.selected_comment()
+        self._show_selection_page(selected[0] if selected is not None else None)
+
+    def _show_selection_page(self, page_index: int | None):
+        if self._document is None or page_index is None or not (0 <= page_index < self._page_count()):
             self._refresh_current_render()
             return
         if self._continuous:
-            self._scroll_to_page(selected.page_index)
+            self._scroll_to_page(page_index)
             self._refresh_current_render()
-        elif selected.page_index != self._current_page:
-            self._show_single_page(selected.page_index)
+        elif page_index != self._current_page:
+            self._show_single_page(page_index)
         else:
             self._refresh_current_render()
 

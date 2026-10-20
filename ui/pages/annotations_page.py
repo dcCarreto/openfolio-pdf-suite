@@ -1,22 +1,39 @@
-"""Aba de anotações e marcação: realce, sublinhado, riscado, notas, caneta e carimbo."""
+"""Aba de anotações e marcação: realce, sublinhado, riscado, notas, caneta e carimbo,
+e os comentários já gravados no documento (editar, remover, XFDF)."""
 
+import re
+
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QButtonGroup,
     QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
-from core.annotations import AddAnnotations, ExportAnnotationsCSV
+from core.annotations import (
+    AddAnnotations,
+    AnnotationInfo,
+    ExportAnnotationsCSV,
+    ListAnnotations,
+    RemoveAnnotations,
+    UpdateAnnotation,
+)
+from core.xfdf import ExportAnnotationsXFDF, ImportAnnotationsXFDF
 from ui.annotation_state import AnnotationState, DEFAULT_COLOR
 from ui.document_session import DocumentSession
 from ui.errors import show_error
 from ui.i18n import tr
+from ui.preferences import remember_folder_of, start_folder
 from ui.tasks import call, run_task
 from ui.stamp_library import StampLibrary
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -41,6 +58,48 @@ _COLORS = [
 ]
 
 _STAMP_TEXTS = ["APROVADO", "CONFIDENCIAL", "RASCUNHO", "REVISADO", "URGENTE"]
+
+_KIND_LABELS = {
+    "Text": "Nota",
+    "Highlight": "Realce",
+    "Underline": "Sublinhado",
+    "StrikeOut": "Riscado",
+    "Squiggly": "Ondulado",
+    "Ink": "Caneta",
+    "FreeText": "Texto livre",
+    "Stamp": "Carimbo",
+    "Square": "Retângulo",
+    "Circle": "Círculo",
+    "Line": "Linha",
+    "Polygon": "Polígono",
+    "PolyLine": "Polilinha",
+    "Caret": "Inserção",
+    "FileAttachment": "Anexo",
+}
+
+# O texto desses faz parte do desenho (/AP): trocar /Contents não mudaria o que aparece.
+_DRAWN_TEXT_KINDS = {"FreeText", "Stamp"}
+
+
+def format_pdf_date(value: str) -> str:
+    """"D:20261019143000-03'00'" -> "19/10/2026 14:30" (vazio se não for uma data do PDF)."""
+    match = re.match(r"D:(\d{4})(\d{2})(\d{2})(\d{2})?(\d{2})?", value or "")
+    if not match:
+        return ""
+    year, month, day, hour, minute = match.groups()
+    text = f"{day}/{month}/{year}"
+    return f"{text} {hour}:{minute or '00'}" if hour else text
+
+
+def describe_comment(comment: AnnotationInfo) -> str:
+    parts = [
+        f"{tr('Página')} {comment.page_index + 1}",
+        tr(_KIND_LABELS.get(comment.kind, comment.kind)),
+    ]
+    parts += [value for value in (comment.author, format_pdf_date(comment.date)) if value]
+    text = " · ".join(parts)
+    first_line = comment.content.strip().splitlines()[0] if comment.content.strip() else ""
+    return f"{text}\n{first_line[:80]}" if first_line else text
 
 
 class AnnotationsPage(QWidget):
@@ -131,8 +190,26 @@ class AnnotationsPage(QWidget):
         save_button = QPushButton(tr("Salvar anotações"))
         save_button.clicked.connect(self._save)
 
-        self.export_csv_picker = FilePicker(mode="save", file_filter="CSV (*.csv);;Excel (*.xlsx)")
-        export_csv_button = QPushButton(tr("Exportar comentários (CSV ou Excel)"))
+        self._comments: list[AnnotationInfo] = []
+        self.comments_list = QListWidget()
+        self.comments_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.comments_list.itemSelectionChanged.connect(self._on_comment_selected)
+        self.comment_text_edit = QPlainTextEdit()
+        self.comment_text_edit.setMaximumHeight(90)
+        self.comment_author_edit = QLineEdit()
+        self.comment_author_edit.setPlaceholderText(tr("Autor"))
+        self.update_comment_button = QPushButton(tr("Salvar alteração do comentário"))
+        self.update_comment_button.clicked.connect(self._update_comment)
+        self.remove_comments_button = QPushButton(tr("Remover comentários selecionados"))
+        self.remove_comments_button.clicked.connect(self._remove_comments)
+        import_xfdf_button = QPushButton(tr("Importar comentários (XFDF)..."))
+        import_xfdf_button.clicked.connect(self._import_xfdf)
+        session.path_changed.connect(self._load_comments)
+
+        self.export_csv_picker = FilePicker(
+            mode="save", file_filter="CSV (*.csv);;Excel (*.xlsx);;XFDF (*.xfdf)"
+        )
+        export_csv_button = QPushButton(tr("Exportar comentários (CSV, Excel ou XFDF)"))
         export_csv_button.clicked.connect(self._export_csv)
 
         layout = QVBoxLayout(self)
@@ -152,9 +229,132 @@ class AnnotationsPage(QWidget):
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
         layout.addWidget(save_button)
-        layout.addWidget(QLabel(tr("Exportar comentários existentes para CSV:")))
+        layout.addWidget(QLabel(tr("Comentários do documento:")))
+        layout.addWidget(self.comments_list)
+        layout.addWidget(self.comment_text_edit)
+        layout.addWidget(self.comment_author_edit)
+        layout.addWidget(self.update_comment_button)
+        layout.addWidget(self.remove_comments_button)
+        layout.addWidget(import_xfdf_button)
+        layout.addWidget(QLabel(tr("Exportar comentários existentes:")))
         layout.addWidget(self.export_csv_picker)
         layout.addWidget(export_csv_button)
+
+        self._load_comments()
+
+    # ---- Comentários já gravados ----------------------------------------------------
+
+    def _load_comments(self):
+        """Relê a lista a cada versão do documento: as posições em /Annots que ela guarda
+        só valem para o arquivo de onde foram lidas."""
+        selected = {(c.page_index, c.index) for c in self._selected_comments()}
+        input_path = self.session.path()
+        try:
+            self._comments = ListAnnotations().run(input_path) if input_path else []
+        except Exception:
+            self._comments = []  # PDF protegido ou ilegível: as outras ferramentas avisam
+        self.comments_list.blockSignals(True)
+        self.comments_list.clear()
+        for comment in self._comments:
+            self.comments_list.addItem(describe_comment(comment))
+            if (comment.page_index, comment.index) in selected:
+                self.comments_list.item(self.comments_list.count() - 1).setSelected(True)
+        if not self._comments:
+            self.comments_list.addItem(tr("Nenhum comentário no documento."))
+            self.comments_list.item(0).setFlags(self.comments_list.item(0).flags() & ~Qt.ItemFlag.ItemIsSelectable)
+        self.comments_list.blockSignals(False)
+        self._on_comment_selected()
+
+    def _selected_comments(self) -> list[AnnotationInfo]:
+        rows = sorted(self.comments_list.row(item) for item in self.comments_list.selectedItems())
+        return [self._comments[row] for row in rows if row < len(self._comments)]
+
+    def _on_comment_selected(self):
+        selected = self._selected_comments()
+        single = selected[0] if len(selected) == 1 else None
+        self.comment_text_edit.setPlainText(single.content if single else "")
+        self.comment_author_edit.setText(single.author if single else "")
+        drawn = single is not None and single.kind in _DRAWN_TEXT_KINDS
+        self.comment_text_edit.setReadOnly(single is None or drawn)
+        self.comment_text_edit.setToolTip(
+            tr("O texto deste comentário faz parte do desenho: remova-o e crie outro.") if drawn else ""
+        )
+        self.comment_author_edit.setEnabled(single is not None)
+        self.update_comment_button.setEnabled(single is not None)
+        self.remove_comments_button.setEnabled(bool(selected))
+        self.annotation_state.set_selected_comment(
+            (single.page_index, single.rect) if single is not None and single.rect else None
+        )
+
+    def _apply_to_document(self, title: str, operation, message):
+        """Roda `operation(entrada, saída)` numa versão nova do documento de trabalho
+        (Ctrl+Z desfaz) e mostra `message(resultado)`."""
+        input_path = self.session.path()
+        if not input_path:
+            QMessageBox.warning(self, title, tr("Abra um PDF para começar."))
+            return
+        output_path = self.session.new_version_path()
+
+        def done(result):
+            self.session.open(output_path)
+            text = message(result)
+            if text:
+                QMessageBox.information(self, title, text)
+
+        run_task(self, title, call(operation, input_path, output_path), on_success=done)
+
+    def _update_comment(self):
+        selected = self._selected_comments()
+        if len(selected) != 1:
+            return
+        comment = selected[0]
+        content = comment.content if comment.kind in _DRAWN_TEXT_KINDS else self.comment_text_edit.toPlainText()
+        author = self.comment_author_edit.text().strip()
+        self._apply_to_document(
+            tr("Editar comentário"),
+            lambda source, output: UpdateAnnotation().run(
+                source, output, comment.page_index, comment.index, content, author
+            ),
+            message=lambda _result: "",
+        )
+
+    def _remove_comments(self):
+        items = [(c.page_index, c.index) for c in self._selected_comments()]
+        if not items:
+            return
+        self._apply_to_document(
+            tr("Remover comentários"),
+            lambda source, output: RemoveAnnotations().run(source, output, items),
+            message=lambda count: tr("{count} anotação(ões) removida(s), com popups e respostas.").format(
+                count=count
+            ),
+        )
+
+    def _import_xfdf(self):
+        if not self.session.path():
+            QMessageBox.warning(self, tr("Anotações"), tr("Abra um PDF para começar."))
+            return
+        xfdf_path, _ = QFileDialog.getOpenFileName(
+            self, tr("Importar comentários (XFDF)"), start_folder(), "XFDF (*.xfdf);;XML (*.xml)"
+        )
+        if not xfdf_path:
+            return
+        remember_folder_of(xfdf_path)
+
+        def message(result):
+            imported, skipped = result
+            text = tr("{count} comentário(s) importado(s).").format(count=imported)
+            if skipped:
+                text += " " + tr(
+                    "{count} ignorado(s): tipo não suportado, página que não existe ou dados inválidos."
+                ).format(count=skipped)
+            return text
+
+        self._apply_to_document(
+            tr("Importar comentários (XFDF)"),
+            lambda source, output: ImportAnnotationsXFDF().run(source, xfdf_path, output),
+            message=message,
+        )
 
     def _reload_stamp_combo(self, select_name: str | None = None):
         self.stamp_combo.blockSignals(True)
@@ -286,14 +486,19 @@ class AnnotationsPage(QWidget):
             QMessageBox.warning(self, tr("Anotações"), tr("Escolha o arquivo de saída."))
             return
 
-        task = call(ExportAnnotationsCSV().run, input_path, output_path)
+        if output_path.lower().endswith(".xfdf"):
+            task = call(ExportAnnotationsXFDF().run, input_path, output_path)
+        else:
+            task = call(lambda *paths: (ExportAnnotationsCSV().run(*paths), 0), input_path, output_path)
 
-        def done(count):
-            QMessageBox.information(
-                self,
-                tr("Anotações"),
-                tr("{count} comentário(s) exportado(s) com sucesso.").format(count=count),
-            )
+        def done(result):
+            count, skipped = result
+            text = tr("{count} comentário(s) exportado(s) com sucesso.").format(count=count)
+            if skipped:
+                text += " " + tr("{count} de tipo que o XFDF daqui não leva (anexo, som...) ficou de fora.").format(
+                    count=skipped
+                )
+            QMessageBox.information(self, tr("Anotações"), text)
 
         run_task(
             self,

@@ -101,7 +101,8 @@ _SECTIONS = [
      "preenchidos ou achate o formulário.",
      "ui.pages.form_fields_page", "FormFieldsPage"),
     ("build_annotations_icon", "Anotações",
-     "Realce, sublinhe, risque, adicione notas, desenhe ou carimbe sobre um PDF.",
+     "Realce, sublinhe, risque, adicione notas, desenhe ou carimbe sobre um PDF; edite, remova e "
+     "troque comentários por XFDF.",
      "ui.pages.annotations_page", "AnnotationsPage"),
     ("build_measure_icon", "Medição",
      "Meça a distância entre dois pontos de um PDF, arrastando no visualizador central.",

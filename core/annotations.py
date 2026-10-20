@@ -10,6 +10,7 @@ stream (Form XObject) construída à mão.
 import datetime
 import getpass
 import io
+import uuid
 from dataclasses import dataclass, field
 
 from pypdf import PdfReader, PdfWriter
@@ -28,6 +29,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 
 from .base import READ, PDFOperation, add_object, open_reader, require_valid_page_index, write_pdf
 from .fonts import SANS_BOLD, register_fonts, text_width
+from .messages import Message
 from .tabular import write_table
 
 _NOTE_SIZE = 24
@@ -161,14 +163,18 @@ def _make_appearance_stream(writer: PdfWriter, rect, content: bytes | str, resou
     return add_object(writer, stream)
 
 
-def _ink_appearance_content(points: list[tuple[float, float]], color: str) -> str:
+def _ink_appearance_content(
+    strokes: list[list[tuple[float, float]]], color: str, width: float = _INK_STROKE_WIDTH, closed: bool = False
+) -> str:
+    """Traços (caneta, linha, polígono) da aparência; `closed` fecha cada traço."""
     r, g, b = _hex_to_rgb01(color)
-    lines = [f"{_INK_STROKE_WIDTH:.2f} w", "1 J", "1 j", f"{r:.3f} {g:.3f} {b:.3f} RG"]
-    x0, y0 = points[0]
-    lines.append(f"{x0:.2f} {y0:.2f} m")
-    for x, y in points[1:]:
-        lines.append(f"{x:.2f} {y:.2f} l")
-    lines.append("S")
+    lines = [f"{width:.2f} w", "1 J", "1 j", f"{r:.3f} {g:.3f} {b:.3f} RG"]
+    for points in strokes:
+        x0, y0 = points[0]
+        lines.append(f"{x0:.2f} {y0:.2f} m")
+        for x, y in points[1:]:
+            lines.append(f"{x:.2f} {y:.2f} l")
+        lines.append("s" if closed else "S")
     return "\n".join(lines) + "\n"
 
 
@@ -184,16 +190,25 @@ def _stamp_appearance(writer: PdfWriter, width: float, height: float, text: str,
     if natural > available > 0:
         size = max(6.0, size * available / natural)
 
+    def draw(canvas):
+        canvas.setFillColorRGB(1, 1, 1)
+        canvas.rect(0, 0, width, height, stroke=0, fill=1)
+        canvas.setStrokeColorRGB(r, g, b)
+        canvas.setLineWidth(2)
+        canvas.rect(1, 1, width - 2, height - 2, stroke=1, fill=0)
+        canvas.setFillColorRGB(r, g, b)
+        canvas.setFont(SANS_BOLD, size)
+        canvas.drawString(8, height / 2 - size / 3, text)
+
+    return canvas_appearance(writer, width, height, draw)
+
+
+def canvas_appearance(writer: PdfWriter, width: float, height: float, draw):
+    """Conteúdo e recursos de uma aparência `width` x `height` desenhada pelo reportlab
+    com `draw(canvas)`, prontos para `_make_appearance_stream`."""
     buffer = io.BytesIO()
     canvas = rl_canvas.Canvas(buffer, pagesize=(width, height))
-    canvas.setFillColorRGB(1, 1, 1)
-    canvas.rect(0, 0, width, height, stroke=0, fill=1)
-    canvas.setStrokeColorRGB(r, g, b)
-    canvas.setLineWidth(2)
-    canvas.rect(1, 1, width - 2, height - 2, stroke=1, fill=0)
-    canvas.setFillColorRGB(r, g, b)
-    canvas.setFont(SANS_BOLD, size)
-    canvas.drawString(8, height / 2 - size / 3, text)
+    draw(canvas)
     canvas.showPage()
     canvas.save()
     buffer.seek(0)
@@ -248,7 +263,7 @@ def _build_annotation(writer: PdfWriter, spec: AnnotationSpec):
             }
         )
         appearance_ref = _make_appearance_stream(
-            writer, rect, _ink_appearance_content(spec.points, spec.color)
+            writer, rect, _ink_appearance_content([spec.points], spec.color)
         )
         annotation[NameObject("/AP")] = DictionaryObject({NameObject("/N"): appearance_ref})
         return annotation
@@ -279,6 +294,10 @@ def _build_annotation(writer: PdfWriter, spec: AnnotationSpec):
         )
         if rotation:
             annotation[NameObject("/Rotate")] = NumberObject(rotation)
+        # A borda de 2 pt da aparência; sem /BS, quem refaz a aparência (ou o XFDF) usa 1 pt.
+        annotation[NameObject("/BS")] = DictionaryObject(
+            {NameObject("/W"): FloatObject(2), NameObject("/S"): NameObject("/S")}
+        )
         annotation[NameObject("/AP")] = DictionaryObject({NameObject("/N"): appearance_ref})
         return annotation
     raise ValueError(f"Tipo de anotação desconhecido: {spec.kind}")
@@ -304,6 +323,8 @@ class AddAnnotations(PDFOperation):
                 annotation[NameObject("/T")] = TextStringObject(author)
             annotation[NameObject("/M")] = TextStringObject(now)
             annotation[NameObject("/CreationDate")] = TextStringObject(now)
+            # Nome único: o XFDF identifica a anotação por ele (reimportar atualiza, não duplica).
+            annotation[NameObject("/NM")] = TextStringObject(str(uuid.uuid4()))
             writer.add_annotation(page_number=spec.page_index, annotation=annotation)
         write_pdf(writer, output_path)
 
@@ -317,9 +338,117 @@ class AnnotationInfo:
     author: str
     content: str
     color: str
+    index: int = 0  # posição em /Annots da página: identifica a anotação para editar/remover
+    rect: tuple[float, float, float, float] | None = None
+    date: str = ""  # /M, como está no PDF ("D:20261019143000-03'00'")
 
 
 _NON_COMMENT_SUBTYPES = {"/Link", "/Widget", "/Popup"}
+
+
+def comment_annotations(page):
+    """(posição em /Annots, anotação) de cada comentário da página: links, widgets de
+    formulário e popups ficam de fora (não são comentários de revisão)."""
+    for index, annotation_ref in enumerate(page.get("/Annots", None) or []):
+        annotation = annotation_ref.get_object()
+        if str(annotation.get("/Subtype", "")) not in _NON_COMMENT_SUBTYPES:
+            yield index, annotation
+
+
+def _object_key(value):
+    """Identidade de um objeto do PDF, seja a referência indireta ou o próprio objeto."""
+    if hasattr(value, "idnum"):
+        return (value.idnum, value.generation)
+    reference = getattr(value, "indirect_reference", None)
+    return (reference.idnum, reference.generation) if reference is not None else id(value)
+
+
+def remove_page_annotations(page, indexes: set[int]) -> int:
+    """Tira de /Annots as anotações nessas posições, com o popup delas e as respostas (/IRT)
+    a elas, como o Acrobat faz ao apagar um comentário. Devolve quantas saíram."""
+    annots = page.get("/Annots", None)
+    if not annots or not indexes:
+        return 0
+    annots = annots.get_object()
+    removed = {_object_key(annots[i]) for i in indexes}
+    changed = True
+    while changed:  # respostas a respostas
+        changed = False
+        for entry in annots:
+            key = _object_key(entry)
+            annotation = entry.get_object()
+            linked = annotation.get("/IRT") if "/IRT" in annotation else annotation.get("/Parent")
+            if key not in removed and linked is not None and _object_key(linked) in removed:
+                removed.add(key)
+                changed = True
+    kept = [entry for entry in annots if _object_key(entry) not in removed]
+    page[NameObject("/Annots")] = ArrayObject(kept)
+    return len(annots) - len(kept)
+
+
+def _comment_at(writer: PdfWriter, page_index: int, index: int):
+    require_valid_page_index(len(writer.pages), page_index)
+    for position, annotation in comment_annotations(writer.pages[page_index]):
+        if position == index:
+            return annotation
+    raise ValueError(Message("A anotação escolhida não existe mais no documento."))
+
+
+class ListAnnotations(PDFOperation):
+    """Os comentários já existentes no PDF, página a página, na ordem de /Annots."""
+
+    def run(self, input_path: str) -> list[AnnotationInfo]:
+        reader = open_reader(input_path, purpose=READ)
+        result = []
+        for page_index, page in enumerate(reader.pages):
+            for index, annotation in comment_annotations(page):
+                rect = annotation.get("/Rect")
+                result.append(
+                    AnnotationInfo(
+                        page_index=page_index,
+                        kind=str(annotation.get("/Subtype", "")).lstrip("/"),
+                        author=str(annotation.get("/T", "") or ""),
+                        content=str(annotation.get("/Contents", "") or ""),
+                        color=_describe_annotation_color(annotation.get("/C")),
+                        index=index,
+                        rect=tuple(float(v) for v in rect) if rect and len(rect) == 4 else None,
+                        date=str(annotation.get("/M", "") or ""),
+                    )
+                )
+        return result
+
+
+class UpdateAnnotation(PDFOperation):
+    """Troca o texto e o autor de um comentário existente e atualiza a data de alteração.
+    O texto formatado (/RC) sai junto: o Acrobat o mostra no lugar de /Contents, e ele
+    continuaria com o texto antigo."""
+
+    def run(self, input_path: str, output_path: str, page_index: int, index: int, content: str, author: str) -> None:
+        writer = PdfWriter(clone_from=open_reader(input_path))
+        annotation = _comment_at(writer, page_index, index)
+        annotation[NameObject("/Contents")] = TextStringObject(content)
+        if author:
+            annotation[NameObject("/T")] = TextStringObject(author)
+        else:
+            annotation.pop("/T", None)
+        annotation.pop("/RC", None)
+        annotation[NameObject("/M")] = TextStringObject(_pdf_date(datetime.datetime.now().astimezone()))
+        write_pdf(writer, output_path)
+
+
+class RemoveAnnotations(PDFOperation):
+    """Remove comentários existentes, dados como (página, posição em /Annots), com os
+    popups e as respostas deles. Devolve quantas anotações saíram."""
+
+    def run(self, input_path: str, output_path: str, items: list[tuple[int, int]]) -> int:
+        writer = PdfWriter(clone_from=open_reader(input_path))
+        by_page: dict[int, set[int]] = {}
+        for page_index, index in items:
+            _comment_at(writer, page_index, index)
+            by_page.setdefault(page_index, set()).add(index)
+        removed = sum(remove_page_annotations(writer.pages[p], indexes) for p, indexes in by_page.items())
+        write_pdf(writer, output_path)
+        return removed
 
 
 def _describe_annotation_color(color_array) -> str:
@@ -343,25 +472,7 @@ class ExportAnnotationsCSV(PDFOperation):
     "comentários" no sentido de revisão de documento)."""
 
     def run(self, input_path: str, output_path: str) -> int:
-        reader = open_reader(input_path, purpose=READ)
-        rows: list[AnnotationInfo] = []
-
-        for page_index, page in enumerate(reader.pages):
-            for annotation_ref in page.get("/Annots", []):
-                annotation = annotation_ref.get_object()
-                subtype = str(annotation.get("/Subtype", ""))
-                if subtype in _NON_COMMENT_SUBTYPES:
-                    continue
-                rows.append(
-                    AnnotationInfo(
-                        page_index=page_index,
-                        kind=subtype.lstrip("/"),
-                        author=str(annotation.get("/T", "") or ""),
-                        content=str(annotation.get("/Contents", "") or ""),
-                        color=_describe_annotation_color(annotation.get("/C")),
-                    )
-                )
-
+        rows = ListAnnotations().run(input_path)
         write_table(
             output_path,
             ["pagina", "tipo", "autor", "texto", "cor"],

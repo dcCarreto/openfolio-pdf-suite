@@ -466,3 +466,18 @@ def test_selecting_a_redaction_area_shows_its_page(three_page_pdf):
     redaction_state.set_selected(rect)
 
     assert viewer._current_page == 2
+
+
+def test_selecting_an_existing_comment_shows_its_page_outlined(three_page_pdf):
+    _app()
+    session = DocumentSession()
+    annotation_state = AnnotationState()
+    viewer = PdfViewer(session, annotation_state, RedactionState())
+    session.open(str(three_page_pdf))
+    annotation_state.set_page_active(True)
+    before = viewer._with_pending_annotations(QPixmap(100, 100), 2)
+
+    annotation_state.set_selected_comment((2, (40, 240, 200, 262)))
+
+    assert viewer._current_page == 2
+    assert viewer._with_pending_annotations(before, 2) is not before

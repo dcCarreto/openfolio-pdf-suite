@@ -20,6 +20,7 @@ class AnnotationState(QObject):
 
     tool_changed = Signal()
     pending_changed = Signal()
+    selection_changed = Signal()  # comentário existente escolhido na lista da aba
 
     def __init__(self):
         super().__init__()
@@ -28,6 +29,17 @@ class AnnotationState(QObject):
         self._stamp_text = DEFAULT_STAMP_TEXT
         self._pending: list[AnnotationSpec] = []
         self._page_active = False
+        self._selected_comment: tuple[int, tuple[float, float, float, float]] | None = None
+
+    def selected_comment(self) -> tuple[int, tuple[float, float, float, float]] | None:
+        """(página, /Rect) do comentário já gravado que está escolhido na lista, ou None."""
+        return self._selected_comment
+
+    def set_selected_comment(self, comment: tuple[int, tuple[float, float, float, float]] | None) -> None:
+        if comment == self._selected_comment:
+            return
+        self._selected_comment = comment
+        self.selection_changed.emit()
 
     def is_page_active(self) -> bool:
         """Se a aba de Anotações é a que está em primeiro plano na sidebar agora.

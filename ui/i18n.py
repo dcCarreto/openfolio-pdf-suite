@@ -516,8 +516,9 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "{current} de {total}": "{current} of {total}",
     # Annotations: sidebar section
     "Anotações": "Annotations",
-    "Realce, sublinhe, risque, adicione notas, desenhe ou carimbe sobre um PDF.": (
-        "Highlight, underline, strike through, add notes, draw, or stamp over a PDF."
+    "Realce, sublinhe, risque, adicione notas, desenhe ou carimbe sobre um PDF; edite, remova e troque comentários por XFDF.": (
+        "Highlight, underline, strike through, add notes, draw, or stamp over a PDF; edit, remove "
+        "and exchange comments via XFDF."
     ),
     # Measure: sidebar section
     "Medição": "Measurement",
@@ -1574,4 +1575,34 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Nenhuma diferença no texto.': 'No differences in the text.',
     'Páginas de {side} sem texto (escaneadas? faça o OCR antes): {pages}': 'Pages of {side} without text (scanned? run OCR first): {pages}',
     'Imagens, formatação e cabeçalhos/rodapés repetidos em todas as páginas não entram na comparação; para eles, use "Comparar visualmente".': 'Images, formatting and headers/footers repeated on every page are not compared; for them, use "Compare visually".',
+    # A11 — comentários existentes e XFDF
+    "Autor": "Author",
+    "Comentários do documento:": "Comments in the document:",
+    "Salvar alteração do comentário": "Save comment change",
+    "Remover comentários selecionados": "Remove selected comments",
+    "Importar comentários (XFDF)...": "Import comments (XFDF)...",
+    "Importar comentários (XFDF)": "Import comments (XFDF)",
+    "Exportar comentários (CSV, Excel ou XFDF)": "Export comments (CSV, Excel or XFDF)",
+    "Exportar comentários existentes:": "Export existing comments:",
+    "Nenhum comentário no documento.": "No comments in the document.",
+    "O texto deste comentário faz parte do desenho: remova-o e crie outro.": "This comment's text is part of its drawing: remove it and create another one.",
+    "Editar comentário": "Edit comment",
+    "Remover comentários": "Remove comments",
+    "{count} anotação(ões) removida(s), com popups e respostas.": "{count} annotation(s) removed, with popups and replies.",
+    "{count} comentário(s) importado(s).": "{count} comment(s) imported.",
+    "{count} ignorado(s): tipo não suportado, página que não existe ou dados inválidos.": "{count} skipped: unsupported type, page that does not exist or invalid data.",
+    "{count} de tipo que o XFDF daqui não leva (anexo, som...) ficou de fora.": "{count} of a type this XFDF export does not carry (attachment, sound...) left out.",
+    "Nota": "Note",
+    "Ondulado": "Squiggly",
+    "Texto livre": "Free text",
+    "Retângulo": "Rectangle",
+    "Círculo": "Circle",
+    "Linha": "Line",
+    "Polígono": "Polygon",
+    "Polilinha": "Polyline",
+    "Inserção": "Caret",
+    "Anexo": "Attachment",
+    "A anotação escolhida não existe mais no documento.": "The chosen annotation no longer exists in the document.",
+    "O arquivo XFDF tem uma declaração DOCTYPE, que não é aceita.": "The XFDF file has a DOCTYPE declaration, which is not accepted.",
+    "O arquivo escolhido não é um XFDF válido.": "The chosen file is not a valid XFDF.",
 }

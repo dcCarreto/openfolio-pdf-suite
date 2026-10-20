@@ -6,7 +6,15 @@ import pytest
 from reportlab.pdfgen import canvas as rl_canvas
 from pypdf import PdfReader
 
-from core.annotations import AddAnnotations, AnnotationSpec, ExportAnnotationsCSV, spec_rect
+from core.annotations import (
+    AddAnnotations,
+    AnnotationSpec,
+    ExportAnnotationsCSV,
+    ListAnnotations,
+    RemoveAnnotations,
+    UpdateAnnotation,
+    spec_rect,
+)
 from core.base import EncryptedPDFError
 
 
@@ -318,3 +326,85 @@ def test_stamp_appearance_uses_the_embedded_font_and_fits_long_text(tmp_path):
     assert "/FontFile2" in descendant["/FontDescriptor"]  # embutida
     sizes = [float(token) for token in re.findall(rb"([\d.]+) Tf", appearance.get_data())]
     assert sizes and min(sizes) < 14  # texto longo encolhe para caber na caixa
+
+
+def _annotated_with_reply_and_link(tmp_path):
+    """Nota com popup e resposta, um realce e um link, nessa ordem em /Annots."""
+    from pypdf import PdfWriter
+    from pypdf.generic import ArrayObject, DictionaryObject, FloatObject, NameObject, TextStringObject
+
+    def annotation(subtype, **extra):
+        result = DictionaryObject(
+            {
+                NameObject("/Type"): NameObject("/Annot"),
+                NameObject("/Subtype"): NameObject(subtype),
+                NameObject("/Rect"): ArrayObject([FloatObject(v) for v in (10, 10, 40, 40)]),
+            }
+        )
+        for key, value in extra.items():
+            result[NameObject(f"/{key}")] = TextStringObject(value) if isinstance(value, str) else value
+        return result
+
+    writer = PdfWriter()
+    writer.add_blank_page(400, 400)
+    note = writer.add_annotation(0, annotation("/Text", Contents="Original", T="Ana", RC="<body>Original</body>"))
+    writer.add_annotation(0, annotation("/Popup", Parent=note.indirect_reference))
+    writer.add_annotation(0, annotation("/Text", Contents="Resposta", IRT=note.indirect_reference))
+    writer.add_annotation(0, annotation("/Highlight", Contents="Realce"))
+    writer.add_annotation(0, annotation("/Link"))
+    path = tmp_path / "comentado.pdf"
+    with open(path, "wb") as f:
+        writer.write(f)
+    return path
+
+
+def test_list_annotations_gives_position_rect_and_date(tmp_path):
+    path = _annotated_with_reply_and_link(tmp_path)
+
+    comments = ListAnnotations().run(str(path))
+
+    assert [(c.kind, c.index, c.content) for c in comments] == [
+        ("Text", 0, "Original"),
+        ("Text", 2, "Resposta"),
+        ("Highlight", 3, "Realce"),
+    ]
+    assert comments[0].rect == (10, 10, 40, 40) and comments[0].author == "Ana"
+
+
+def test_update_annotation_changes_text_author_and_drops_rich_text(tmp_path):
+    path, out = _annotated_with_reply_and_link(tmp_path), tmp_path / "editado.pdf"
+
+    UpdateAnnotation().run(str(path), str(out), 0, 0, "Texto novo", "Bia")
+
+    note = PdfReader(str(out)).pages[0]["/Annots"][0].get_object()
+    assert note["/Contents"] == "Texto novo" and note["/T"] == "Bia"
+    assert "/RC" not in note and str(note["/M"]).startswith("D:")
+
+
+def test_remove_annotation_takes_its_popup_and_replies(tmp_path):
+    path, out = _annotated_with_reply_and_link(tmp_path), tmp_path / "removido.pdf"
+
+    assert RemoveAnnotations().run(str(path), str(out), [(0, 0)]) == 3
+
+    subtypes = [a.get_object()["/Subtype"] for a in PdfReader(str(out)).pages[0]["/Annots"]]
+    assert subtypes == ["/Highlight", "/Link"]
+
+
+def test_editing_a_comment_that_is_not_there_fails_without_writing(tmp_path):
+    path, out = _annotated_with_reply_and_link(tmp_path), tmp_path / "x.pdf"
+
+    with pytest.raises(ValueError, match="não existe mais"):
+        RemoveAnnotations().run(str(path), str(out), [(0, 4)])  # o link não é comentário
+    with pytest.raises(ValueError, match="não existe mais"):
+        UpdateAnnotation().run(str(path), str(out), 0, 9, "x", "")
+    assert not out.exists()
+
+
+def test_new_annotations_get_a_unique_name(tmp_path):
+    path_in, path_out = tmp_path / "doc.pdf", tmp_path / "out.pdf"
+    _make_pdf(path_in, "texto")
+    specs = [AnnotationSpec(page_index=0, kind="note", position=(10, 10), text=str(n)) for n in range(2)]
+    AddAnnotations().run(str(path_in), str(path_out), specs)
+
+    names = [a.get_object()["/NM"] for a in PdfReader(str(path_out)).pages[0]["/Annots"]]
+    assert len(set(names)) == 2
