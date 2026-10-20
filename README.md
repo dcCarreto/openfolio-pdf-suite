@@ -72,7 +72,9 @@ pelo "Abrir com" do sistema (no Windows, o instalador oferece incluir o OpenFoli
 O app lembra o idioma, a última pasta usada e os arquivos recentes. **Arquivo > Imprimir**
 (Ctrl+P) imprime o documento de trabalho inteiro, um intervalo, a página atual ou as páginas
 selecionadas nas miniaturas, com anotações e campos preenchidos, ajustando cada página ao
-papel; PDFs cujo autor proibiu a impressão não são impressos.
+papel; PDFs cujo autor proibiu a impressão não são impressos. **Arquivo > Propriedades do
+documento** (Ctrl+D) mostra versão do PDF, tamanho, produtor, datas, proteção e permissões, as
+fontes usadas (se estão embutidas e em que páginas) e os tamanhos de página.
 
 As operações rodam em segundo plano: a janela continua respondendo, a barra de status mostra
 o andamento e o botão "Cancelar" interrompe a operação sem deixar arquivo pela metade. Os
@@ -329,6 +331,7 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
   rasterize.py     Achatamento de página em imagem, com áreas pintadas nos próprios pixels
   annotations.py   Anotações reais (Highlight/Underline/StrikeOut/Ink/Stamp) via pypdf
   xfdf.py          Exportação e importação de comentários em XFDF
+  properties.py    Propriedades do documento: proteção, fontes, tamanhos de página
   ocr.py           Reconhecimento de texto (Tesseract) com camada de texto invisível
   redaction.py     Redação real (rasterização + verificação) e sanitização de PDFs
   signature.py     Assinatura digital (pyhanko) e verificação completa das assinaturas

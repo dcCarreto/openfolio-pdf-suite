@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.properties import ReadDocumentProperties
 from ui import i18n, sidebar_icons
 from ui.annotation_state import AnnotationState
 from ui.app_events import pdf_paths_from_mime
@@ -34,8 +35,9 @@ from ui.icon import build_app_icon
 from ui.measure_state import MeasureState
 from ui.preferences import Preferences, start_folder, use_preferences
 from ui.printing import page_count_for_printing, pages_to_print, print_pages
+from ui.properties_dialog import DocumentPropertiesDialog
 from ui.redaction_state import RedactionState
-from ui.tasks import run_task, task_manager
+from ui.tasks import call, run_task, task_manager
 from ui.theme import apply_dark_titlebar
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.widget_state import capture_state, restore_state
@@ -293,6 +295,9 @@ class MainWindow(QMainWindow):
         self._print_action = file_menu.addAction(tr("Imprimir..."))
         self._print_action.setShortcut("Ctrl+P")
         self._print_action.triggered.connect(self.print_document)
+        self._properties_action = file_menu.addAction(tr("Propriedades do documento..."))
+        self._properties_action.setShortcut("Ctrl+D")
+        self._properties_action.triggered.connect(self.show_document_properties)
         self._recent_menu = file_menu.addMenu(tr("Abrir recente"))
         self._recent_menu.aboutToShow.connect(self._fill_recent_menu)
         self._recent_menu.setEnabled(bool(self._preferences.recent_files()))
@@ -515,6 +520,7 @@ class MainWindow(QMainWindow):
         self._save_action.setEnabled(has_document and self.session.is_modified() and not busy)
         self._save_as_action.setEnabled(has_document and not busy)
         self._print_action.setEnabled(has_document and not busy)
+        self._properties_action.setEnabled(has_document and not busy)
 
         source = self.session.source_path()
         if source:
@@ -585,6 +591,26 @@ class MainWindow(QMainWindow):
         dialog.setOption(QPrintDialog.PrintDialogOption.PrintSelection, bool(self.session.selected_pages()))
         if dialog.exec():
             self.start_printing(printer, page_count)
+
+    def show_document_properties(self) -> bool:
+        """Arquivo > Propriedades do documento: lê em segundo plano e abre o diálogo."""
+        path = self.session.path()
+        if path is None:
+            return False
+        file_name = Path(self.session.source_path() or path).name
+        modified = self.session.is_modified()
+
+        def done(properties):
+            self._properties_dialog = DocumentPropertiesDialog(properties, file_name, modified, self)
+            self._properties_dialog.open()
+
+        return run_task(
+            self,
+            tr("Propriedades do documento"),
+            call(ReadDocumentProperties().run, path),
+            on_success=done,
+            error_message=tr("Não foi possível ler as propriedades: {error}"),
+        )
 
     def start_printing(self, printer: QPrinter, page_count: int) -> bool:
         """Imprime as páginas escolhidas no diálogo (separado dele para os testes)."""
