@@ -65,6 +65,8 @@ def test_every_fixed_interface_text_has_a_translation():
 def test_every_core_message_has_a_translation():
     keys = []
     for path in _python_files("core"):
+        if path.name == "cli.py":
+            continue  # a linha de comando fala só português: as mensagens dela não passam pelo tr()
         tree = ast.parse(path.read_text(encoding="utf-8"))
         keys += [_literal(call.args[0]) for call in _calls(tree, "Message")]
         for call in _calls(tree, "update"):

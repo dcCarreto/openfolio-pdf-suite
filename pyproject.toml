@@ -17,6 +17,9 @@ dependencies = [
     "pyhanko>=0.25",
 ]
 
+[project.scripts]
+openfolio = "core.cli:main"
+
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
 build = ["pyinstaller>=6.0"]

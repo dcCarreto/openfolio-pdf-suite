@@ -29,6 +29,7 @@
 - [Requisitos](#requisitos)
 - [Como instalar a partir do código-fonte](#como-instalar-a-partir-do-código-fonte)
 - [Como rodar](#como-rodar)
+  - [Linha de comando](#linha-de-comando)
 - [Tecnologias utilizadas](#tecnologias-utilizadas)
 - [Estrutura do projeto](#estrutura-do-projeto)
 - [Testes](#testes)
@@ -289,6 +290,25 @@ python main.py
 A janela principal abre em modo escuro, com a aba **Criar PDF** selecionada por padrão. Basta
 escolher a ferramenta desejada na barra lateral.
 
+### Linha de comando
+
+A instalação pelo código-fonte também cria o comando `openfolio`, com as mesmas operações sem
+abrir a janela (útil em scripts e automação):
+
+```bash
+openfolio merge capa.pdf contrato.pdf anexos.pdf -o completo.pdf
+openfolio extract completo.pdf -o resumo.pdf --paginas "1, 4-6"
+openfolio compress completo.pdf -o menor.pdf --nivel strong
+openfolio protect menor.pdf -o protegido.pdf        # pergunta a senha
+openfolio info protegido.pdf --senha minhasenha --json
+```
+
+Comandos: `merge`, `split`, `rotate`, `remove`, `extract`, `compress`, `protect`, `unlock`,
+`watermark`, `number`, `ocr`, `pdfa`, `text`, `images` e `info` (`openfolio COMANDO -h`
+mostra as opções). Como na janela, páginas contam a partir de 1, nada é sobrescrito sem
+`--force` e um erro ou Ctrl+C nunca deixa um arquivo pela metade. O código de saída é 0 quando
+deu certo, 1 em erro, 2 em uso errado e 130 quando interrompido.
+
 ## Tecnologias utilizadas
 
 | Biblioteca | Uso |
@@ -332,6 +352,7 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
   annotations.py   Anotações reais (Highlight/Underline/StrikeOut/Ink/Stamp) via pypdf
   xfdf.py          Exportação e importação de comentários em XFDF
   properties.py    Propriedades do documento: proteção, fontes, tamanhos de página
+  cli.py           Linha de comando (openfolio merge/split/compress/...), sem Qt
   ocr.py           Reconhecimento de texto (Tesseract) com camada de texto invisível
   redaction.py     Redação real (rasterização + verificação) e sanitização de PDFs
   signature.py     Assinatura digital (pyhanko) e verificação completa das assinaturas
