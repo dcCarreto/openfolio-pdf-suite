@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QAbstractItemView, QListView, QListWidget, QListWi
 
 from core.progress import PDFIUM_LOCK
 from ui.i18n import tr
-from ui.viewer.render import render_page
+from ui.viewer.render import framed, render_page
 
 _THUMBNAIL_SCALE = 0.2
 _ICON_SIZE = QSize(96, 128)
@@ -112,7 +112,7 @@ class ThumbnailList(QListWidget):
             page.close()
         item = self.item(index)
         if item is not None:
-            item.setIcon(QIcon(pixmap))
+            item.setIcon(QIcon(framed(pixmap)))
         if not self._pending:
             self._timer.stop()
 

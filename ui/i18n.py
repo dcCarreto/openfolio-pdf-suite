@@ -1657,4 +1657,10 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "{count} não embutida(s): em outro computador, o texto pode aparecer com outra fonte.": "{count} not embedded: on another computer, the text may show in a different font.",
     "Tamanho": "Size",
     "Personalizada": "Custom",
+    # A14 — tema
+    "Exibir": "View",
+    "Tema": "Theme",
+    "Escuro": "Dark",
+    "Claro": "Light",
+    "Seguir o sistema": "Follow the system",
 }

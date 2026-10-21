@@ -12,8 +12,8 @@ documento.
 
 from pathlib import Path
 
-from PySide6.QtCore import QItemSelectionModel, QPoint, QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPixmap, QShortcut, QTransform
+from PySide6.QtCore import QItemSelectionModel, QPoint, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QIcon, QKeySequence, QPixmap, QShortcut, QTransform
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -35,7 +35,7 @@ from core.progress import PDFIUM_LOCK
 from ui.i18n import error_text, tr
 from ui.preferences import remember_folder_of, start_folder
 from ui.tasks import run_task
-from ui.viewer.render import render_page
+from ui.viewer.render import framed, render_page
 
 _ICON_SIZE = QSize(96, 128)
 _ROLE = Qt.ItemDataRole.UserRole  # (página de origem a partir de 0, ou None se em branco; giro)
@@ -49,16 +49,6 @@ class _CaptionBelowDelegate(QStyledItemDelegate):
         super().initStyleOption(option, index)
         option.decorationPosition = QStyleOptionViewItem.Position.Top
         option.displayAlignment = Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop
-
-
-def _framed(pixmap: QPixmap) -> QPixmap:
-    """Contorno cinza: página branca sobre a lista branca do tema claro não aparece."""
-    pixmap = QPixmap(pixmap)
-    painter = QPainter(pixmap)
-    painter.setPen(QColor("#9a9a9a"))
-    painter.drawRect(QRectF(QPointF(), pixmap.deviceIndependentSize()).adjusted(0.5, 0.5, -0.5, -0.5))
-    painter.end()
-    return pixmap
 
 
 class OrganizePage(QWidget):
@@ -76,7 +66,7 @@ class OrganizePage(QWidget):
         self._redo_stack: list[list[tuple[int | None, int]]] = []
         self._blank = QPixmap(_ICON_SIZE.width(), _ICON_SIZE.width() * 4 // 3)
         self._blank.fill(QColor("white"))
-        self._blank = _framed(self._blank)
+        self._blank = framed(self._blank)
 
         self.grid = QListWidget()
         self.grid.setFlow(QListView.Flow.LeftToRight)
@@ -273,7 +263,7 @@ class OrganizePage(QWidget):
             # Pelo lado maior: girada ou não, a página ocupa a altura do ícone.
             longest = max(page.get_size())
             scale = _ICON_SIZE.height() / longest if longest > 0 else 0.2
-            self._pixmaps[index] = _framed(render_page(page, scale, self.devicePixelRatioF()))
+            self._pixmaps[index] = framed(render_page(page, scale, self.devicePixelRatioF()))
             page.close()
         for row in range(self.grid.count()):
             item = self.grid.item(row)

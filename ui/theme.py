@@ -1,22 +1,53 @@
-"""Tema visual único: modo escuro, limpo, inspirado no macOS."""
+"""Temas visuais, limpos e inspirados no macOS: escuro (o padrão), claro ou o do sistema."""
 
 import sys
 
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QGuiApplication, QPalette
 from PySide6.QtWidgets import QApplication, QWidget
 
-_BG = "#1e1e1e"
-_PANEL = "#2c2c2e"
-_ELEVATED = "#3a3a3c"
-_BORDER = "#48484a"
-_TEXT = "#f5f5f7"
-_TEXT_MUTED = "#8e8e93"
-_ACCENT = "#0a84ff"
-_ACCENT_PRESSED = "#0064d6"
+DARK = "dark"
+LIGHT = "light"
+SYSTEM = "system"
+THEMES = (DARK, LIGHT, SYSTEM)
+
+_COLORS = {
+    DARK: {
+        "bg": "#1e1e1e",
+        "panel": "#2c2c2e",
+        "elevated": "#3a3a3c",
+        "border": "#48484a",
+        "text": "#f5f5f7",
+        "muted": "#8e8e93",
+        "accent": "#0a84ff",
+        "accent_pressed": "#0064d6",
+        "hover": "#46464a",
+        "overlay": "255, 255, 255",  # realce de hover: claro sobre o escuro
+    },
+    LIGHT: {
+        "bg": "#e8e8ed",
+        "panel": "#ffffff",
+        "elevated": "#dcdce1",
+        "border": "#c4c4c9",
+        "text": "#1c1c1e",
+        "muted": "#6e6e73",
+        "accent": "#007aff",
+        "accent_pressed": "#0062cc",
+        "hover": "#cfcfd4",
+        "overlay": "0, 0, 0",
+    },
+}
+
+_current = DARK
 
 _FONT_FAMILY = '"SF Pro Text", "Helvetica Neue", "Segoe UI", sans-serif'
 
-_STYLESHEET = f"""
+def _stylesheet(colors: dict) -> str:
+    _BG, _PANEL, _ELEVATED, _BORDER = colors["bg"], colors["panel"], colors["elevated"], colors["border"]
+    _TEXT, _TEXT_MUTED = colors["text"], colors["muted"]
+    _ACCENT, _ACCENT_PRESSED = colors["accent"], colors["accent_pressed"]
+    _HOVER, _OVERLAY = colors["hover"], colors["overlay"]
+    return f"""
 * {{
     font-family: {_FONT_FAMILY};
     font-size: 10.5pt;
@@ -64,12 +95,13 @@ QPushButton {{
 }}
 
 QPushButton:hover {{
-    background-color: #46464a;
+    background-color: {_HOVER};
 }}
 
 QPushButton:pressed {{
     background-color: {_ACCENT_PRESSED};
     border-color: {_ACCENT_PRESSED};
+    color: white;
 }}
 
 QPushButton:disabled {{
@@ -86,11 +118,11 @@ QPushButton#flagButton {{
 }}
 
 QPushButton#flagButton:hover {{
-    background-color: rgba(255, 255, 255, 20);
+    background-color: rgba({_OVERLAY}, 20);
 }}
 
 QPushButton#flagButton:pressed {{
-    background-color: rgba(255, 255, 255, 35);
+    background-color: rgba({_OVERLAY}, 35);
 }}
 
 QLineEdit, QComboBox, QSpinBox {{
@@ -231,7 +263,7 @@ QListWidget#sidebar::item:selected {{
 }}
 
 QListWidget#sidebar::item:hover:!selected {{
-    background-color: rgba(255, 255, 255, 12);
+    background-color: rgba({_OVERLAY}, 12);
 }}
 
 QMenuBar {{
@@ -281,37 +313,59 @@ QStatusBar {{
 """
 
 
-def _dark_palette() -> QPalette:
+def _palette(colors: dict) -> QPalette:
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(_BG))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor(_TEXT))
-    palette.setColor(QPalette.ColorRole.Base, QColor(_PANEL))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(_ELEVATED))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(_PANEL))
-    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(_TEXT))
-    palette.setColor(QPalette.ColorRole.Text, QColor(_TEXT))
-    palette.setColor(QPalette.ColorRole.Button, QColor(_ELEVATED))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor(_TEXT))
-    palette.setColor(QPalette.ColorRole.Link, QColor(_ACCENT))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor(_ACCENT))
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("white"))
-    palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(_TEXT_MUTED))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(_TEXT_MUTED))
-    palette.setColor(
-        QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(_TEXT_MUTED)
-    )
+    roles = QPalette.ColorRole
+    for role, key in (
+        (roles.Window, "bg"),
+        (roles.WindowText, "text"),
+        (roles.Base, "panel"),
+        (roles.AlternateBase, "elevated"),
+        (roles.ToolTipBase, "panel"),
+        (roles.ToolTipText, "text"),
+        (roles.Text, "text"),
+        (roles.Button, "elevated"),
+        (roles.ButtonText, "text"),
+        (roles.Link, "accent"),
+        (roles.Highlight, "accent"),
+        (roles.PlaceholderText, "muted"),
+    ):
+        palette.setColor(role, QColor(colors[key]))
+    palette.setColor(roles.HighlightedText, QColor("white"))
+    for role in (roles.Text, roles.ButtonText, roles.WindowText):
+        palette.setColor(QPalette.ColorGroup.Disabled, role, QColor(colors["muted"]))
     return palette
 
 
-def apply_theme(app: QApplication) -> None:
-    """Aplica o tema escuro único, inspirado no macOS, a toda a aplicação."""
+def resolved_theme(theme: str) -> str:
+    """DARK ou LIGHT: SYSTEM vira o esquema de cores do sistema (escuro se ele não disser)."""
+    if theme == SYSTEM:
+        scheme = QGuiApplication.styleHints().colorScheme()
+        return LIGHT if scheme == Qt.ColorScheme.Light else DARK
+    return theme if theme in _COLORS else DARK
+
+
+def current_theme() -> str:
+    """O tema aplicado agora (DARK ou LIGHT)."""
+    return _current
+
+
+def apply_theme(app: QApplication, theme: str = DARK) -> None:
+    """Aplica o tema a toda a aplicação, inclusive às janelas já abertas. Os ícones
+    desenhados pelo app (`ui/icon_utils.py`) seguem a paleta sozinhos."""
+    global _current
+    _current = resolved_theme(theme)
+    colors = _COLORS[_current]
     app.setStyle("Fusion")
-    app.setPalette(_dark_palette())
-    app.setStyleSheet(_STYLESHEET)
+    app.setPalette(_palette(colors))
+    app.setStyleSheet(_stylesheet(colors))
+    for window in app.topLevelWidgets():
+        if window.isWindow() and window.testAttribute(Qt.WidgetAttribute.WA_WState_Created):
+            apply_titlebar(window)
 
 
-def apply_dark_titlebar(window: QWidget) -> None:
-    """No Windows, escurece a barra de título nativa (o DWM não segue a paleta do Qt)."""
+def apply_titlebar(window: QWidget) -> None:
+    """No Windows, a barra de título nativa acompanha o tema (o DWM não segue a paleta do Qt)."""
     if sys.platform != "win32":
         return
 
@@ -322,7 +376,7 @@ def apply_dark_titlebar(window: QWidget) -> None:
     import ctypes
 
     hwnd = int(window.winId())
-    value = ctypes.c_int(1)
+    value = ctypes.c_int(1 if _current == DARK else 0)
     for attribute in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE varia por build do Windows
         result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
             hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)

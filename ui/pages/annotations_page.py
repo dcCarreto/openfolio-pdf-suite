@@ -144,7 +144,7 @@ class AnnotationsPage(QWidget):
             button.setStyleSheet(
                 f"QPushButton {{ background-color: #{color}; border: 2px solid transparent; "
                 "border-radius: 4px; }"
-                "QPushButton:checked { border: 2px solid #ffffff; }"
+                "QPushButton:checked { border: 2px solid palette(window-text); }"
             )
             button.clicked.connect(lambda _checked, c=color: self.annotation_state.set_color(c))
             color_group.addButton(button)

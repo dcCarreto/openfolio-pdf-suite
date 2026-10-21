@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication
 from ui.app_events import FileOpenFilter, pdf_paths_from_arguments
 from ui.diagnostics import install_exception_hooks, setup_logging
 from ui.main_window import APP_VERSION, MainWindow
+from ui.preferences import Preferences
 from ui.theme import apply_theme
 
 
@@ -23,8 +24,9 @@ def main():
     install_exception_hooks()
     logging.getLogger("openfolio").info("OpenFolio PDF Suite %s iniciado (log: %s)", APP_VERSION, log_file)
 
-    apply_theme(app)
-    window = MainWindow(settings=QSettings())
+    settings = QSettings()
+    apply_theme(app, Preferences(settings).theme())
+    window = MainWindow(settings=settings)
     window.show()
 
     # "Abrir com" / duplo clique num PDF: o arquivo chega como argumento (Windows, Linux)

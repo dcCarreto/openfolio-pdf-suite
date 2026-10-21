@@ -288,7 +288,8 @@ python main.py
 ```
 
 A janela principal abre em modo escuro, com a aba **Criar PDF** selecionada por padrão. Basta
-escolher a ferramenta desejada na barra lateral.
+escolher a ferramenta desejada na barra lateral. **Exibir > Tema** troca para o tema claro ou
+segue o do sistema (inclusive quando ele muda com o app aberto); a escolha é lembrada.
 
 ### Linha de comando
 
@@ -360,7 +361,7 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
 ui/              Interface gráfica (PySide6)
   main_window.py       Janela principal: sidebar, visualizador e as 26 seções (cada aba é
                        construída na primeira vez em que é aberta)
-  theme.py             Tema escuro único, inspirado no macOS
+  theme.py             Temas escuro e claro (ou o do sistema), inspirados no macOS
   icon.py              Ícone da aplicação (renderizado a partir de assets/logo.svg)
   document_session.py  Documento de trabalho: arquivo do usuário, versões, desfazer/refazer
   area_pick_state.py   Marcação de áreas no visualizador para as ferramentas

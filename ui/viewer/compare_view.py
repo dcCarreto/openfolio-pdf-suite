@@ -24,7 +24,7 @@ from core.geometry import PageGeometry
 from core.progress import PDFIUM_LOCK
 from ui.i18n import tr
 from ui.page_ranges import format_page_ranges
-from ui.theme import apply_dark_titlebar
+from ui.theme import apply_titlebar
 from ui.viewer.render import render_page
 from ui.viewer.viewer_icons import build_next_page_icon, build_prev_page_icon, build_zoom_in_icon, build_zoom_out_icon
 
@@ -290,7 +290,7 @@ class CompareWindow(QWidget):
         self._update_sync_points()
         self._update_highlights()
         self._update_counter()
-        apply_dark_titlebar(self)
+        apply_titlebar(self)
 
     def _summary(self) -> str:
         count = len(self.diff.changes)

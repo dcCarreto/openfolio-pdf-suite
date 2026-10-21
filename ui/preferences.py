@@ -1,5 +1,5 @@
-"""Preferências do usuário guardadas entre sessões: arquivos recentes, última pasta, idioma
-e a assinatura e as iniciais do "Preencher e assinar".
+"""Preferências do usuário guardadas entre sessões: arquivos recentes, última pasta, idioma,
+tema e a assinatura e as iniciais do "Preencher e assinar".
 
 Ficam no mesmo QSettings da geometria da janela. Sem QSettings (testes), as preferências
 vivem só na memória do processo.
@@ -63,6 +63,16 @@ class Preferences:
 
     def set_language(self, language: str) -> None:
         self._set("ui/language", language)
+
+    # -- tema (A14) ---------------------------------------------------------------
+
+    def theme(self) -> str:
+        """"dark" (padrão), "light" ou "system" (ver `ui/theme.py`)."""
+        value = str(self._get("ui/theme", "dark") or "dark")
+        return value if value in ("dark", "light", "system") else "dark"
+
+    def set_theme(self, theme: str) -> None:
+        self._set("ui/theme", theme)
 
     # -- assinatura e iniciais (A04) ----------------------------------------------
 

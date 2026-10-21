@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QSettings, QSize, Qt
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QActionGroup, QGuiApplication
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
     QApplication,
@@ -38,7 +38,8 @@ from ui.printing import page_count_for_printing, pages_to_print, print_pages
 from ui.properties_dialog import DocumentPropertiesDialog
 from ui.redaction_state import RedactionState
 from ui.tasks import call, run_task, task_manager
-from ui.theme import apply_dark_titlebar
+from ui import theme
+from ui.theme import apply_titlebar
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.widget_state import capture_state, restore_state
 from ui.widgets.page_container import PageContainer
@@ -176,10 +177,11 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_menu_bar()
         self._restore_layout()
-        apply_dark_titlebar(self)
+        apply_titlebar(self)
 
         i18n.install_qt_translator(QApplication.instance())
         i18n.language_changed.changed.connect(self._on_language_changed)
+        QGuiApplication.styleHints().colorSchemeChanged.connect(self._on_system_color_scheme_changed)
         self._tasks.started.connect(self._on_task_started)
         self._tasks.started.connect(self.session.note_operation)
         self._tasks.finished.connect(self._on_task_finished)
@@ -316,6 +318,18 @@ class MainWindow(QMainWindow):
         if hasattr(self, "session"):
             self._update_document_actions()
 
+        view_menu = menu_bar.addMenu(tr("Exibir"))
+        theme_menu = view_menu.addMenu(tr("Tema"))
+        theme_group = QActionGroup(theme_menu)
+        self._theme_actions = {}
+        for key, label in ((theme.DARK, "Escuro"), (theme.LIGHT, "Claro"), (theme.SYSTEM, "Seguir o sistema")):
+            action = theme_menu.addAction(tr(label))
+            action.setCheckable(True)
+            action.setChecked(key == self._preferences.theme())
+            action.triggered.connect(lambda _checked=False, k=key: self.set_theme(k))
+            theme_group.addAction(action)
+            self._theme_actions[key] = action
+
         help_menu = menu_bar.addMenu(tr("Ajuda"))
         about_action = help_menu.addAction(tr("Sobre o OpenFolio PDF Suite"))
         about_action.triggered.connect(self._show_about)
@@ -416,7 +430,7 @@ class MainWindow(QMainWindow):
         self.viewer.retranslate()
         self.task_status.retranslate()
         self._build_menu_bar()
-        apply_dark_titlebar(self)
+        apply_titlebar(self)
 
     # -- navegação ---------------------------------------------------------------
 
@@ -634,6 +648,16 @@ class MainWindow(QMainWindow):
         page = self._ensure_page(row)
         page.mode_combo.setCurrentIndex(1)
         page._apply_verify()
+
+    def set_theme(self, key: str) -> None:
+        """Exibir > Tema: aplica e guarda para as próximas sessões."""
+        self._preferences.set_theme(key)
+        self._theme_actions[key].setChecked(True)
+        theme.apply_theme(QApplication.instance(), key)
+
+    def _on_system_color_scheme_changed(self, _scheme) -> None:
+        if self._preferences.theme() == theme.SYSTEM:
+            theme.apply_theme(QApplication.instance(), theme.SYSTEM)
 
     def _show_about(self):
         QMessageBox.about(

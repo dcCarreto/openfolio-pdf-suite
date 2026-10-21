@@ -1,7 +1,8 @@
 """Conversão de páginas pypdfium2 para QPixmap."""
 
 from PIL.ImageQt import ImageQt
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtCore import QPointF, QRectF
+from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
 
 from core.progress import PDFIUM_LOCK
 
@@ -26,3 +27,13 @@ def render_page(pdfium_page, scale: float, device_pixel_ratio: float = 1.0, rota
 def logical_size(pixmap: QPixmap):
     """Tamanho do pixmap em pixels lógicos (o que ele ocupa na tela)."""
     return pixmap.deviceIndependentSize().toSize()
+
+
+def framed(pixmap: QPixmap) -> QPixmap:
+    """Contorno cinza na miniatura: página branca sobre a lista branca do tema claro não aparece."""
+    pixmap = QPixmap(pixmap)
+    painter = QPainter(pixmap)
+    painter.setPen(QColor("#9a9a9a"))
+    painter.drawRect(QRectF(QPointF(), pixmap.deviceIndependentSize()).adjusted(0.5, 0.5, -0.5, -0.5))
+    painter.end()
+    return pixmap
