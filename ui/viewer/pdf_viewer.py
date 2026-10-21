@@ -39,6 +39,7 @@ from ui.measure_state import MeasureState, format_distance
 from ui.redaction_state import RedactionState
 from ui.tasks import run_task
 from ui.viewer.page_canvas import PageCanvas
+from ui.viewer.presentation import PresentationWindow
 from ui.viewer.render import logical_size, render_page
 from ui.viewer.search import DocumentSearch
 from ui.viewer.search_bar import SearchBar
@@ -46,6 +47,7 @@ from ui.viewer.side_panel import DocumentSidePanel
 from ui.viewer.thumbnail_list import ThumbnailList
 from ui.viewer.viewer_icons import (
     build_continuous_page_icon,
+    build_double_page_icon,
     build_fit_page_icon,
     build_fit_width_icon,
     build_next_page_icon,
@@ -72,6 +74,15 @@ _DRAWING_TOOLS = ("highlight", "underline", "strikeout", "note", "ink", "stamp")
 # descartada (voltam a ser renderizadas se o usuário rolar até elas). Antes nenhuma página
 # era liberada e a memória crescia sem limite ao rolar documentos longos.
 _KEEP_RENDERED_SCREENS = 3
+
+# Layouts das páginas (A15). Página dupla e livro são a rolagem contínua com duas páginas
+# por linha; no livro a capa fica sozinha, e as páginas pares à esquerda, como impressas.
+SINGLE = "single"
+CONTINUOUS = "continuous"
+DOUBLE = "double"
+BOOK = "book"
+LAYOUTS = (SINGLE, CONTINUOUS, DOUBLE, BOOK)
+_PAGE_GAP = 12
 # Busca incremental: tempo máximo por fatia antes de devolver o controle à janela.
 _SEARCH_SLICE_SECONDS = 0.03
 
@@ -82,6 +93,7 @@ class PdfViewer(QWidget):
     preenchido vira uma versão do documento, que Ctrl+Z desfaz e "Salvar" grava."""
 
     verify_signatures_requested = Signal()
+    layout_changed = Signal(str)
 
     def __init__(
         self,
@@ -103,6 +115,7 @@ class PdfViewer(QWidget):
         self._view_rotation = 0  # "girar a visualização": só na tela, o arquivo não muda
         self._scale = _DEFAULT_SCALE
         self._continuous = False
+        self._spread: str | None = None  # DOUBLE ou BOOK (com `_continuous`)
         self._show_thumbnails = True
         self._current_page = 0
         self._search = None
@@ -314,18 +327,24 @@ class PdfViewer(QWidget):
         self.single_page_button = self._tool_button(build_single_page_icon(), "Página única")
         self.single_page_button.setCheckable(True)
         self.single_page_button.setChecked(True)
-        self.single_page_button.clicked.connect(lambda: self._set_continuous(False))
+        self.single_page_button.clicked.connect(lambda: self.set_layout(SINGLE))
 
         self.continuous_button = self._tool_button(build_continuous_page_icon(), "Rolagem contínua")
         self.continuous_button.setCheckable(True)
-        self.continuous_button.clicked.connect(lambda: self._set_continuous(True))
+        self.continuous_button.clicked.connect(lambda: self.set_layout(CONTINUOUS))
+
+        self.double_page_button = self._tool_button(build_double_page_icon(), "Página dupla")
+        self.double_page_button.setCheckable(True)
+        self.double_page_button.clicked.connect(lambda: self.set_layout(DOUBLE))
 
         self._mode_group = QButtonGroup(self)
         self._mode_group.setExclusive(True)
         self._mode_group.addButton(self.single_page_button)
         self._mode_group.addButton(self.continuous_button)
+        self._mode_group.addButton(self.double_page_button)
         layout.addWidget(self.single_page_button)
         layout.addWidget(self.continuous_button)
+        layout.addWidget(self.double_page_button)
         layout.addSpacing(4)
 
         self.thumbnails_button = self._tool_button(build_thumbnails_icon(), "Painel lateral (miniaturas, marcadores, anexos)")
@@ -351,6 +370,7 @@ class PdfViewer(QWidget):
             self.page_indicator,
             self.single_page_button,
             self.continuous_button,
+            self.double_page_button,
             self.thumbnails_button,
             search_button,
         ]
@@ -518,12 +538,16 @@ class PdfViewer(QWidget):
             vlayout.setSpacing(spacing)
 
             offset = margin
-            for index in range(self._page_count()):
-                label = self._make_placeholder_label(index)
-                vlayout.addWidget(label, 0, Qt.AlignmentFlag.AlignHCenter)
-                self._page_labels.append(label)
-                self._page_tops.append(offset)
-                offset += label.height() + spacing
+            for row in self._rows():
+                labels = [self._make_placeholder_label(index) for index in row]
+                if self._spread:
+                    vlayout.addWidget(self._spread_row(row, labels), 0, Qt.AlignmentFlag.AlignHCenter)
+                else:
+                    vlayout.addWidget(labels[0], 0, Qt.AlignmentFlag.AlignHCenter)
+                for label in labels:
+                    self._page_labels.append(label)
+                    self._page_tops.append(offset)
+                offset += max(label.height() for label in labels) + spacing
             vlayout.addStretch()
 
             self.scroll_area.setWidget(container)
@@ -540,6 +564,38 @@ class PdfViewer(QWidget):
             self._update_canvas_cursor()
 
         self._update_page_indicator()
+
+    def _rows(self) -> list[list[int]]:
+        """As páginas de cada linha da rolagem: uma por linha, ou duas na página dupla (1-2,
+        3-4...) e no livro (1 sozinha, depois 2-3, 4-5...), contando de 1."""
+        pages = list(range(self._page_count()))
+        if not self._spread:
+            return [[page] for page in pages]
+        start = 1 if self._spread == BOOK else 0
+        rows = [[0]] if start and pages else []
+        rows += [pages[i : i + 2] for i in range(start, len(pages), 2)]
+        return rows
+
+    def _spread_row(self, row: list[int], labels: list[QLabel]) -> QWidget:
+        """Duas páginas lado a lado, encostadas no meio como um livro aberto. Página que fica
+        sozinha na linha (a capa do livro, a última) fica do lado em que estaria impressa."""
+        widget = QWidget()
+        hlayout = QHBoxLayout(widget)
+        hlayout.setContentsMargins(0, 0, 0, 0)
+        hlayout.setSpacing(_PAGE_GAP // 2)
+        if len(labels) == 1:
+            spacer = QWidget()
+            spacer.setFixedSize(labels[0].width(), 1)
+            on_the_right = self._spread == BOOK and row[0] % 2 == 0  # ímpar contando de 1
+            pair = [spacer, labels[0]] if on_the_right else [labels[0], spacer]
+        else:
+            pair = labels
+        for item, side in zip(pair, (Qt.AlignmentFlag.AlignRight, Qt.AlignmentFlag.AlignLeft)):
+            hlayout.addWidget(item, 0, side | Qt.AlignmentFlag.AlignTop)
+        return widget
+
+    def _row_of(self, page: int) -> list[int]:
+        return next((row for row in self._rows() if page in row), [page])
 
     def _make_placeholder_label(self, index: int) -> QLabel:
         geometry = self._geometry(index)
@@ -836,8 +892,8 @@ class PdfViewer(QWidget):
         for index, label in enumerate(self._page_labels):
             label_top = self._page_tops[index]
             label_bottom = label_top + label.height()
-            if label_top <= viewport_top:
-                current_page = index
+            if label_top <= viewport_top and (index == 0 or self._page_tops[index - 1] != label_top):
+                current_page = index  # na página dupla, a primeira da linha
             if label_bottom >= viewport_top - buffer and label_top <= viewport_bottom + buffer:
                 if index not in self._rendered_pages:
                     self._render_page_into_label(index, label)
@@ -845,6 +901,10 @@ class PdfViewer(QWidget):
                 label_bottom < viewport_top - keep or label_top > viewport_bottom + keep
             ):
                 self._release_page(index)
+        if scrollbar.maximum() > 0 and viewport_top >= scrollbar.maximum():
+            # No fim da rolagem a última linha não chega ao topo: ela é a atual (senão
+            # "próxima" e o indicador ficariam presos na penúltima).
+            current_page = self._page_tops.index(self._page_tops[-1])
 
         self._current_page = current_page
         self.thumbnail_list.select_page(current_page)
@@ -896,7 +956,9 @@ class PdfViewer(QWidget):
     # -- navegação e zoom -----------------------------------------------------
 
     def _go_prev(self):
-        if self._continuous:
+        if self._spread:
+            self._step_row(-1)
+        elif self._continuous:
             self._scroll_to_page(max(0, self._current_page - 1))
         else:
             self._show_single_page(max(0, self._current_page - 1))
@@ -905,10 +967,18 @@ class PdfViewer(QWidget):
         if self._document is None:
             return
         last = self._page_count() - 1
-        if self._continuous:
+        if self._spread:
+            self._step_row(1)
+        elif self._continuous:
             self._scroll_to_page(min(last, self._current_page + 1))
         else:
             self._show_single_page(min(last, self._current_page + 1))
+
+    def _step_row(self, direction: int):
+        """Na página dupla, avança ou volta uma linha (duas páginas)."""
+        rows = self._rows()
+        current = next((n for n, row in enumerate(rows) if self._current_page in row), 0)
+        self._scroll_to_page(rows[max(0, min(len(rows) - 1, current + direction))][0])
 
     def _go_first(self):
         self._go_to_page(0)
@@ -944,11 +1014,11 @@ class PdfViewer(QWidget):
         """Zoom para a página inteira caber na área visível."""
         if self._document is None:
             return
-        geometry = self._geometry(self._current_page)
-        if geometry.width <= 0 or geometry.height <= 0:
+        width, height = self._row_size(self._current_page)
+        if width <= 0 or height <= 0:
             return
         viewport = self.scroll_area.viewport()
-        scale = min((viewport.width() - 24) / geometry.width, (viewport.height() - 24) / geometry.height)
+        scale = min((viewport.width() - 24) / width, (viewport.height() - 24) / height)
         self._scale = max(_MIN_SCALE, min(_MAX_SCALE, scale))
         self._apply_zoom()
 
@@ -999,22 +1069,60 @@ class PdfViewer(QWidget):
     def _fit_width(self):
         if self._document is None:
             return
-        width_pt = self._geometry(self._current_page).width
+        width_pt = self._row_size(self._current_page)[0]
         if width_pt <= 0:
             return
         viewport_width = self.scroll_area.viewport().width() - 24
         self._scale = max(_MIN_SCALE, min(_MAX_SCALE, viewport_width / width_pt))
         self._apply_zoom()
 
-    def _set_continuous(self, continuous: bool):
-        if continuous == self._continuous:
+    def _row_size(self, page: int) -> tuple[float, float]:
+        """Largura e altura, em pontos, do que o zoom precisa caber: a página, ou a linha na
+        página dupla (página sozinha ocupa o lugar de duas, como nas outras linhas)."""
+        geometries = [self._geometry(index) for index in self._row_of(page)]
+        if not self._spread:
+            return geometries[0].width, geometries[0].height
+        gap = _PAGE_GAP / 2 / self._scale  # o vão entre as páginas não cresce com o zoom
+        return 2 * max(g.width for g in geometries) + gap, max(g.height for g in geometries)
+
+    def start_presentation(self):
+        """Exibir > Apresentação: o documento de trabalho em tela cheia, a partir da página
+        atual, na tela em que a janela está. Ao sair, o visualizador vai à última mostrada."""
+        path = self.session.path()
+        if self._document is None or not path:
+            return None
+        window = PresentationWindow(path, self._current_page)
+        window.finished.connect(self._go_to_page)
+        screen = self.screen()
+        if screen is not None:
+            window.setGeometry(screen.geometry())
+        window.showFullScreen()
+        window.activateWindow()
+        self._presentation = window  # referência Python enquanto a janela existe
+        return window
+
+    def page_layout(self) -> str:
+        if not self._continuous:
+            return SINGLE
+        return self._spread or CONTINUOUS
+
+    def set_layout(self, layout: str):
+        """Página única, rolagem contínua, página dupla ou livro (capa sozinha)."""
+        if layout not in LAYOUTS:
+            raise ValueError(f"Layout inválido: {layout}")
+        continuous, spread = layout != SINGLE, layout if layout in (DOUBLE, BOOK) else None
+        if hasattr(self, "single_page_button"):
+            buttons = {SINGLE: self.single_page_button, CONTINUOUS: self.continuous_button}
+            buttons.get(layout, self.double_page_button).setChecked(True)
+        if (continuous, spread) == (self._continuous, self._spread):
             return
         page = self._current_page
-        self._continuous = continuous
+        self._continuous, self._spread = continuous, spread
         if self._document is not None:
             self._rebuild_canvas()
             if continuous:
                 self._scroll_to_page(page)  # continua na página em que o usuário estava
+        self.layout_changed.emit(layout)
 
     def _toggle_thumbnails(self, checked: bool):
         self._show_thumbnails = checked
@@ -1134,9 +1242,7 @@ class PdfViewer(QWidget):
             or self.area_pick_state.is_page_active()
         )
         if drawing_active and self._continuous:
-            self._set_continuous(False)
-            if hasattr(self, "single_page_button"):
-                self.single_page_button.setChecked(True)
+            self.set_layout(SINGLE)
         self._update_canvas_cursor()
 
     def _update_canvas_cursor(self):

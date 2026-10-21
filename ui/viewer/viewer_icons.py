@@ -86,6 +86,14 @@ def build_continuous_page_icon() -> QIcon:
     return _build(draw)
 
 
+def build_double_page_icon() -> QIcon:
+    def draw(p):
+        p.drawRoundedRect(QRectF(2.5, 4, 8, 14), 1.2, 1.2)
+        p.drawRoundedRect(QRectF(11.5, 4, 8, 14), 1.2, 1.2)
+
+    return _build(draw)
+
+
 def build_thumbnails_icon() -> QIcon:
     def draw(p):
         p.drawRoundedRect(QRectF(3, 3, 7, 7), 1, 1)

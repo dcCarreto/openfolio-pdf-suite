@@ -50,8 +50,9 @@ servidor nenhum e sem paywall. Tudo roda localmente, na sua máquina.
 A navegação é feita por uma barra lateral com ícone e descrição de cada ferramenta. No centro
 fica o visualizador — sempre visível, com miniaturas, marcadores e anexos ao lado, zoom
 (também com Ctrl + roda do mouse), ajuste à largura ou à página, rotação da visualização,
-rolagem contínua ou página única, busca que destaca todas as ocorrências e seleção de texto
-com Ctrl+C. É nele que você desenha as anotações, marca as áreas de redação e posiciona o que
+rolagem contínua, página única, página dupla ou livro (capa sozinha), busca que destaca todas
+as ocorrências e seleção de texto com Ctrl+C; **Exibir > Apresentação** (F5) mostra o
+documento em tela cheia, uma página por vez (setas, espaço ou clique passam; Esc sai). É nele que você desenha as anotações, marca as áreas de redação e posiciona o que
 as ferramentas pedem (a área de um texto novo, de um link, de um campo de formulário, do corte
 ou do selo da assinatura), arrastando sobre a página. Formulários são preenchidos ali mesmo, no
 modo página única: os campos aparecem realçados, e um clique abre o campo de texto, marca a

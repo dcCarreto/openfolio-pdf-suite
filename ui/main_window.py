@@ -40,6 +40,7 @@ from ui.redaction_state import RedactionState
 from ui.tasks import call, run_task, task_manager
 from ui import theme
 from ui.theme import apply_titlebar
+from ui.viewer import pdf_viewer as viewer_layouts
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.widget_state import capture_state, restore_state
 from ui.widgets.page_container import PageContainer
@@ -182,6 +183,7 @@ class MainWindow(QMainWindow):
         i18n.install_qt_translator(QApplication.instance())
         i18n.language_changed.changed.connect(self._on_language_changed)
         QGuiApplication.styleHints().colorSchemeChanged.connect(self._on_system_color_scheme_changed)
+        self.viewer.layout_changed.connect(lambda layout: self._layout_actions[layout].setChecked(True))
         self._tasks.started.connect(self._on_task_started)
         self._tasks.started.connect(self.session.note_operation)
         self._tasks.finished.connect(self._on_task_finished)
@@ -315,10 +317,27 @@ class MainWindow(QMainWindow):
         self._redo_action = edit_menu.addAction(tr("Refazer"))
         self._redo_action.setShortcuts(["Ctrl+Y", "Ctrl+Shift+Z"])
         self._redo_action.triggered.connect(self.redo)
-        if hasattr(self, "session"):
-            self._update_document_actions()
 
         view_menu = menu_bar.addMenu(tr("Exibir"))
+        self._presentation_action = view_menu.addAction(tr("Apresentação"))
+        self._presentation_action.setShortcuts(["F5", "Ctrl+L"])
+        self._presentation_action.triggered.connect(self.viewer.start_presentation)
+        layout_menu = view_menu.addMenu(tr("Páginas"))
+        layout_group = QActionGroup(layout_menu)
+        self._layout_actions = {}
+        for key, label in (
+            (viewer_layouts.SINGLE, "Página única"),
+            (viewer_layouts.CONTINUOUS, "Rolagem contínua"),
+            (viewer_layouts.DOUBLE, "Página dupla"),
+            (viewer_layouts.BOOK, "Livro (capa sozinha)"),
+        ):
+            action = layout_menu.addAction(tr(label))
+            action.setCheckable(True)
+            action.setChecked(key == self.viewer.page_layout())
+            action.triggered.connect(lambda _checked=False, k=key: self.viewer.set_layout(k))
+            layout_group.addAction(action)
+            self._layout_actions[key] = action
+        view_menu.addSeparator()
         theme_menu = view_menu.addMenu(tr("Tema"))
         theme_group = QActionGroup(theme_menu)
         self._theme_actions = {}
@@ -333,6 +352,8 @@ class MainWindow(QMainWindow):
         help_menu = menu_bar.addMenu(tr("Ajuda"))
         about_action = help_menu.addAction(tr("Sobre o OpenFolio PDF Suite"))
         about_action.triggered.connect(self._show_about)
+        if hasattr(self, "session"):
+            self._update_document_actions()
 
         # Mantemos uma referência Python (self._language_switcher): sem ela, o PySide6
         # pode coletar o widget mesmo com o Qt "dono" dele internamente via setCornerWidget.
@@ -535,6 +556,7 @@ class MainWindow(QMainWindow):
         self._save_as_action.setEnabled(has_document and not busy)
         self._print_action.setEnabled(has_document and not busy)
         self._properties_action.setEnabled(has_document and not busy)
+        self._presentation_action.setEnabled(has_document)
 
         source = self.session.source_path()
         if source:
