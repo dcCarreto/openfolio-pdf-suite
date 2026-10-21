@@ -21,7 +21,7 @@ dependencies = [
 openfolio = "core.cli:main"
 
 [project.optional-dependencies]
-test = ["pytest>=7.0"]
+test = ["pytest>=7.0", "pytest-cov>=6.0"]
 build = ["pyinstaller>=6.0"]
 # Versões fixas: uma versão nova do ruff ou do mypy pode reprovar o CI sem mudança no código.
 lint = ["ruff==0.17.1", "mypy==2.4.0"]
@@ -41,6 +41,15 @@ target-version = "py310"
 select = ["E4", "E7", "E9", "F", "W", "B"]
 # zip() sem strict=: vários usos pareiam de propósito listas de tamanhos diferentes.
 ignore = ["B905"]
+
+[tool.coverage.run]
+source = ["core", "ui"]
+
+[tool.coverage.report]
+# Só os arquivos com linhas sem teste, dos menos cobertos para os mais cobertos.
+show_missing = true
+skip_covered = true
+sort = "Cover"
 
 [tool.mypy]
 python_version = "3.10"

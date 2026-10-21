@@ -47,3 +47,26 @@ jobs:
         run: pip install -e ".[test]"
       - name: Rodar testes
         run: pytest
+
+  coverage:
+    # Python 3.14: o coverage usa o sys.monitoring, que tambem acompanha o codigo rodado nas
+    # threads do Qt (QThreadPool); no 3.11 o corpo das tarefas apareceria como sem teste.
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Instalar dependencias do sistema (necessarias so pra importar o PySide6)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0 libxkbcommon0 libxcb-cursor0 libgl1
+      - name: Instalar dependencias Python
+        run: pip install -e ".[test]"
+      - name: Rodar testes com cobertura
+        run: pytest --cov
+      - name: Resumo da cobertura
+        if: always()
+        run: coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"

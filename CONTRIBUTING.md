@@ -17,4 +17,5 @@
   ruff check .   # bugs comuns (nomes indefinidos, imports sem uso, armadilhas do flake8-bugbear)
   mypy           # tipos de core/ e ui/ (configuração no pyproject.toml)
   pytest
+  pytest --cov   # opcional: lista os arquivos com linhas sem teste, dos menos cobertos
   ```
