@@ -25,9 +25,12 @@ def main():
     logging.getLogger("openfolio").info("OpenFolio PDF Suite %s iniciado (log: %s)", APP_VERSION, log_file)
 
     settings = QSettings()
-    apply_theme(app, Preferences(settings).theme())
+    preferences = Preferences(settings)
+    apply_theme(app, preferences.theme())
     window = MainWindow(settings=settings)
     window.show()
+    if preferences.check_updates_on_start():
+        window.check_for_updates(manual=False)
 
     # "Abrir com" / duplo clique num PDF: o arquivo chega como argumento (Windows, Linux)
     # ou como evento FileOpen (macOS).

@@ -41,7 +41,10 @@
 O OpenFolio PDF Suite é um aplicativo desktop (Windows/Linux/macOS, via PySide6) que reúne as
 operações de PDF mais comuns — mesclar, dividir, comprimir, proteger, converter, preencher,
 anotar, redigir, assinar — sem depender de ferramentas online, sem enviar seus arquivos para
-servidor nenhum e sem paywall. Tudo roda localmente, na sua máquina.
+servidor nenhum e sem paywall. Tudo roda localmente, na sua máquina. O app só acessa a internet
+para ver se há versão nova, e só quando você pede (**Ajuda > Verificar atualizações**) ou liga
+a verificação ao iniciar, que vem desligada; ele consulta a lista pública de releases do GitHub
+e não envia nada sobre você ou seus documentos.
 
 <p align="center">
   <img src="assets/screenshots/01-visao-geral.png" alt="Janela principal do OpenFolio PDF Suite: sidebar, visualizador central com um PDF aberto e a aba Anotações" width="900">
@@ -355,6 +358,7 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
   xfdf.py          Exportação e importação de comentários em XFDF
   properties.py    Propriedades do documento: proteção, fontes, tamanhos de página
   cli.py           Linha de comando (openfolio merge/split/compress/...), sem Qt
+  updates.py       Escolha da release mais nova na lista do GitHub (verificação opt-in)
   ocr.py           Reconhecimento de texto (Tesseract) com camada de texto invisível
   redaction.py     Redação real (rasterização + verificação) e sanitização de PDFs
   signature.py     Assinatura digital (pyhanko) e verificação completa das assinaturas
@@ -366,7 +370,7 @@ ui/              Interface gráfica (PySide6)
   icon.py              Ícone da aplicação (renderizado a partir de assets/logo.svg)
   document_session.py  Documento de trabalho: arquivo do usuário, versões, desfazer/refazer
   area_pick_state.py   Marcação de áreas no visualizador para as ferramentas
-  preferences.py       Arquivos recentes, última pasta e idioma entre sessões
+  preferences.py       Arquivos recentes, última pasta, idioma, tema e atualização
   app_events.py        Arquivos vindos da linha de comando, do "Abrir com" e de arrastar
   errors.py            Mensagens de erro para o usuário, com detalhes técnicos à parte
   printing.py          Impressão do documento (render do pdfium enviado à impressora)

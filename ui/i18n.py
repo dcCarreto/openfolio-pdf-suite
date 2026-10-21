@@ -1667,4 +1667,12 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Apresentação": "Presentation",
     "Página dupla": "Two pages",
     "Livro (capa sozinha)": "Book (cover on its own)",
+    # A17 — verificação de atualização
+    "Verificar atualizações...": "Check for updates...",
+    "Verificar atualizações ao iniciar": "Check for updates at startup",
+    "Verificar atualizações": "Check for updates",
+    "Não foi possível verificar atualizações. Confira a conexão e tente de novo.": "Could not check for updates. Check your connection and try again.",
+    "Você já usa a versão mais nova ({version}).": "You already have the latest version ({version}).",
+    "Atualização disponível": "Update available",
+    "A versão {version} do OpenFolio PDF Suite está disponível (você usa a {current}). Abrir a página de download?": "OpenFolio PDF Suite {version} is available (you have {current}). Open the download page?",
 }

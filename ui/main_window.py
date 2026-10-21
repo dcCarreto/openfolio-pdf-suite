@@ -1,11 +1,13 @@
 """Janela principal da aplicação."""
 
 import importlib
+import json
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QSettings, QSize, Qt
-from PySide6.QtGui import QActionGroup, QGuiApplication
+from PySide6.QtCore import QByteArray, QSettings, QSize, Qt, QUrl
+from PySide6.QtGui import QActionGroup, QDesktopServices, QGuiApplication
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
     QApplication,
@@ -22,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core import updates
 from core.properties import ReadDocumentProperties
 from ui import i18n, sidebar_icons
 from ui.annotation_state import AnnotationState
@@ -350,6 +353,13 @@ class MainWindow(QMainWindow):
             self._theme_actions[key] = action
 
         help_menu = menu_bar.addMenu(tr("Ajuda"))
+        update_action = help_menu.addAction(tr("Verificar atualizações..."))
+        update_action.triggered.connect(lambda: self.check_for_updates(manual=True))
+        self._update_on_start_action = help_menu.addAction(tr("Verificar atualizações ao iniciar"))
+        self._update_on_start_action.setCheckable(True)
+        self._update_on_start_action.setChecked(self._preferences.check_updates_on_start())
+        self._update_on_start_action.toggled.connect(self._preferences.set_check_updates_on_start)
+        help_menu.addSeparator()
         about_action = help_menu.addAction(tr("Sobre o OpenFolio PDF Suite"))
         about_action.triggered.connect(self._show_about)
         if hasattr(self, "session"):
@@ -680,6 +690,59 @@ class MainWindow(QMainWindow):
     def _on_system_color_scheme_changed(self, _scheme) -> None:
         if self._preferences.theme() == theme.SYSTEM:
             theme.apply_theme(QApplication.instance(), theme.SYSTEM)
+
+    def check_for_updates(self, manual: bool = True) -> bool:
+        """Ajuda > Verificar atualizações (e ao iniciar, se o usuário ligou). Só baixa a lista
+        pública de releases do GitHub; nada é instalado. Sem `manual`, só avisa se houver
+        versão nova. Devolve False se já houver uma consulta em andamento."""
+        if getattr(self, "_update_reply", None) is not None:
+            return False
+        if getattr(self, "_network", None) is None:
+            self._network = QNetworkAccessManager(self)
+        request = QNetworkRequest(QUrl(updates.RELEASES_URL))
+        request.setHeader(QNetworkRequest.KnownHeaders.UserAgentHeader, f"OpenFolio-PDF-Suite/{APP_VERSION}")
+        request.setRawHeader(b"Accept", b"application/vnd.github+json")
+        request.setTransferTimeout(15_000)
+        self._update_reply = self._network.get(request)
+        self._update_reply.finished.connect(lambda: self._on_update_reply(manual))
+        return True
+
+    def _on_update_reply(self, manual: bool) -> None:
+        reply, self._update_reply = self._update_reply, None
+        reply.deleteLater()
+        releases = None
+        if reply.error() == QNetworkReply.NetworkError.NoError:
+            try:
+                releases = json.loads(bytes(reply.readAll().data()))
+            except ValueError:
+                pass
+        if not isinstance(releases, list):
+            logging.getLogger("openfolio").warning("Verificação de atualização falhou: %s", reply.errorString())
+            if manual:
+                QMessageBox.warning(
+                    self,
+                    tr("Verificar atualizações"),
+                    tr("Não foi possível verificar atualizações. Confira a conexão e tente de novo."),
+                )
+            return
+        found = updates.newest_release(releases, APP_VERSION)
+        if found is None:
+            if manual:
+                QMessageBox.information(
+                    self,
+                    tr("Verificar atualizações"),
+                    tr("Você já usa a versão mais nova ({version}).").format(version=APP_VERSION),
+                )
+            return
+        version, url = found
+        answer = QMessageBox.question(
+            self,
+            tr("Atualização disponível"),
+            tr("A versão {version} do OpenFolio PDF Suite está disponível (você usa a {current}). "
+               "Abrir a página de download?").format(version=version, current=APP_VERSION),
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            QDesktopServices.openUrl(QUrl(url))
 
     def _show_about(self):
         QMessageBox.about(
