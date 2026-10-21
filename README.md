@@ -295,6 +295,12 @@ A janela principal abre em modo escuro, com a aba **Criar PDF** selecionada por 
 escolher a ferramenta desejada na barra lateral. **Exibir > Tema** troca para o tema claro ou
 segue o do sistema (inclusive quando ele muda com o app aberto); a escolha é lembrada.
 
+**Ctrl+K** (Exibir > Paleta de comandos) abre uma busca por todas as ferramentas e comandos dos
+menus: digite parte do nome ou do que a ferramenta faz ("senha", "lote"), sem se preocupar com
+acentos, e Enter abre. Em **Editar > Atalhos de teclado** cada comando e cada ferramenta pode
+ganhar outro atalho (ou nenhum); atalhos repetidos são recusados e "Restaurar padrões" volta os
+de fábrica.
+
 ### Linha de comando
 
 A instalação pelo código-fonte também cria o comando `openfolio`, com as mesmas operações sem
@@ -370,7 +376,8 @@ ui/              Interface gráfica (PySide6)
   icon.py              Ícone da aplicação (renderizado a partir de assets/logo.svg)
   document_session.py  Documento de trabalho: arquivo do usuário, versões, desfazer/refazer
   area_pick_state.py   Marcação de áreas no visualizador para as ferramentas
-  preferences.py       Arquivos recentes, última pasta, idioma, tema e atualização
+  preferences.py       Arquivos recentes, última pasta, idioma, tema, atualização e atalhos
+  shortcuts.py         Paleta de comandos (Ctrl+K) e tela de atalhos de teclado
   app_events.py        Arquivos vindos da linha de comando, do "Abrir com" e de arrastar
   errors.py            Mensagens de erro para o usuário, com detalhes técnicos à parte
   printing.py          Impressão do documento (render do pdfium enviado à impressora)

@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QSettings, QSize, Qt, QUrl
-from PySide6.QtGui import QActionGroup, QDesktopServices, QGuiApplication
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QGuiApplication, QKeySequence
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
@@ -40,6 +40,7 @@ from ui.preferences import Preferences, start_folder, use_preferences
 from ui.printing import page_count_for_printing, pages_to_print, print_pages
 from ui.properties_dialog import DocumentPropertiesDialog
 from ui.redaction_state import RedactionState
+from ui.shortcuts import CommandPalette, ShortcutsDialog
 from ui.tasks import call, run_task, task_manager
 from ui import theme
 from ui.theme import apply_titlebar
@@ -177,6 +178,7 @@ class MainWindow(QMainWindow):
         self._redaction_row = self._row_of["RedactionPage"]
         self._measure_row = self._row_of["MeasurePage"]
         self._pages: dict[int, QWidget] = {}  # linha -> aba já construída
+        self._default_shortcuts: dict[str, list[QKeySequence]] = {}  # chave do comando -> de fábrica
 
         self._build_ui()
         self._build_menu_bar()
@@ -285,45 +287,51 @@ class MainWindow(QMainWindow):
         """A aba da linha `row` da barra lateral (construída se ainda não foi)."""
         return self._ensure_page(row)
 
+    def _command(self, menu, key: str, label: str, *shortcuts: str) -> QAction:
+        """Ação de menu com chave estável (`objectName`), alcançável pela paleta de comandos
+        e com atalho configurável; `shortcuts` são os de fábrica."""
+        action = menu.addAction(label)
+        action.setObjectName(key)
+        action.setShortcuts(list(shortcuts))
+        self._commands.append((menu.title(), action))
+        return action
+
     def _build_menu_bar(self):
         menu_bar = self.menuBar()
         menu_bar.clear()
+        # (título do menu, ação), na ordem dos menus. Guardado aqui porque percorrer os menus
+        # com QAction.menu() no PySide6 apaga o submenu quando o objeto Python é coletado.
+        self._commands: list[tuple[str, QAction]] = []
+        command = self._command
 
         file_menu = menu_bar.addMenu(tr("Arquivo"))
-        open_action = file_menu.addAction(tr("Abrir PDF..."))
-        open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(self._open_pdf)
-        self._save_action = file_menu.addAction(tr("Salvar"))
-        self._save_action.setShortcut("Ctrl+S")
+        command(file_menu, "file.open", tr("Abrir PDF..."), "Ctrl+O").triggered.connect(self._open_pdf)
+        self._save_action = command(file_menu, "file.save", tr("Salvar"), "Ctrl+S")
         self._save_action.triggered.connect(self.save_document)
-        self._save_as_action = file_menu.addAction(tr("Salvar como..."))
-        self._save_as_action.setShortcut("Ctrl+Shift+S")
+        self._save_as_action = command(file_menu, "file.save_as", tr("Salvar como..."), "Ctrl+Shift+S")
         self._save_as_action.triggered.connect(self.save_document_as)
-        self._print_action = file_menu.addAction(tr("Imprimir..."))
-        self._print_action.setShortcut("Ctrl+P")
+        self._print_action = command(file_menu, "file.print", tr("Imprimir..."), "Ctrl+P")
         self._print_action.triggered.connect(self.print_document)
-        self._properties_action = file_menu.addAction(tr("Propriedades do documento..."))
-        self._properties_action.setShortcut("Ctrl+D")
+        self._properties_action = command(file_menu, "file.properties", tr("Propriedades do documento..."), "Ctrl+D")
         self._properties_action.triggered.connect(self.show_document_properties)
         self._recent_menu = file_menu.addMenu(tr("Abrir recente"))
         self._recent_menu.aboutToShow.connect(self._fill_recent_menu)
         self._recent_menu.setEnabled(bool(self._preferences.recent_files()))
         file_menu.addSeparator()
-        quit_action = file_menu.addAction(tr("Sair"))
-        quit_action.setShortcut("Ctrl+Q")
-        quit_action.triggered.connect(self.close)
+        command(file_menu, "file.quit", tr("Sair"), "Ctrl+Q").triggered.connect(self.close)
 
         edit_menu = menu_bar.addMenu(tr("Editar"))
-        self._undo_action = edit_menu.addAction(tr("Desfazer"))
-        self._undo_action.setShortcut("Ctrl+Z")
+        self._undo_action = command(edit_menu, "edit.undo", tr("Desfazer"), "Ctrl+Z")
         self._undo_action.triggered.connect(self.undo)
-        self._redo_action = edit_menu.addAction(tr("Refazer"))
-        self._redo_action.setShortcuts(["Ctrl+Y", "Ctrl+Shift+Z"])
+        self._redo_action = command(edit_menu, "edit.redo", tr("Refazer"), "Ctrl+Y", "Ctrl+Shift+Z")
         self._redo_action.triggered.connect(self.redo)
+        edit_menu.addSeparator()
+        command(edit_menu, "edit.shortcuts", tr("Atalhos de teclado...")).triggered.connect(self.edit_shortcuts)
 
         view_menu = menu_bar.addMenu(tr("Exibir"))
-        self._presentation_action = view_menu.addAction(tr("Apresentação"))
-        self._presentation_action.setShortcuts(["F5", "Ctrl+L"])
+        self._palette_action = command(view_menu, "view.palette", tr("Paleta de comandos..."), "Ctrl+K")
+        self._palette_action.triggered.connect(self.show_command_palette)
+        self._presentation_action = command(view_menu, "view.presentation", tr("Apresentação"), "F5", "Ctrl+L")
         self._presentation_action.triggered.connect(self.viewer.start_presentation)
         layout_menu = view_menu.addMenu(tr("Páginas"))
         layout_group = QActionGroup(layout_menu)
@@ -334,7 +342,7 @@ class MainWindow(QMainWindow):
             (viewer_layouts.DOUBLE, "Página dupla"),
             (viewer_layouts.BOOK, "Livro (capa sozinha)"),
         ):
-            action = layout_menu.addAction(tr(label))
+            action = command(layout_menu, f"view.layout.{key}", tr(label))
             action.setCheckable(True)
             action.setChecked(key == self.viewer.page_layout())
             action.triggered.connect(lambda _checked=False, k=key: self.viewer.set_layout(k))
@@ -345,7 +353,7 @@ class MainWindow(QMainWindow):
         theme_group = QActionGroup(theme_menu)
         self._theme_actions = {}
         for key, label in ((theme.DARK, "Escuro"), (theme.LIGHT, "Claro"), (theme.SYSTEM, "Seguir o sistema")):
-            action = theme_menu.addAction(tr(label))
+            action = command(theme_menu, f"view.theme.{key}", tr(label))
             action.setCheckable(True)
             action.setChecked(key == self._preferences.theme())
             action.triggered.connect(lambda _checked=False, k=key: self.set_theme(k))
@@ -353,15 +361,30 @@ class MainWindow(QMainWindow):
             self._theme_actions[key] = action
 
         help_menu = menu_bar.addMenu(tr("Ajuda"))
-        update_action = help_menu.addAction(tr("Verificar atualizações..."))
+        update_action = command(help_menu, "help.check_updates", tr("Verificar atualizações..."))
         update_action.triggered.connect(lambda: self.check_for_updates(manual=True))
-        self._update_on_start_action = help_menu.addAction(tr("Verificar atualizações ao iniciar"))
+        self._update_on_start_action = command(help_menu, "help.check_updates_on_start", tr("Verificar atualizações ao iniciar"))
         self._update_on_start_action.setCheckable(True)
         self._update_on_start_action.setChecked(self._preferences.check_updates_on_start())
         self._update_on_start_action.toggled.connect(self._preferences.set_check_updates_on_start)
         help_menu.addSeparator()
-        about_action = help_menu.addAction(tr("Sobre o OpenFolio PDF Suite"))
-        about_action.triggered.connect(self._show_about)
+        command(help_menu, "help.about", tr("Sobre o OpenFolio PDF Suite")).triggered.connect(self._show_about)
+
+        # Uma ação por ferramenta, fora dos menus (a barra lateral já as lista), para a paleta
+        # e para quem quiser um atalho direto para a aba.
+        for action in getattr(self, "_tool_actions", []):
+            self.removeAction(action)
+            action.deleteLater()
+        self._tool_actions = []
+        for row, (_icon, title, subtitle, _module, class_name) in enumerate(_SECTIONS):
+            action = QAction(self.sidebar.item(row).icon(), tr(title), self)
+            action.setObjectName(f"tool.{class_name}")
+            action.setStatusTip(tr(subtitle))
+            action.triggered.connect(lambda _checked=False, r=row: self.sidebar.setCurrentRow(r))
+            self.addAction(action)
+            self._tool_actions.append(action)
+            self._commands.append((tr("Ferramentas"), action))
+        self._apply_shortcuts()
         if hasattr(self, "session"):
             self._update_document_actions()
 
@@ -403,6 +426,33 @@ class MainWindow(QMainWindow):
         layout.addWidget(us_button)
         layout.addWidget(br_button)
         return widget
+
+    # -- comandos e atalhos (A18) ------------------------------------------------------
+
+    def commands(self) -> list[tuple[str, QAction]]:
+        """(rótulo, ação) de tudo o que a paleta de comandos e a tela de atalhos alcançam: as
+        ações dos menus com chave e as das ferramentas. O rótulo usa o texto atual da ação
+        ("Desfazer Comprimir")."""
+        return [(f"{title} › {action.text()}", action) for title, action in self._commands]
+
+    def _apply_shortcuts(self):
+        for _label, action in self.commands():
+            key = action.objectName()
+            defaults = self._default_shortcuts.setdefault(key, action.shortcuts())
+            custom = self._preferences.shortcut(key)
+            action.setShortcuts(defaults if custom is None else [QKeySequence(custom)])
+
+    def show_command_palette(self):
+        palette = CommandPalette([c for c in self.commands() if c[1] is not self._palette_action], self)
+        if palette.exec() and palette.chosen is not None:
+            palette.chosen.trigger()
+
+    def edit_shortcuts(self):
+        dialog = ShortcutsDialog(self.commands(), self._default_shortcuts, self)
+        if dialog.exec():
+            for key, keys in dialog.changes().items():
+                self._preferences.set_shortcut(key, keys)
+            self._apply_shortcuts()
 
     # -- tamanho e posição -----------------------------------------------------
 

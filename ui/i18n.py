@@ -1675,4 +1675,16 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Você já usa a versão mais nova ({version}).": "You already have the latest version ({version}).",
     "Atualização disponível": "Update available",
     "A versão {version} do OpenFolio PDF Suite está disponível (você usa a {current}). Abrir a página de download?": "OpenFolio PDF Suite {version} is available (you have {current}). Open the download page?",
+    # A18 — paleta de comandos e atalhos
+    "Atalhos de teclado...": "Keyboard shortcuts...",
+    "Paleta de comandos...": "Command palette...",
+    "Ferramentas": "Tools",
+    "Paleta de comandos": "Command palette",
+    "Digite o nome de uma ferramenta ou comando": "Type the name of a tool or command",
+    "Atalhos de teclado": "Keyboard shortcuts",
+    "Comando": "Command",
+    "Atalho": "Shortcut",
+    "Restaurar padrões": "Restore defaults",
+    "O atalho {keys} já é usado pelo visualizador.": "The shortcut {keys} is already used by the viewer.",
+    "O atalho {keys} já é usado por \"{command}\".": "The shortcut {keys} is already used by \"{command}\".",
 }

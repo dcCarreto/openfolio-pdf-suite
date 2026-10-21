@@ -1,5 +1,5 @@
 """Preferências do usuário guardadas entre sessões: arquivos recentes, última pasta, idioma,
-tema, verificação de atualização e a assinatura e as iniciais do "Preencher e assinar".
+tema, verificação de atualização, atalhos de teclado e a assinatura e as iniciais do "Preencher e assinar".
 
 Ficam no mesmo QSettings da geometria da janela. Sem QSettings (testes), as preferências
 vivem só na memória do processo.
@@ -82,6 +82,22 @@ class Preferences:
 
     def set_check_updates_on_start(self, enabled: bool) -> None:
         self._set("updates/check_on_start", "true" if enabled else "false")
+
+    # -- atalhos de teclado (A18) -------------------------------------------------
+
+    def shortcut(self, command: str) -> str | None:
+        """Atalho escolhido para `command` ("" = nenhum), ou None se ficou o de fábrica."""
+        value = self._get(f"shortcuts/{command}")
+        return None if value is None else str(value)
+
+    def set_shortcut(self, command: str, keys: str | None) -> None:
+        key = f"shortcuts/{command}"
+        if keys is not None:
+            self._set(key, keys)
+        elif self._settings is None:
+            self._memory.pop(key, None)
+        else:
+            self._settings.remove(key)
 
     # -- assinatura e iniciais (A04) ----------------------------------------------
 
