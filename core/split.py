@@ -78,13 +78,13 @@ class SplitByBookmarks(PDFOperation):
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(parents=True, exist_ok=True)
 
-        parts = []
+        parts: list[tuple[str, int, int]] = []
         if starts[0][1] > 0:
             parts.append(("inicio", 0, starts[0][1]))
         for index, (title, start_page) in enumerate(starts):
             end_page = starts[index + 1][1] if index + 1 < len(starts) else total_pages
             if end_page > start_page:
-                parts.append((title, start_page, end_page))
+                parts.append((title or "", start_page, end_page))
 
         output_paths = []
         first_number = 0 if starts[0][1] > 0 else 1

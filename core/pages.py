@@ -7,6 +7,7 @@ contadas a partir de 1, como o usuário as vê.
 """
 
 import io
+from collections.abc import Iterable
 
 from pypdf import PdfReader, PdfWriter
 
@@ -15,7 +16,7 @@ from .document import pages_writer
 from .messages import Message
 
 
-def _page_list(pages: list[int]) -> str:
+def _page_list(pages: Iterable[int]) -> str:
     return ", ".join(str(page + 1) for page in sorted(pages))
 
 
@@ -172,17 +173,21 @@ class ArrangePages(PDFOperation):
         parts: list[tuple[PdfReader, list[int]]] = []
         blank_count = 0
         for index, _angle in layout:
-            source, page = (reader, index) if index is not None else (blanks, blank_count)
-            blank_count += index is None
+            if index is not None:
+                source, page = reader, index
+            else:
+                assert blanks is not None  # há páginas em branco na lista
+                source, page = blanks, blank_count
+                blank_count += 1
             if parts and parts[-1][0] is source:
                 parts[-1][1].append(page)
             else:
                 parts.append((source, [page]))
 
         writer = pages_writer(parts, properties_from=reader)
-        for page, (_index, angle) in zip(writer.pages, layout):
+        for new_page, (_index, angle) in zip(writer.pages, layout):
             if angle % 360:
-                page.rotate(angle)
+                new_page.rotate(angle)
         write_pdf(writer, output_path)
 
 
@@ -200,6 +205,7 @@ def _blank_pages(reader: PdfReader, layout: list[tuple[int | None, int]]) -> Pdf
             sizes.append(_A4)
             continue
         index, angle = previous
+        assert index is not None  # `previous` só guarda páginas reais
         page = reader.pages[index]
         width, height = float(page.mediabox.width), float(page.mediabox.height)
         sizes.append((height, width) if (page.rotation + angle) % 180 else (width, height))

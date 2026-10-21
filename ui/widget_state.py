@@ -92,7 +92,7 @@ def _capture_one(widget: QWidget) -> Any:
         return None if widget.isReadOnly() else widget.toPlainText()
     if isinstance(widget, QTableWidget):
         cells = [
-            [widget.item(row, column).text() if widget.item(row, column) else None for column in range(widget.columnCount())]
+            [item.text() if (item := widget.item(row, column)) else None for column in range(widget.columnCount())]
             for row in range(widget.rowCount())
         ]
         return cells

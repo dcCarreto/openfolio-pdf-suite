@@ -37,7 +37,8 @@ def _stamp_text(input_path: str, output_path: str, label_for_page, position_for_
             else:
                 canvas.drawCentredString(x, y, text)
 
-        page.merge_page(visual_overlay(PageGeometry.from_pypdf_page(source_page), draw))
+        if (overlay := visual_overlay(PageGeometry.from_pypdf_page(source_page), draw)) is not None:
+            page.merge_page(overlay)
 
     write_pdf(writer, output_path)
 

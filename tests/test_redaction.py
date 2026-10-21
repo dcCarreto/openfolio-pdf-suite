@@ -1,8 +1,10 @@
 """Testes de core/redaction.py: redação real (rasterização) e sanitização de PDFs."""
 
+from types import SimpleNamespace
+
 import pypdfium2 as pdfium
 import pytest
-from pypdf import PdfReader, PdfWriter
+from pypdf import PageObject, PdfReader, PdfWriter
 from pypdf.annotations import Highlight
 from pypdf.generic import (
     ArrayObject,
@@ -326,6 +328,19 @@ def test_redaction_is_not_saved_when_verification_fails(make_text_pdf, tmp_path,
 
     assert not path_out.exists()
     assert not list(tmp_path.glob(".openfolio-*"))
+
+
+def test_redaction_is_not_saved_when_the_page_image_cannot_be_read(make_text_pdf, tmp_path, monkeypatch):
+    path_in = make_text_pdf("doc.pdf", [(80, 650, "CPF 123.456.789-09")])
+    path_out = tmp_path / "out.pdf"
+    rects = FindSensitiveData().run(str(path_in), kinds=["cpf"])
+    # Sem conseguir ler a imagem da página, não dá para conferir a área: nada é salvo.
+    monkeypatch.setattr(PageObject, "images", property(lambda self: [SimpleNamespace(image=None)]))
+
+    with pytest.raises(RedactionVerificationError):
+        RedactDocument().run(str(path_in), str(path_out), rects)
+
+    assert not path_out.exists()
 
 
 def test_redaction_rejects_invalid_page_index(make_text_pdf, tmp_path):

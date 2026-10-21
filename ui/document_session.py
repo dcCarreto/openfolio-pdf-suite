@@ -115,7 +115,7 @@ class DocumentSession(QObject):
             self.page_selection_changed.emit()
 
     def is_version_path(self, path: str | None) -> bool:
-        return bool(path) and _key(path) in {_key(p) for p in self._pending}
+        return bool(path and _key(path) in {_key(p) for p in self._pending})
 
     # -- abrir e versões ----------------------------------------------------------
 
@@ -192,6 +192,7 @@ class DocumentSession(QObject):
         if not self._versions or self._source is None:
             return
         current = self.path()
+        assert current is not None  # há versões
         if _key(current) != _key(self._source):
             _copy_atomically(current, self._source)
         self._saved_index = self._index
@@ -202,6 +203,7 @@ class DocumentSession(QObject):
         if not self._versions:
             return
         current = self.path()
+        assert current is not None  # há versões
         if _key(current) != _key(path):
             _copy_atomically(current, path)
         password = known_password(current)

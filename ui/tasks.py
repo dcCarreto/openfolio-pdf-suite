@@ -72,7 +72,7 @@ class TaskManager(QObject):
         self._title = ""
         self._progress: Progress | None = None
         self._signals: _Signals | None = None
-        self._on_success: Callable[[Any], None] | None = None
+        self._on_success: Callable[[Any], object] | None = None
         self._on_error: Callable[[BaseException], None] | None = None
 
     def is_busy(self) -> bool:
@@ -85,7 +85,7 @@ class TaskManager(QObject):
         self,
         title: str,
         fn: Callable[[Progress], Any],
-        on_success: Callable[[Any], None] | None = None,
+        on_success: Callable[[Any], object] | None = None,
         on_error: Callable[[BaseException], None] | None = None,
     ) -> bool:
         """Inicia `fn(progress)` numa thread de trabalho. Devolve False (sem rodar nada) se
@@ -186,7 +186,7 @@ def run_task(
     parent: QWidget,
     title: str,
     fn: Callable[[Progress], Any],
-    on_success: Callable[[Any], None] | None = None,
+    on_success: Callable[[Any], object] | None = None,
     error_message: str | None = None,
     on_error: Callable[[BaseException], None] | None = None,
 ) -> bool:

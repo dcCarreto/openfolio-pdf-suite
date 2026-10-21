@@ -369,8 +369,7 @@ def apply_titlebar(window: QWidget) -> None:
     if sys.platform != "win32":
         return
 
-    app = QApplication.instance()
-    if app is not None and app.platformName() == "offscreen":
+    if QApplication.platformName() == "offscreen":
         return
 
     import ctypes

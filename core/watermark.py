@@ -35,6 +35,7 @@ class AddWatermark(PDFOperation):
             canvas.drawCentredString(0, 0, text)
 
         for source_page, page in zip(reader.pages, writer.pages):
-            page.merge_page(visual_overlay(PageGeometry.from_pypdf_page(source_page), draw))
+            if (overlay := visual_overlay(PageGeometry.from_pypdf_page(source_page), draw)) is not None:
+                page.merge_page(overlay)
 
         write_pdf(writer, output_path)

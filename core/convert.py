@@ -122,12 +122,12 @@ class ConvertFromImages(PDFOperation):
 def _prepared_image(path: str):
     """A imagem pronta para o reportlab (o próprio arquivo, se for um JPEG que não precisa
     de ajuste) e o tamanho dela em pixels, já na orientação certa."""
-    with Image.open(path) as image:
-        is_jpeg = image.format == "JPEG"
-        orientation = image.getexif().get(_EXIF_ORIENTATION, 1)
-        if is_jpeg and orientation == 1 and image.mode in ("RGB", "L"):
-            return path, image.size
-        image = ImageOps.exif_transpose(image)
+    with Image.open(path) as opened:
+        is_jpeg = opened.format == "JPEG"
+        orientation = opened.getexif().get(_EXIF_ORIENTATION, 1)
+        if is_jpeg and orientation == 1 and opened.mode in ("RGB", "L"):
+            return path, opened.size
+        image = ImageOps.exif_transpose(opened)
         if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
             rgba = image.convert("RGBA")
             flattened = Image.new("RGB", rgba.size, "white")

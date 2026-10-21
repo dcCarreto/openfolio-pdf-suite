@@ -85,9 +85,9 @@ class DocumentSidePanel(QTabWidget):
             logger.debug("Sem anexos legíveis em %s", path, exc_info=True)
             attachments = []
         for info in attachments:
-            item = QListWidgetItem(f"{info.name} ({_size(info.size)})")
-            item.setData(Qt.ItemDataRole.UserRole, info.name)
-            self.attachments_list.addItem(item)
+            attachment = QListWidgetItem(f"{info.name} ({_size(info.size)})")
+            attachment.setData(Qt.ItemDataRole.UserRole, info.name)
+            self.attachments_list.addItem(attachment)
         self._update_tabs()
 
     def clear(self) -> None:

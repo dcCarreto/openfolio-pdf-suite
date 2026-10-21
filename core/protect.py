@@ -1,6 +1,7 @@
 """Proteção por senha e permissões de arquivos PDF."""
 
 from dataclasses import dataclass
+from typing import Any
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.constants import UserAccessPermissions as _Perm
@@ -65,7 +66,7 @@ class ProtectPDF(PDFOperation):
         reader = open_reader(input_path)
         writer = PdfWriter(clone_from=reader)
 
-        encrypt_kwargs = {"user_password": password, "algorithm": "AES-256"}
+        encrypt_kwargs: dict[str, Any] = {"user_password": password, "algorithm": "AES-256"}
         if owner_password:
             encrypt_kwargs["owner_password"] = owner_password
         if permissions is not None:

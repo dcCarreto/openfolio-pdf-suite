@@ -4,7 +4,7 @@ from pypdf import PdfWriter
 from pypdf.generic import ArrayObject, ContentStream, FloatObject, NameObject, RectangleObject
 
 from .base import PDFOperation, open_reader, write_pdf
-from .geometry import PageGeometry, intersect_rects
+from .geometry import PageGeometry, intersect_rects, normalize_rect
 from .messages import Message
 from .overlay import materialize_inherited_attributes
 
@@ -74,7 +74,7 @@ class ScalePages(PDFOperation):
             center_x = (left + right) / 2 * factor
             center_y = (bottom + top) / 2 * factor
             box = RectangleObject(
-                [center_x - target_w / 2, center_y - target_h / 2, center_x + target_w / 2, center_y + target_h / 2]
+                (center_x - target_w / 2, center_y - target_h / 2, center_x + target_w / 2, center_y + target_h / 2)
             )
             page.mediabox = box
             page.cropbox = box
@@ -93,7 +93,7 @@ def _clip_other_boxes(page, box: RectangleObject) -> None:
         current = [float(value) for value in page[key]]
         clipped = intersect_rects(
             (min(current[0], current[2]), min(current[1], current[3]), max(current[0], current[2]), max(current[1], current[3])),
-            tuple(float(value) for value in box),
+            normalize_rect(box),
         )
         if clipped is None:
             del page[key]

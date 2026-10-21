@@ -1,7 +1,7 @@
 """Testes de core/layers.py: listar e alternar visibilidade de camadas (OCG)."""
 
 import pytest
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject, TextStringObject
 
 from core.base import EncryptedPDFError
@@ -50,7 +50,7 @@ def test_list_layers_reports_names_and_visibility(tmp_path):
 
     layers = ListLayers().run(str(pdf_path))
 
-    assert [(l.name, l.visible) for l in layers] == [
+    assert [(layer.name, layer.visible) for layer in layers] == [
         ("Fundo", True),
         ("Anotações", True),
         ("Rascunho", False),
@@ -79,7 +79,7 @@ def test_set_layer_visibility_hides_a_visible_layer(tmp_path):
     SetLayerVisibility().run(str(pdf_path), str(output_path), layer_index=1, visible=False)
 
     layers = ListLayers().run(str(output_path))
-    assert [(l.name, l.visible) for l in layers] == [("Fundo", True), ("Rascunho", False)]
+    assert [(layer.name, layer.visible) for layer in layers] == [("Fundo", True), ("Rascunho", False)]
 
 
 def test_set_layer_visibility_shows_a_hidden_layer(tmp_path):
@@ -90,7 +90,7 @@ def test_set_layer_visibility_shows_a_hidden_layer(tmp_path):
     SetLayerVisibility().run(str(pdf_path), str(output_path), layer_index=1, visible=True)
 
     layers = ListLayers().run(str(output_path))
-    assert [(l.name, l.visible) for l in layers] == [("Fundo", True), ("Rascunho", True)]
+    assert [(layer.name, layer.visible) for layer in layers] == [("Fundo", True), ("Rascunho", True)]
 
 
 def test_set_layer_visibility_rejects_invalid_index(tmp_path):

@@ -42,12 +42,14 @@ from .rasterize import (
 
 def _hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
     hex_color = hex_color.lstrip("#")
-    return tuple(int(hex_color[i : i + 2], 16) / 255 for i in (0, 2, 4))
+    red, green, blue = (int(hex_color[i : i + 2], 16) / 255 for i in (0, 2, 4))
+    return red, green, blue
 
 
 def _hex_to_rgb255(hex_color: str) -> tuple[int, int, int]:
     hex_color = hex_color.lstrip("#")
-    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    red, green, blue = (int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    return red, green, blue
 
 
 @dataclass

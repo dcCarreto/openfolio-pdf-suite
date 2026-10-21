@@ -256,7 +256,9 @@ class CompareWindow(QWidget):
             # A cor do destaque sobre o papel branco, opaca: sobre o tema escuro, a
             # transparente ficaria escura.
             color = COLORS[kind]
-            red, green, blue = (255 - (255 - value) * color.alpha() // 255 for value in color.getRgb()[:3])
+            red, green, blue = (
+                255 - (255 - value) * color.alpha() // 255 for value in (color.red(), color.green(), color.blue())
+            )
             legend = QLabel(name)
             legend.setStyleSheet(
                 f"background-color: rgb({red}, {green}, {blue}); color: black; padding: 2px 6px; border-radius: 3px;"
@@ -282,10 +284,10 @@ class CompareWindow(QWidget):
         layout.addLayout(toolbar)
         layout.addWidget(splitter, 1)
 
-        QShortcut(QKeySequence("F3"), self, activated=lambda: self._step(1))
-        QShortcut(QKeySequence("Shift+F3"), self, activated=lambda: self._step(-1))
-        QShortcut(QKeySequence("Ctrl+="), self, activated=lambda: self._zoom(self._scale + _ZOOM_STEP))
-        QShortcut(QKeySequence("Ctrl+-"), self, activated=lambda: self._zoom(self._scale - _ZOOM_STEP))
+        QShortcut(QKeySequence("F3"), self).activated.connect(lambda: self._step(1))
+        QShortcut(QKeySequence("Shift+F3"), self).activated.connect(lambda: self._step(-1))
+        QShortcut(QKeySequence("Ctrl+="), self).activated.connect(lambda: self._zoom(self._scale + _ZOOM_STEP))
+        QShortcut(QKeySequence("Ctrl+-"), self).activated.connect(lambda: self._zoom(self._scale - _ZOOM_STEP))
 
         self._update_sync_points()
         self._update_highlights()

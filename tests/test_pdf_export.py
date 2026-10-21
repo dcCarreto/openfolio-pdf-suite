@@ -14,7 +14,7 @@ from pypdf import PdfReader, PdfWriter
 from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Table
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Table
 
 from core.extract_text import ExtractText
 from core.fonts import SANS, register_fonts

@@ -29,6 +29,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 
 from .base import READ, PDFOperation, add_object, open_reader, require_valid_page_index, write_pdf
 from .fonts import SANS_BOLD, register_fonts, text_width
+from .geometry import normalize_rect
 from .messages import Message
 from .tabular import write_table
 
@@ -56,7 +57,8 @@ class AnnotationSpec:
 
 def _hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
     hex_color = hex_color.lstrip("#")
-    return tuple(int(hex_color[i : i + 2], 16) / 255 for i in (0, 2, 4))
+    red, green, blue = (int(hex_color[i : i + 2], 16) / 255 for i in (0, 2, 4))
+    return red, green, blue
 
 
 def _color_array(hex_color: str) -> ArrayObject:
@@ -130,9 +132,11 @@ def spec_rect(spec: AnnotationSpec) -> tuple[float, float, float, float]:
     if spec.kind == "ink":
         return _points_bounding_rect(spec.points)
     if spec.kind == "note":
+        assert spec.position is not None
         x, y = spec.position
         return _visual_box(x, y, _NOTE_SIZE, _NOTE_SIZE, spec.rotation)
     if spec.kind == "stamp":
+        assert spec.position is not None
         x, y = spec.position
         width, height = _STAMP_SIZE
         return _visual_box(x, y, width, height, spec.rotation)
@@ -185,7 +189,7 @@ def _stamp_appearance(writer: PdfWriter, width: float, height: float, text: str,
     register_fonts()
     r, g, b = _hex_to_rgb01(color)
     available = width - 16
-    size = _STAMP_FONT_SIZE
+    size: float = _STAMP_FONT_SIZE
     natural = text_width(text, SANS_BOLD, size)
     if natural > available > 0:
         size = max(6.0, size * available / natural)
@@ -213,7 +217,9 @@ def canvas_appearance(writer: PdfWriter, width: float, height: float, draw):
     canvas.save()
     buffer.seek(0)
     page = PdfReader(buffer).pages[0]
-    return page.get_contents().get_data(), page["/Resources"].clone(writer)
+    contents = page.get_contents()
+    assert contents is not None  # o reportlab sempre grava o conteúdo
+    return contents.get_data(), page["/Resources"].clone(writer)
 
 
 def _text_markup_annotation(subtype: str, spec: AnnotationSpec) -> DictionaryObject:
@@ -241,9 +247,9 @@ def _build_annotation(writer: PdfWriter, spec: AnnotationSpec):
     if spec.kind == "strikeout":
         return _text_markup_annotation("StrikeOut", spec)
     if spec.kind == "note":
-        annotation = Text(rect=spec_rect(spec), text=spec.text)
-        annotation[NameObject("/C")] = _color_array(spec.color)  # antes a cor escolhida era ignorada
-        return annotation
+        note = Text(rect=spec_rect(spec), text=spec.text)
+        note[NameObject("/C")] = _color_array(spec.color)  # antes a cor escolhida era ignorada
+        return note
     if spec.kind == "ink":
         # Caneta é /Ink com /InkList (antes era gravada como /PolyLine, sem cor nem
         # espessura: leitores que regeneram a aparência mostravam outro traço).
@@ -411,7 +417,7 @@ class ListAnnotations(PDFOperation):
                         content=str(annotation.get("/Contents", "") or ""),
                         color=_describe_annotation_color(annotation.get("/C")),
                         index=index,
-                        rect=tuple(float(v) for v in rect) if rect and len(rect) == 4 else None,
+                        rect=normalize_rect(rect) if rect and len(rect) == 4 else None,
                         date=str(annotation.get("/M", "") or ""),
                     )
                 )

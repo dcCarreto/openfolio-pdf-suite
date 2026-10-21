@@ -95,12 +95,12 @@ class CheckAccessibility(PDFOperation):
     def run(self, input_path: str) -> AccessibilityReport:
         reader = open_reader(input_path, purpose=READ)
         issues: list[str] = []
-        catalog = reader.trailer["/Root"]
+        catalog = reader.root_object
 
         if not catalog.get("/Lang"):
             issues.append("O documento não declara um idioma (/Lang).")
 
-        title = (reader.metadata or {}).get("/Title")
+        title = reader.metadata.get("/Title") if reader.metadata else None
         if not title:
             issues.append("O documento não tem um título nos metadados.")
         viewer_prefs = _resolve(catalog.get("/ViewerPreferences"))
@@ -177,7 +177,7 @@ class FixBasicAccessibilityIssues(PDFOperation):
 
         writer.root_object[NameObject("/Lang")] = TextStringObject(language)
 
-        existing_metadata = reader.metadata or {}
+        existing_metadata: dict = reader.metadata or {}
         writer.add_metadata(
             {
                 "/Title": title,

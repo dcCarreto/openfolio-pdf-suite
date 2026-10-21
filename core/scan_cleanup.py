@@ -139,12 +139,12 @@ def skew_angle(mask: Image.Image) -> float:
     não há linhas de texto para medir."""
     candidates = [step / 2 for step in range(int(-_MAX_SKEW * 2), int(_MAX_SKEW * 2) + 1)]
     scores = {angle: _profile_score(mask, angle) for angle in candidates}
-    coarse = max(scores, key=scores.get)
+    coarse = max(scores, key=lambda angle: scores[angle])
     for step in range(-4, 5):
         angle = round(coarse + step / 10, 1)
         if angle not in scores and abs(angle) <= _MAX_SKEW:
             scores[angle] = _profile_score(mask, angle)
-    best = max(scores, key=scores.get)
+    best = max(scores, key=lambda angle: scores[angle])
     # Sem um ganho claro sobre a página como está (foto, desenho), melhor não mexer.
     if abs(best) < _MIN_SKEW or scores[best] <= scores[0.0] * 1.1:
         return 0.0

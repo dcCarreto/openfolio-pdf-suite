@@ -48,7 +48,7 @@ def _absolute_image_paths(document: QTextDocument) -> None:
     images = []
     block = document.begin()
     while block.isValid():
-        for item in block:
+        for item in block:  # type: ignore[attr-defined]  # o stub não sabe iterar um QTextBlock
             fragment = item.fragment()
             if fragment.charFormat().isImageFormat():
                 images.append((fragment.position(), fragment.length(), fragment.charFormat().toImageFormat()))

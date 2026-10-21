@@ -58,8 +58,8 @@ def paint_fill_item(painter: QPainter, rect: QRectF, text: str = "", image: byte
         picture = QImage.fromData(image)
         if picture.isNull() or rect.isEmpty():
             return
-        size = picture.size().scaled(rect.size().toSize(), Qt.AspectRatioMode.KeepAspectRatio)
-        target = QRectF(0, 0, size.width(), size.height())
+        fitted = picture.size().scaled(rect.size().toSize(), Qt.AspectRatioMode.KeepAspectRatio)
+        target = QRectF(0, 0, fitted.width(), fitted.height())
         target.moveCenter(rect.center())
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.drawImage(target, picture)
@@ -144,8 +144,8 @@ class SignaturePad(QWidget):
         data = QByteArray()
         buffer = QBuffer(data)
         buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-        image.save(buffer, "PNG")
-        return bytes(data)
+        image.save(buffer, "PNG")  # type: ignore[call-overload]  # o stub pede bytes, o PySide6 só aceita texto
+        return bytes(data.data())
 
 
 class SignatureDialog(QDialog):

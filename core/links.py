@@ -125,7 +125,8 @@ class ListLinks(PDFOperation):
                 annotation = annotation_ref.get_object()
                 if annotation.get("/Subtype") != "/Link":
                     continue
-                rect = tuple(float(v) for v in annotation["/Rect"])
+                x0, y0, x1, y1 = (float(v) for v in annotation["/Rect"])
+                rect = (x0, y0, x1, y1)
                 result.append(
                     LinkInfo(
                         page_index=page_index,

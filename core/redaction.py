@@ -300,8 +300,8 @@ def _verify_redaction(path: str, burned: dict[int, list[Rect]]) -> None:
                     Message("A página {page} ainda tem texto depois da redação. O arquivo não foi salvo.", page=index + 1)
                 )
             geometry = PageGeometry.from_pypdf_page(page)
-            images = [image_file.image.convert("RGB") for image_file in page.images]
-            if len(images) != 1:
+            images = [image_file.image for image_file in page.images]
+            if len(images) != 1 or images[0] is None:
                 raise RedactionVerificationError(
                     Message(
                         "A página {page} tem conteúdo inesperado depois da redação. O arquivo não foi salvo.",
@@ -310,7 +310,7 @@ def _verify_redaction(path: str, burned: dict[int, list[Rect]]) -> None:
                 )
             with PDFIUM_LOCK:
                 rendered = document[index].render(scale=_VERIFY_RENDER_SCALE).to_pil().convert("RGB")
-            for candidate, max_level in ((images[0], 0), (rendered, _VERIFY_MAX_LEVEL)):
+            for candidate, max_level in ((images[0].convert("RGB"), 0), (rendered, _VERIFY_MAX_LEVEL)):
                 for rect in visual_rects:
                     if not _area_is_filled(candidate, geometry, rect, max_level):
                         raise RedactionVerificationError(
@@ -511,7 +511,7 @@ class _Sanitizer:
 
     def report_document_level(self, reader: PdfReader) -> None:
         """Contabiliza o que vive no catálogo — que não é copiado para o arquivo novo."""
-        catalog = reader.trailer["/Root"]
+        catalog = reader.root_object
         names = _resolve(catalog.get("/Names"))
         if isinstance(names, DictionaryObject):
             if "/JavaScript" in names:
@@ -639,7 +639,7 @@ def find_residual_risks(path: str, *, check_metadata: bool = True) -> list[str]:
     """Procura, num PDF já sanitizado, qualquer coisa que a sanitização deveria ter removido.
     Devolve a lista (vazia se estiver tudo limpo)."""
     reader = PdfReader(path)
-    catalog = reader.trailer["/Root"]
+    catalog = reader.root_object
     problems: set[str] = set()
 
     names = _resolve(catalog.get("/Names"))
@@ -657,7 +657,7 @@ def find_residual_risks(path: str, *, check_metadata: bool = True) -> list[str]:
     if isinstance(acroform, DictionaryObject) and "/XFA" in acroform:
         problems.add("formulário XFA")
     if check_metadata:
-        info = reader.metadata or {}
+        info: dict = reader.metadata or {}
         if any(info.get(key) for key in ("/Title", "/Author", "/Subject", "/Keywords", "/Creator")):
             problems.add("metadados do documento")
         if "/Metadata" in catalog:
@@ -723,7 +723,7 @@ class SanitizeDocument(PDFOperation):
         if not remove_metadata:
             if reader.metadata:
                 writer.add_metadata(reader.metadata)
-            catalog = reader.trailer["/Root"]
+            catalog = reader.root_object
             if "/Metadata" in catalog and _is_xmp_stream(catalog.raw_get("/Metadata")):
                 writer.root_object[NameObject("/Metadata")] = catalog.raw_get("/Metadata").clone(writer)
 

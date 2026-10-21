@@ -41,7 +41,7 @@ from ui.tasks import run_task
 from ui.viewer.page_canvas import PageCanvas
 from ui.viewer.presentation import PresentationWindow
 from ui.viewer.render import logical_size, render_page
-from ui.viewer.search import DocumentSearch
+from ui.viewer.search import DocumentSearch, SearchMatch
 from ui.viewer.search_bar import SearchBar
 from ui.viewer.side_panel import DocumentSidePanel
 from ui.viewer.thumbnail_list import ThumbnailList
@@ -110,7 +110,7 @@ class PdfViewer(QWidget):
         self.redaction_state = redaction_state
         self.measure_state = measure_state or MeasureState()
         self.area_pick_state = area_pick_state or AreaPickState()
-        self._document = None
+        self._document: pdfium.PdfDocument | None = None
         self._geometries: dict[int, PageGeometry] = {}  # geometria do arquivo, sem a rotação da tela
         self._view_rotation = 0  # "girar a visualização": só na tela, o arquivo não muda
         self._scale = _DEFAULT_SCALE
@@ -119,7 +119,7 @@ class PdfViewer(QWidget):
         self._show_thumbnails = True
         self._current_page = 0
         self._search = None
-        self._matches = []
+        self._matches: list[SearchMatch] = []
         self._current_match = -1
         self._page_labels: list[QLabel] = []
         self._page_tops: list[int] = []
@@ -151,7 +151,7 @@ class PdfViewer(QWidget):
         self._search_timer.timeout.connect(self._continue_search)
 
         self._build_ui()
-        QShortcut(QKeySequence("Ctrl+F"), self, activated=self._toggle_search)
+        QShortcut(QKeySequence("Ctrl+F"), self).activated.connect(self._toggle_search)
         # Navegação pelo teclado com o foco no visualizador (os campos das abas continuam
         # recebendo as teclas normalmente).
         for keys, handler in (
@@ -166,7 +166,8 @@ class PdfViewer(QWidget):
             (("Ctrl+C",), self.copy_selected_text),
         ):
             for key in keys:
-                shortcut = QShortcut(QKeySequence(key), self, activated=handler)
+                shortcut = QShortcut(QKeySequence(key), self)
+                shortcut.activated.connect(handler)
                 shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.scroll_area.viewport().installEventFilter(self)
 
@@ -587,9 +588,9 @@ class PdfViewer(QWidget):
             spacer = QWidget()
             spacer.setFixedSize(labels[0].width(), 1)
             on_the_right = self._spread == BOOK and row[0] % 2 == 0  # ímpar contando de 1
-            pair = [spacer, labels[0]] if on_the_right else [labels[0], spacer]
+            pair: list[QWidget] = [spacer, labels[0]] if on_the_right else [labels[0], spacer]
         else:
-            pair = labels
+            pair = list(labels)
         for item, side in zip(pair, (Qt.AlignmentFlag.AlignRight, Qt.AlignmentFlag.AlignLeft)):
             hlayout.addWidget(item, 0, side | Qt.AlignmentFlag.AlignTop)
         return widget
@@ -607,6 +608,7 @@ class PdfViewer(QWidget):
 
     def _render_with_overlays(self, index: int) -> QPixmap:
         with PDFIUM_LOCK:
+            assert self._document is not None
             page = self._document[index]
             pixmap = render_page(page, self._scale, self.devicePixelRatioF(), rotation=self._view_rotation)
             page.close()
@@ -679,6 +681,7 @@ class PdfViewer(QWidget):
         geometry = self._geometries.get(page_index)
         if geometry is None:
             with PDFIUM_LOCK:
+                assert self._document is not None
                 page = self._document[page_index]
                 geometry = PageGeometry.from_pdfium_page(page)
                 page.close()
@@ -1519,6 +1522,7 @@ class PdfViewer(QWidget):
 
     def _text_quads(self, page_index: int, start_pdf, end_pdf) -> list:
         """Retângulos do texto entre os dois pontos (chamar com `PDFIUM_LOCK`)."""
+        assert self._document is not None
         page = self._document[page_index]
         textpage = page.get_textpage()
         try:
@@ -1625,6 +1629,7 @@ class PdfViewer(QWidget):
 
     def _field_screen_rect(self, widget: FormWidget) -> QRectF:
         canvas = self._page_labels[0]
+        assert isinstance(canvas, PageCanvas)  # campos só no modo página única
         rect = self._user_rect_to_screen(widget.page_index, widget.rect).normalized()
         return rect.translated(canvas.pixmap_offset())
 
@@ -1670,6 +1675,7 @@ class PdfViewer(QWidget):
 
     def _fill_form_fields(self, values: dict[str, str]):
         input_path = self.session.path()
+        assert input_path is not None  # há um documento aberto
         output_path = self.session.new_version_path()
         run_task(
             self,

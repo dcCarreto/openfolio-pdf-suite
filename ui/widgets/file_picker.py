@@ -174,7 +174,7 @@ class FilePicker(QWidget):
         if self._apply_to_document:
             # Uma versão nova do documento de trabalho; vazio sem documento aberto, para a
             # aba pedir que o usuário abra um PDF.
-            return self._session.new_version_path() if self._session.path() else ""
+            return self._session.new_version_path() if self._session and self._session.path() else ""
         return self._file_path()
 
     def snapshot(self) -> tuple:

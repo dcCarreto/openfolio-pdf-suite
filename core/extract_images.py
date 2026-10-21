@@ -3,10 +3,11 @@
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from PIL import Image, ImageOps
 from pypdf import PdfWriter
-from pypdf.generic import NameObject, NumberObject, StreamObject
+from pypdf.generic import DictionaryObject, NameObject, NumberObject, StreamObject
 
 from .base import EXTRACT, READ, PDFOperation, add_object, open_reader, replace_object, require_valid_page_index, write_pdf
 from .messages import Message
@@ -60,8 +61,8 @@ class ListEmbeddedImages(PDFOperation):
                         page_index=page_index,
                         image_index=image_index,
                         name=image_file.name,
-                        width=image_file.image.width,
-                        height=image_file.image.height,
+                        width=image_file.image.width if image_file.image else 0,
+                        height=image_file.image.height if image_file.image else 0,
                     )
                 )
         return result
@@ -120,16 +121,16 @@ class ReplaceEmbeddedImage(PDFOperation):
                 "ser substituída sem reescrever a página. Use Editar texto ou a redação para cobri-la."
             )
 
-        original = target.indirect_reference.get_object()
+        original = cast(DictionaryObject, target.indirect_reference.get_object())
         width, height = int(original.get("/Width", 1)), int(original.get("/Height", 1))
-        with Image.open(new_image_path) as new_image:
+        with Image.open(new_image_path) as opened:
             plain_jpeg = (
-                new_image.format == "JPEG"
-                and new_image.mode in ("RGB", "L")
-                and new_image.getexif().get(0x0112, 1) == 1
+                opened.format == "JPEG"
+                and opened.mode in ("RGB", "L")
+                and opened.getexif().get(0x0112, 1) == 1
             )
             raw_jpeg = Path(new_image_path).read_bytes() if plain_jpeg else None
-            new_image = ImageOps.exif_transpose(new_image)
+            new_image = ImageOps.exif_transpose(opened)
             new_image.load()
             replacement = _image_xobject(writer, new_image, width / height, fit, original, raw_jpeg)
         replace_object(writer, target.indirect_reference, replacement)

@@ -29,12 +29,14 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from PIL import Image, ImageChops
 from pypdf import PdfWriter
 from pypdf.generic import (
     ArrayObject,
     ContentStream,
+    DictionaryObject,
     EncodedStreamObject,
     IndirectObject,
     NameObject,
@@ -205,7 +207,7 @@ def _collect_image_uses(contents, resources, ctm, display_sizes, images, visited
             ref = xobjects.get(operands[0]) if hasattr(xobjects, "get") else None
             if not isinstance(ref, IndirectObject):
                 continue
-            xobject = ref.get_object()
+            xobject = cast(DictionaryObject, ref.get_object())
             subtype = xobject.get("/Subtype")
             if subtype == "/Image":
                 a, b, c, d, _e, _f = ctm
@@ -329,7 +331,7 @@ def _is_gray(image: Image.Image) -> bool:
     sample.thumbnail((256, 256))
     red, green, blue = sample.split()
     for a, b in ((red, green), (green, blue)):
-        low, high = ImageChops.difference(a, b).getextrema()
+        low, high = cast(tuple[int, int], ImageChops.difference(a, b).getextrema())
         if high > _GRAY_TOLERANCE:
             return False
     return True

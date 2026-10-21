@@ -4,6 +4,7 @@ import importlib
 import json
 import logging
 from pathlib import Path
+from typing import cast
 
 from PySide6.QtCore import QByteArray, QSettings, QSize, Qt, QUrl
 from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QGuiApplication, QKeySequence
@@ -711,6 +712,7 @@ class MainWindow(QMainWindow):
     def start_printing(self, printer: QPrinter, page_count: int) -> bool:
         """Imprime as páginas escolhidas no diálogo (separado dele para os testes)."""
         path = self.session.path()
+        assert path is not None  # Imprimir só fica habilitado com documento
         pages = pages_to_print(printer, page_count, self.session.current_page(), self.session.selected_pages())
         return run_task(
             self,
@@ -735,11 +737,11 @@ class MainWindow(QMainWindow):
         """Exibir > Tema: aplica e guarda para as próximas sessões."""
         self._preferences.set_theme(key)
         self._theme_actions[key].setChecked(True)
-        theme.apply_theme(QApplication.instance(), key)
+        theme.apply_theme(cast(QApplication, QApplication.instance()), key)
 
     def _on_system_color_scheme_changed(self, _scheme) -> None:
         if self._preferences.theme() == theme.SYSTEM:
-            theme.apply_theme(QApplication.instance(), theme.SYSTEM)
+            theme.apply_theme(cast(QApplication, QApplication.instance()), theme.SYSTEM)
 
     def check_for_updates(self, manual: bool = True) -> bool:
         """Ajuda > Verificar atualizações (e ao iniciar, se o usuário ligou). Só baixa a lista
@@ -753,12 +755,13 @@ class MainWindow(QMainWindow):
         request.setHeader(QNetworkRequest.KnownHeaders.UserAgentHeader, f"OpenFolio-PDF-Suite/{APP_VERSION}")
         request.setRawHeader(b"Accept", b"application/vnd.github+json")
         request.setTransferTimeout(15_000)
-        self._update_reply = self._network.get(request)
+        self._update_reply: QNetworkReply | None = self._network.get(request)
         self._update_reply.finished.connect(lambda: self._on_update_reply(manual))
         return True
 
     def _on_update_reply(self, manual: bool) -> None:
         reply, self._update_reply = self._update_reply, None
+        assert reply is not None
         reply.deleteLater()
         releases = None
         if reply.error() == QNetworkReply.NetworkError.NoError:

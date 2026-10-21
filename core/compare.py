@@ -184,7 +184,7 @@ def _without_page_furniture(
             center = sum(words[i][1].bottom + words[i][1].top for i in line) / (2 * len(line))
             text = re.sub(
                 r"(?<![^\W\d_])\d+(?![^\W\d_])",  # números soltos, não colados a letras ("2ª")
-                lambda match: "#" if match.group() in numbers else match.group(),
+                lambda match: "#" if match.group() in numbers else match.group(),  # noqa: B023 (usada na hora)
                 " ".join(words[i][0] for i in line),
             )
             keyed.append((center, (text, round(center / 4)), line))

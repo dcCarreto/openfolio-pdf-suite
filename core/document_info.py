@@ -48,6 +48,6 @@ def document_notices(path: str) -> DocumentNotices:
         )
     if fillable:
         notices.messages.append(Message("Tem formulário ({count} campo(s)): clique num campo para preencher.", count=len(fillable)))
-    if "/OCProperties" in reader.trailer["/Root"]:
+    if "/OCProperties" in reader.root_object:
         notices.messages.append(Message("Tem camadas (veja a aba Camadas)."))
     return notices

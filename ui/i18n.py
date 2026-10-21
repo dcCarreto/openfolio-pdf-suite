@@ -698,7 +698,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Certificado (*.pfx *.p12)": "Certificate (*.pfx *.p12)",
     "Arquivo .pfx/.p12:": "Certificate file (.pfx/.p12):",
     "Senha do certificado": "Certificate password",
-    "Senha:": "Password:",
     "Certificado autoassinado gerado na hora, sem validade jurídica — use só "
     "para testar o fluxo ou assinaturas de uso pessoal/interno.": (
         "Self-signed certificate generated on the spot, with no legal validity — use it only "
@@ -712,7 +711,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "PDF file to verify (empty = the open document):"
     ),
     "Verificar": "Verify",
-    "Abra um PDF para começar.": "Open a PDF to get started.",
     "Digite o nome do signatário.": "Enter the signer's name.",
     "O PDF de entrada não tem páginas.": "The input PDF has no pages.",
     "Escolha o arquivo .pfx/.p12.": "Choose the .pfx/.p12 file.",

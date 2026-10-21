@@ -1,6 +1,7 @@
 """Metadados de arquivos PDF."""
 
 import datetime
+from typing import Any
 
 from pypdf import PdfWriter
 
@@ -50,8 +51,8 @@ class ReadMetadata(PDFOperation):
 
     def run(self, input_path: str) -> dict:
         reader = open_reader(input_path, purpose=READ)
-        metadata = reader.metadata or {}
-        result = {name: str(metadata.get(key, "") or "") for name, key in _FIELDS.items()}
+        metadata: dict = reader.metadata or {}
+        result: dict[str, Any] = {name: str(metadata.get(key, "") or "") for name, key in _FIELDS.items()}
         result["created"] = _parse_pdf_date(metadata.get("/CreationDate"))
         result["modified"] = _parse_pdf_date(metadata.get("/ModDate"))
         return result
@@ -83,7 +84,7 @@ class SetMetadata(PDFOperation):
     ) -> None:
         reader = open_reader(input_path)
         writer = PdfWriter(clone_from=reader)
-        existing = reader.metadata or {}
+        existing: dict = reader.metadata or {}
         values = {"title": title, "author": author, "subject": subject, "keywords": keywords, "creator": creator, "producer": producer}
 
         updated = {

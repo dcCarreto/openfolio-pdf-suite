@@ -5,6 +5,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import DictionaryObject, NameObject
@@ -164,7 +165,7 @@ class RemoveAttachment(PDFOperation):
         if len(remaining) == len(entries):
             raise ValueError(Message('Nenhum anexo chamado "{name}" foi encontrado neste PDF.', name=name))
 
-        names = writer.root_object["/Names"].get_object()
+        names = cast(DictionaryObject, writer.root_object["/Names"].get_object())
         if remaining:
             names[NameObject("/EmbeddedFiles")] = build_name_tree(remaining)
         else:

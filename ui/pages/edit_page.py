@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 
 from core.edit_text import EditTextArea, TextEditRect
 from core.extract_images import ListEmbeddedImages, ReplaceEmbeddedImage
-from core.links import AddLink, ListLinks, RemoveLink
+from core.links import AddLink, LinkInfo, ListLinks, RemoveLink
 from ui.area_pick_state import AreaPickState
 from ui.i18n import tr, tr_message
 from ui.tasks import call, call_with_progress, run_task
@@ -346,8 +346,8 @@ class EditPage(QWidget):
         areas = []
         for row in range(self.edit_text_table.rowCount()):
             try:
-                values = [float(self.edit_text_table.item(row, column).text()) for column in range(5)]
-            except (AttributeError, ValueError):
+                values = [float((self.edit_text_table.item(row, column) or QTableWidgetItem()).text()) for column in range(5)]
+            except ValueError:
                 areas.append((-1, (0.0, 0.0, 0.0, 0.0)))  # linha inválida: mantém a numeração
                 continue
             page, left, bottom, right, top = values
@@ -476,8 +476,9 @@ class EditPage(QWidget):
         self.link_target_page_spin.setRange(1, 9999)
         self.link_target_stack.addWidget(self.link_url_edit)
         target_page_widget = QWidget()
-        target_page_widget.setLayout(with_current_page_button(self.link_target_page_spin, self.session))
-        target_page_widget.layout().setContentsMargins(0, 0, 0, 0)
+        target_page_layout = with_current_page_button(self.link_target_page_spin, self.session)
+        target_page_layout.setContentsMargins(0, 0, 0, 0)
+        target_page_widget.setLayout(target_page_layout)
         self.link_target_stack.addWidget(target_page_widget)
 
         self.add_link_output_picker = FilePicker(
@@ -602,7 +603,7 @@ class EditPage(QWidget):
         load_button.clicked.connect(self._load_links_to_remove)
         self.remove_links_list = QListWidget()
         self.remove_links_list.currentRowChanged.connect(self._on_link_to_remove_chosen)
-        self._loaded_links = []
+        self._loaded_links: list[LinkInfo] = []
 
         self.remove_link_page_spin = QSpinBox()
         self.remove_link_page_spin.setRange(1, 9999)

@@ -97,7 +97,7 @@ class ConvertPage(QWidget):
         )
         self.pdf_output_picker = FilePicker(
             mode="save",
-            suggested_source=lambda: (self.image_list_editor.paths() or [None])[0],
+            suggested_source=lambda: next(iter(self.image_list_editor.paths()), None),
             suggested_suffix="convertido",
         )
         self.image_page_size_combo = QComboBox()

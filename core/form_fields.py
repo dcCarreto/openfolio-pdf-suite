@@ -10,9 +10,18 @@ import csv
 import io
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 from pypdf import PdfReader, PdfWriter
-from pypdf.generic import ArrayObject, BooleanObject, DictionaryObject, NameObject, StreamObject, read_object
+from pypdf.generic import (
+    ArrayObject,
+    BooleanObject,
+    DictionaryObject,
+    IndirectObject,
+    NameObject,
+    StreamObject,
+    read_object,
+)
 from reportlab.pdfgen import canvas
 
 from .base import READ, PDFOperation, atomic_output, open_reader, require_valid_page_index, write_pdf
@@ -50,6 +59,7 @@ class AddFormField(PDFOperation):
             raise ValueError(f"field_type inválido: {field_type}")
         if field_type in _CHOICE_FIELD_TYPES and not options:
             raise ValueError(f"Informe ao menos uma opção (options) para o tipo {field_type}.")
+        options = list(options or [])
 
         reader = open_reader(input_path)
         require_valid_page_index(len(reader.pages), page_number)
@@ -106,7 +116,7 @@ class AddFormField(PDFOperation):
 
         overlay_reader = PdfReader(buffer)
         overlay_page = overlay_reader.pages[0]
-        overlay_acroform = overlay_reader.trailer["/Root"]["/AcroForm"]
+        overlay_acroform = cast(DictionaryObject, overlay_reader.root_object["/AcroForm"].get_object())
 
         annots_before = list(target_page.get("/Annots", []))
         target_page.merge_page(overlay_page)
@@ -119,11 +129,11 @@ class AddFormField(PDFOperation):
         acroform = writer.root_object.get("/AcroForm")
         if acroform is None:
             acroform = writer._add_object(overlay_acroform.clone(writer))
-            acroform_obj = acroform.get_object()
+            acroform_obj = cast(DictionaryObject, acroform.get_object())
             acroform_obj[NameObject("/Fields")] = ArrayObject(new_annots)
             writer.root_object[NameObject("/AcroForm")] = acroform
         else:
-            acroform_obj = acroform.get_object()
+            acroform_obj = cast(DictionaryObject, acroform.get_object())
             fields = acroform_obj.get("/Fields", ArrayObject())
             for annot in new_annots:
                 fields.append(annot)
@@ -152,12 +162,12 @@ def _merge_default_fonts(writer: PdfWriter, acroform_obj: DictionaryObject, over
     if resources is None:
         resources = DictionaryObject()
         acroform_obj[NameObject("/DR")] = resources
-    resources = resources.get_object()
+    resources = cast(DictionaryObject, resources.get_object())
     fonts = resources.get("/Font")
     if fonts is None:
         fonts = DictionaryObject()
         resources[NameObject("/Font")] = fonts
-    fonts = fonts.get_object()
+    fonts = cast(DictionaryObject, fonts.get_object())
     for font_name, font_ref in overlay_fonts.items():
         if font_name not in fonts:
             fonts[NameObject(font_name)] = font_ref.clone(writer)
@@ -239,11 +249,11 @@ class AddRadioGroup(PDFOperation):
         buffer.seek(0)
 
         overlay_reader = PdfReader(buffer)
-        overlay_parent = overlay_reader.trailer["/Root"]["/AcroForm"]["/Fields"][0].get_object()
-        overlay_acroform = overlay_reader.trailer["/Root"]["/AcroForm"]
+        overlay_acroform = cast(DictionaryObject, overlay_reader.root_object["/AcroForm"].get_object())
+        overlay_parent = cast(DictionaryObject, cast(ArrayObject, overlay_acroform["/Fields"])[0].get_object())
 
-        kid_refs = []
-        for page_index, page_options in options_by_page.items():
+        kid_refs: list[IndirectObject] = []
+        for page_index in options_by_page:
             target_page = writer.pages[page_index]
             annots_before = list(target_page.get("/Annots", []))
             target_page.merge_page(overlay_reader.pages[page_index])
@@ -259,16 +269,16 @@ class AddRadioGroup(PDFOperation):
         parent[NameObject("/Kids")] = ArrayObject(kid_refs)
         parent_ref = writer._add_object(parent)
         for kid_ref in kid_refs:
-            kid_ref.get_object()[NameObject("/Parent")] = parent_ref
+            cast(DictionaryObject, kid_ref.get_object())[NameObject("/Parent")] = parent_ref
 
         acroform = writer.root_object.get("/AcroForm")
         if acroform is None:
             acroform = writer._add_object(overlay_acroform.clone(writer))
-            acroform_obj = acroform.get_object()
+            acroform_obj = cast(DictionaryObject, acroform.get_object())
             acroform_obj[NameObject("/Fields")] = ArrayObject([parent_ref])
             writer.root_object[NameObject("/AcroForm")] = acroform
         else:
-            acroform_obj = acroform.get_object()
+            acroform_obj = cast(DictionaryObject, acroform.get_object())
             fields = acroform_obj.get("/Fields", ArrayObject())
             fields.append(parent_ref)
             acroform_obj[NameObject("/Fields")] = fields
@@ -393,7 +403,7 @@ class ListFormWidgets(PDFOperation):
 
     def run(self, input_path: str) -> list[FormWidget]:
         reader = open_reader(input_path, purpose=READ)
-        if "/AcroForm" not in reader.trailer["/Root"]:
+        if "/AcroForm" not in reader.root_object:
             return []
         widgets = []
         for page_index, page in enumerate(reader.pages):
@@ -494,7 +504,7 @@ def _read_csv_values(csv_path: str) -> dict[str, str]:
             delimiter = csv.Sniffer().sniff(text[:4096], delimiters=",;\t").delimiter
         except csv.Error:
             delimiter = ","
-        rows = csv.DictReader(io.StringIO(text), delimiter=delimiter)
+        rows = list(csv.DictReader(io.StringIO(text), delimiter=delimiter))
     values: dict[str, str] = {}
     for row in rows:
         normalized = {str(key).strip().lower(): (value or "") for key, value in row.items() if key is not None}
@@ -729,7 +739,7 @@ class FlattenFormFields(PDFOperation):
                 if "/Annots" not in page:
                     continue
                 kept = ArrayObject()
-                for ref in page["/Annots"]:
+                for ref in cast(ArrayObject, page["/Annots"]):
                     annotation = ref.get_object()
                     if annotation.get("/Subtype") == "/Widget" and _qualified_name(annotation) in values:
                         flattened_widgets.append(ref)

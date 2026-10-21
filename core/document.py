@@ -21,6 +21,7 @@ pior do que não declarar.
 """
 
 from collections.abc import Iterator
+from typing import Any
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject, TextStringObject
@@ -37,7 +38,7 @@ def _resolve(obj):
 # -- árvores de nomes e de números -----------------------------------------------------------
 
 
-def iter_name_tree(node, key: str = "/Names") -> Iterator[tuple[object, object]]:
+def iter_name_tree(node, key: str = "/Names") -> Iterator[tuple[Any, Any]]:
     """Percorre uma árvore de nomes (ou de números, com `key="/Nums"`) do PDF, com todos os
     níveis de `/Kids`, e devolve os pares (chave, valor) — o valor como está no arquivo
     (normalmente uma referência indireta)."""
@@ -117,7 +118,10 @@ def apply_page_labels(writer: PdfWriter, specs: list[PageLabel | None]) -> None:
         style, prefix, value = resolved[run_start]
         if style is None and not prefix:
             style = "/D"  # o pypdf exige estilo ou prefixo; um rótulo vazio vira decimal
-        writer.set_page_label(run_start, index - 1, style=style, prefix=prefix or None, start=max(1, value))
+        # PageLabelStyle é só uma classe de constantes ("/D"); o pypdf recebe o texto
+        writer.set_page_label(
+            run_start, index - 1, style=style, prefix=prefix or None, start=max(1, value)  # type: ignore[arg-type]
+        )
         run_start = index
 
 

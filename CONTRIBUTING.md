@@ -10,3 +10,11 @@
 - Python 3.10+.
 - Funções e classes novas devem ter docstring curta.
 - Testes ficam em `tests/`.
+- Antes do PR, rode o que o CI confere:
+
+  ```bash
+  pip install -e ".[test,lint]"
+  ruff check .   # bugs comuns (nomes indefinidos, imports sem uso, armadilhas do flake8-bugbear)
+  mypy           # tipos de core/ e ui/ (configuração no pyproject.toml)
+  pytest
+  ```

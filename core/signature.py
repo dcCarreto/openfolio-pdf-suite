@@ -36,7 +36,7 @@ from pyhanko.sign.validation import validate_pdf_signature
 from pyhanko.sign.validation.status import SignatureCoverageLevel
 
 from .base import PDFOperation, atomic_output, open_reader, require_valid_page_index
-from .geometry import PageGeometry, intersect_rects
+from .geometry import PageGeometry, intersect_rects, normalize_rect
 
 _STAMP_WIDTH = 175
 _STAMP_HEIGHT = 50
@@ -77,7 +77,7 @@ def _stamp_box(page, position: str) -> tuple[float, float, float, float]:
     for ref in page.get("/Annots", []):
         annotation = ref.get_object()
         if annotation.get("/FT") == "/Sig" or annotation.get("/Parent", {}).get("/FT") == "/Sig":
-            occupied.append(geometry.user_rect_to_visual(tuple(float(v) for v in annotation["/Rect"])))
+            occupied.append(geometry.user_rect_to_visual(normalize_rect(annotation["/Rect"])))
 
     left, bottom, right, top = _POSITIONS[position](geometry.width, geometry.height)
     step = (_STAMP_HEIGHT + _STAMP_GAP) * (1 if position.startswith("bottom") else -1)
@@ -186,7 +186,8 @@ class SignDocument(PDFOperation):
                 stamp_text="Assinado digitalmente por %(signer)s\n%(ts)s"
             )
             meta = signers.PdfSignatureMetadata(field_name=field_name)
-            field_spec = fields.SigFieldSpec(field_name, on_page=page_index, box=box)
+            # O pyhanko anota a caixa como inteiros, mas grava frações de ponto sem problema.
+            field_spec = fields.SigFieldSpec(field_name, on_page=page_index, box=box)  # type: ignore[arg-type]
             pdf_signer = signers.PdfSigner(
                 meta, signer=signer, stamp_style=stamp_style, new_field_spec=field_spec
             )
@@ -203,7 +204,7 @@ VERDICT_VALID = "valid"
 VERDICT_WARNING = "warning"
 VERDICT_INVALID = "invalid"
 
-_COVERAGE_NAMES = {
+_COVERAGE_NAMES: dict[SignatureCoverageLevel | None, str] = {
     SignatureCoverageLevel.ENTIRE_FILE: "entire_file",
     SignatureCoverageLevel.ENTIRE_REVISION: "entire_revision",
     SignatureCoverageLevel.CONTIGUOUS_BLOCK_FROM_START: "partial",

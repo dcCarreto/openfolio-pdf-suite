@@ -53,7 +53,7 @@ def find_libreoffice() -> str | None:
 @dataclass
 class OfficeConversionResult:
     used_libreoffice: bool
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[Message] = field(default_factory=list)
 
 
 class ConvertOfficeToPDF(PDFOperation):
@@ -118,7 +118,7 @@ class ConvertOfficeToPDF(PDFOperation):
                 raise RuntimeError("O LibreOffice não gerou o arquivo PDF esperado.")
             shutil.copy(generated_path, output_path)
 
-    def _convert_with_fallback(self, input_path: str, output_path: str, suffix: str) -> list[str]:
+    def _convert_with_fallback(self, input_path: str, output_path: str, suffix: str) -> list[Message]:
         register_fonts()
         if suffix == ".docx":
             return _docx_to_pdf(input_path, output_path)
@@ -164,7 +164,7 @@ def _table(rows: list[list[str]], available_width: float, cell_style) -> Table:
 # --- Word ------------------------------------------------------------------------------
 
 
-def _docx_to_pdf(input_path: str, output_path: str) -> list[str]:
+def _docx_to_pdf(input_path: str, output_path: str) -> list[Message]:
     from docx import Document
     from docx.table import Table as DocxTable
 
@@ -247,7 +247,7 @@ def _section_has_text(section) -> bool:
 # --- Excel -----------------------------------------------------------------------------
 
 
-def _xlsx_to_pdf(input_path: str, output_path: str) -> list[str]:
+def _xlsx_to_pdf(input_path: str, output_path: str) -> list[Message]:
     from openpyxl import load_workbook
 
     workbook = load_workbook(input_path, data_only=True)
@@ -297,7 +297,7 @@ def _trim_empty(rows: list[list[str]]) -> list[list[str]]:
 # --- PowerPoint ------------------------------------------------------------------------
 
 
-def _pptx_to_pdf(input_path: str, output_path: str) -> list[str]:
+def _pptx_to_pdf(input_path: str, output_path: str) -> list[Message]:
     """Um slide por página; quando o texto não cabe, o slide continua na página seguinte
     (antes o excesso era cortado sem aviso)."""
     from pptx import Presentation

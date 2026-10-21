@@ -31,6 +31,7 @@ import tempfile
 import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 from xml.etree import ElementTree
 
 from pypdf import PdfReader, PdfWriter
@@ -442,7 +443,7 @@ def _filter_names(obj) -> list[str]:
 
 def _all_objects(document):
     """Todos os objetos alcançáveis a partir do catálogo (sem repetir)."""
-    root = document.root_object if isinstance(document, PdfWriter) else document.trailer["/Root"]
+    root = document.root_object
     stack = [root]
     seen: set[int] = set()
     while stack:
@@ -524,7 +525,7 @@ def _sync_metadata(writer: PdfWriter) -> None:
     xmp.xmp_metadata_date = now
     writer.xmp_metadata = xmp
 
-    updated = {key: value for key, value in text.items() if value}
+    updated: dict[str, Any] = {key: value for key, value in text.items() if value}
     updated.update({"/Producer": PRODUCER, "/CreationDate": _info_date(created), "/ModDate": _info_date(now)})
     if "/Trapped" in info:
         updated["/Trapped"] = info["/Trapped"]
@@ -534,7 +535,7 @@ def _sync_metadata(writer: PdfWriter) -> None:
 
 def _write_identification(writer: PdfWriter, part: int, conformance: str) -> None:
     xmp = writer.xmp_metadata or XmpInformation.create()
-    xmp.pdfaid_part = part
+    xmp.pdfaid_part = str(part)
     xmp.pdfaid_conformance = conformance
     writer.xmp_metadata = xmp
 
@@ -560,7 +561,7 @@ def _declared_identification(reader: PdfReader) -> tuple[int | None, str | None]
 def _forbidden_content(document, part: int) -> list[str]:
     """O que `_prepare` corrigiria: usado só na verificação de um arquivo pronto."""
     found: set[str] = set()
-    catalog = document.trailer["/Root"]
+    catalog = document.root_object
     names = _resolve(catalog.get("/Names"))
     if isinstance(names, DictionaryObject):
         if "/JavaScript" in names:
@@ -602,7 +603,7 @@ def _forbidden_content(document, part: int) -> list[str]:
 def _blocking_issues(document, part: int, conformance: str) -> list[str]:
     """O que a conversão não corrige sozinha (fontes, transparência, estrutura...)."""
     issues: list[str] = []
-    catalog = document.root_object if isinstance(document, PdfWriter) else document.trailer["/Root"]
+    catalog = document.root_object
 
     intents = [_resolve(i) for i in _resolve(catalog.get("/OutputIntents")) or []]
     if not any(i.get("/S") == "/GTS_PDFA1" and "/DestOutputProfile" in i for i in intents):
@@ -732,7 +733,7 @@ def _metadata_issues(reader: PdfReader) -> list[str]:
         return [Message("Os metadados XMP estão malformados.")]
     if xmp is None:
         return issues
-    info = reader.metadata or {}
+    info: dict = reader.metadata or {}
     title = str(info.get("/Title") or "")
     xmp_title = (xmp.dc_title or {}).get("x-default", "") if isinstance(xmp.dc_title, dict) else ""
     if title != xmp_title:

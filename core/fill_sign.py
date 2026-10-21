@@ -79,5 +79,6 @@ class FillAndSign(PDFOperation):
                 for item in page_items:
                     _draw_item(canvas, geometry, item)
 
-            writer.pages[page_index].merge_page(visual_overlay(geometry, draw))
+            if (overlay := visual_overlay(geometry, draw)) is not None:
+                writer.pages[page_index].merge_page(overlay)
         write_pdf(writer, output_path)

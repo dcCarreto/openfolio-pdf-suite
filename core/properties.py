@@ -4,6 +4,7 @@ fontes usadas (e se estão embutidas) e tamanhos de página. Só leitura da estr
 import os
 import re
 from dataclasses import dataclass, field
+from typing import cast
 
 from pypdf import PasswordType, PdfReader
 from pypdf.constants import UserAccessPermissions
@@ -84,7 +85,7 @@ class DocumentProperties:
 def _version(reader: PdfReader) -> str:
     match = re.match(r"%PDF-(\d+\.\d+)", reader.pdf_header or "")
     version = match.group(1) if match else ""
-    catalog_version = str(reader.trailer["/Root"].get("/Version", "")).lstrip("/")
+    catalog_version = str(reader.root_object.get("/Version", "")).lstrip("/")
     if re.fullmatch(r"\d+\.\d+", catalog_version):
         # O /Version do catálogo vale quando é mais novo que o cabeçalho (atualização incremental).
         if not version or tuple(map(int, catalog_version.split("."))) > tuple(map(int, version.split("."))):
@@ -164,7 +165,7 @@ def _collect_fonts(resources, content: bytes | None, page_index: int, fonts: dic
     if not isinstance(resources, DictionaryObject):
         return
     used_fonts = _used_names(content, _FONT_USE)
-    for name, reference in (resources.get("/Font") or DictionaryObject()).get_object().items():
+    for name, reference in cast(DictionaryObject, (resources.get("/Font") or DictionaryObject()).get_object()).items():
         if used_fonts is not None and name not in used_fonts:
             continue
         key = _object_key(reference)
@@ -173,7 +174,7 @@ def _collect_fonts(resources, content: bytes | None, page_index: int, fonts: dic
         if page_index not in fonts[key].pages:
             fonts[key].pages.append(page_index)
     used_xobjects = _used_names(content, _XOBJECT_USE)
-    for name, reference in (resources.get("/XObject") or DictionaryObject()).get_object().items():
+    for name, reference in cast(DictionaryObject, (resources.get("/XObject") or DictionaryObject()).get_object()).items():
         xobject = reference.get_object()
         key = _object_key(reference)
         if (used_xobjects is not None and name not in used_xobjects) or key in visited:
@@ -227,7 +228,7 @@ def _visible_size(page) -> tuple[float, float]:
 class ReadDocumentProperties(PDFOperation):
     def run(self, input_path: str) -> DocumentProperties:
         reader = open_reader(input_path, purpose=READ)
-        catalog = reader.trailer["/Root"]
+        catalog = reader.root_object
 
         with open(input_path, "rb") as file:
             linearized = b"/Linearized" in file.read(1024)

@@ -23,12 +23,30 @@ openfolio = "core.cli:main"
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
 build = ["pyinstaller>=6.0"]
+# Versões fixas: uma versão nova do ruff ou do mypy pode reprovar o CI sem mudança no código.
+lint = ["ruff==0.17.1", "mypy==2.4.0"]
 
 [tool.setuptools]
 packages = ["core", "ui"]
 
 [tool.setuptools.package-data]
 core = ["data/fonts/*", "data/icc/*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+# Regras de bugs comuns; o estilo (tamanho de linha, ordem de imports) fica livre.
+select = ["E4", "E7", "E9", "F", "W", "B"]
+# zip() sem strict=: vários usos pareiam de propósito listas de tamanhos diferentes.
+ignore = ["B905"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["core", "ui", "main.py"]
+# pytesseract, pyhanko e afins não publicam tipos.
+ignore_missing_imports = true
 
 [build-system]
 requires = ["setuptools>=68"]

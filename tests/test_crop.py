@@ -48,7 +48,6 @@ def test_crop_rejects_encrypted_input(make_encrypted_pdf, tmp_path):
 def test_crop_margins_follow_the_page_as_seen_on_rotated_pages(make_text_pdf, tmp_path):
     import pypdfium2 as pdfium
 
-    from core.geometry import PageGeometry
 
     # Página 612x792 com /Rotate 90: na tela ela é 792 de largura por 612 de altura.
     pdf_path = make_text_pdf("rot.pdf", [(80, 650, "texto")], rotate=90)

@@ -1,7 +1,6 @@
 """Testes de core/links.py: anotações de link (hyperlink)."""
 
 import pytest
-from pypdf import PdfReader
 
 from core.base import EncryptedPDFError
 from core.links import AddLink, ListLinks, RemoveLink

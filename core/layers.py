@@ -23,7 +23,7 @@ class ListLayers(PDFOperation):
 
     def run(self, input_path: str) -> list[LayerInfo]:
         reader = open_reader(input_path, purpose=READ)
-        catalog = reader.trailer["/Root"]
+        catalog = reader.root_object
         oc_properties_ref = catalog.get("/OCProperties")
         if oc_properties_ref is None:
             return []

@@ -12,6 +12,7 @@ desenha a partir da geometria.
 import os
 import re
 import uuid
+from typing import cast
 from xml.etree import ElementTree
 
 from pypdf import PdfWriter
@@ -301,7 +302,7 @@ def _build(writer: PdfWriter, subtype: str, element) -> DictionaryObject:
     elif subtype == "/Line":
         line = _floats(element.get("start"), 2) + _floats(element.get("end"), 2)
         annotation[NameObject("/L")] = _float_array(line)
-        strokes = [[tuple(line[:2]), tuple(line[2:])]]
+        strokes = [[(line[0], line[1]), (line[2], line[3])]]
     elif subtype in ("/Polygon", "/PolyLine"):
         vertices = _floats(_child_text(element, "vertices"))
         annotation[NameObject("/Vertices")] = _float_array(vertices)
@@ -367,7 +368,7 @@ class ImportAnnotationsXFDF(PDFOperation):
             for _index, annotation in comment_annotations(page)
             if annotation.get("/NM")
         }
-        added: dict[str, object] = {}  # nome -> anotação, para ligar as respostas
+        added: dict[str, DictionaryObject] = {}  # nome -> anotação, para ligar as respostas
         replies = []
         imported = skipped = 0
 
@@ -392,7 +393,7 @@ class ImportAnnotationsXFDF(PDFOperation):
                     if key in old:
                         annotation[NameObject(key)] = old.raw_get(key)
                 replace_object(writer, old.indirect_reference, annotation)
-                annotation = writer.get_object(old.indirect_reference)
+                annotation = cast(DictionaryObject, writer.get_object(old.indirect_reference))
             else:
                 if name in existing:
                     other = writer.pages[existing[name]]

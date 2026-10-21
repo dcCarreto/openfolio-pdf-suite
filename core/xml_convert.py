@@ -74,7 +74,7 @@ def wrap_code_line(line: str, max_chars: int) -> list[str]:
     if len(continuation) > max_chars // 2:
         continuation = _CONTINUATION_INDENT  # recuo enorme: não sobraria espaço para o texto
 
-    pieces = []
+    pieces: list[str] = []
     rest, prefix = line, ""
     while len(prefix) + len(rest) > max_chars:
         room = max_chars - len(prefix)
