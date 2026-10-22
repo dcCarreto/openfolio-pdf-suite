@@ -6,9 +6,10 @@ import sys
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
+from core.version import APP_VERSION
 from ui.app_events import FileOpenFilter, pdf_paths_from_arguments
 from ui.diagnostics import install_exception_hooks, setup_logging
-from ui.main_window import APP_VERSION, MainWindow
+from ui.main_window import MainWindow
 from ui.preferences import Preferences
 from ui.theme import apply_theme
 

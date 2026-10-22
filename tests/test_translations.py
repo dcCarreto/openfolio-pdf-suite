@@ -96,6 +96,15 @@ def test_translations_keep_the_same_placeholders():
     assert wrong == {}
 
 
+def test_every_translation_is_still_used():
+    # Um texto que mudou deixa a tradução antiga para trás, às vezes dizendo o que o app não faz mais.
+    used = set()
+    for path in [*_python_files("core", "ui"), ROOT / "main.py"]:
+        if path.name != "i18n.py":
+            used |= {_literal(node) for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))}
+    assert sorted(key for key in TRANSLATIONS if key not in used) == []
+
+
 # --- Varredura da interface em inglês --------------------------------------------------
 
 _PORTUGUESE = re.compile(

@@ -8,7 +8,7 @@
 #
 # O app nao e assinado nem notarizado (exigiria uma conta paga de
 # desenvolvedor Apple) - o macOS vai bloquear a primeira execucao via
-# Gatekeeper. Isso e esperado numa build beta; instrucoes de como abrir
+# Gatekeeper. Isso e esperado sem a assinatura; instrucoes de como abrir
 # mesmo assim ficam no README/release notes.
 set -euo pipefail
 

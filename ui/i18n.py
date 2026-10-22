@@ -274,7 +274,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Arquivo PDF de saída:": "Output PDF file:",
     "Arquivo Word, Excel ou PowerPoint de entrada:": "Input Word, Excel, or PowerPoint file:",
     "Arquivo XML de entrada:": "Input XML file:",
-    "Escolha o arquivo PDF de entrada.": "Choose the input PDF file.",
     "Falha ao converter: {error}": "Failed to convert: {error}",
     "{count} imagem(ns) gerada(s) com sucesso.": "{count} image(s) generated successfully.",
     "Adicione pelo menos uma imagem.": "Add at least one image.",
@@ -485,7 +484,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Ajustar à largura": "Fit to width",
     "Página única": "Single page",
     "Rolagem contínua": "Continuous scroll",
-    "Miniaturas": "Thumbnails",
     "Buscar": "Search",
     "Página {current} de {total}": "Page {current} of {total}",
     "Página {number}": "Page {number}",
@@ -497,9 +495,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     "Senha incorreta. Tente novamente:": "Wrong password. Try again:",
     "Não foi possível abrir o PDF: {error}": "Could not open the PDF: {error}",
-    "Não foi possível abrir o PDF (pode estar corrompido): {error}": (
-        "Could not open the PDF (it may be corrupted): {error}"
-    ),
     # PDF viewer search bar
     "Buscar no documento...": "Search the document...",
     "Ocorrência anterior": "Previous match",
@@ -552,9 +547,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Texto da nota:": "Note text:",
     # OCR: sidebar section
     "OCR": "OCR",
-    "Reconheça texto em páginas escaneadas, tornando-as pesquisáveis.": (
-        "Recognize text in scanned pages, making them searchable."
-    ),
     # OCR: page UI
     "Reconhecer texto": "Recognize text",
     "Nenhum idioma de reconhecimento instalado no Tesseract.": (
@@ -563,7 +555,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Tesseract encontrado. Idiomas disponíveis: {languages}.": (
         "Tesseract found. Available languages: {languages}."
     ),
-    "Nenhum idioma de reconhecimento disponível.": "No recognition language available.",
     "Falha ao reconhecer texto: {error}": "Failed to recognize text: {error}",
     "Texto reconhecido em {count} página(s).": "Text recognized in {count} page(s).",
     "Nenhuma página precisou de OCR (o PDF já tinha texto).": (
@@ -762,27 +753,12 @@ _EN_TRANSLATIONS: dict[str, str] = {
     # PDF/A
     "Converter para PDF/A": "Convert to PDF/A",
     "Validar PDF/A": "Validate PDF/A",
-    "Conversão aproximada: remove JavaScript, anexos embutidos e criptografia, e "
-    "declara conformidade PDF/A nos metadados — mas não embute perfil de cor "
-    "(/OutputIntent) nem verifica fontes. Para arquivamento legal, valide o "
-    "resultado com uma ferramenta dedicada (ex.: veraPDF) antes de considerar o "
-    "documento arquivável.": (
-        "Approximate conversion: removes JavaScript, embedded attachments, and encryption, "
-        "and declares PDF/A conformance in the metadata — but doesn't embed a color profile "
-        "(/OutputIntent) or check fonts. For legal archiving, validate the result with a "
-        "dedicated tool (e.g., veraPDF) before considering the document archival-ready."
-    ),
     "Parte (PDF/A-N):": "Part (PDF/A-N):",
     "Nível de conformidade:": "Conformance level:",
     "A (acessível)": "A (accessible)",
     "B (básica)": "B (basic)",
     "U (Unicode)": "U (Unicode)",
     "PDF convertido com sucesso.": "PDF converted successfully.",
-    "Verifica só um subconjunto dos requisitos de PDF/A (criptografia, "
-    "JavaScript, anexos e metadados XMP) — não é validação ISO 19005 completa.": (
-        "Checks only a subset of PDF/A requirements (encryption, JavaScript, attachments, "
-        "and XMP metadata) — this is not full ISO 19005 validation."
-    ),
     "Validar": "Validate",
     "Falha ao validar: {error}": "Failed to validate: {error}",
     "Nenhum problema encontrado nas verificações realizadas.": (
@@ -832,14 +808,10 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Link adicionado com sucesso.": "Link added successfully.",
     "Falha ao listar links: {error}": "Failed to list links: {error}",
     "Nenhum link encontrado.": "No links found.",
-    'Use "Listar links" para descobrir a página e o número do link a remover.': (
-        'Use "List links" to find the page and number of the link to remove.'
-    ),
     "Número do link na página:": "Link number on the page:",
     "Falha ao remover link: {error}": "Failed to remove link: {error}",
     "Link removido com sucesso.": "Link removed successfully.",
     # Annotations: export comments
-    "Exportar comentários existentes para CSV:": "Export existing comments to CSV:",
     "Falha ao exportar comentários: {error}": "Failed to export comments: {error}",
     "{count} comentário(s) exportado(s) com sucesso.": "{count} comment(s) exported successfully.",
     # Accessibility
@@ -1078,7 +1050,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     'Nenhum campo com nome válido encontrado no CSV.': 'No field with a valid name found in the CSV.',
     'Nenhum campo encontrado no arquivo FDF.': 'No field found in the FDF file.',
-    'Exportar comentários (CSV ou Excel)': 'Export comments (CSV or Excel)',
     'Adicionar anexo': 'Add attachment',
     'Remover anexo': 'Remove attachment',
     'Nenhum anexo chamado "{name}" foi encontrado neste PDF.': (

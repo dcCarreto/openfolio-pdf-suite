@@ -96,8 +96,8 @@ prática:
 - **Linux**: o AppImage pode precisar de `chmod +x` antes de rodar; o `.deb` não tem
   esse problema.
 
-Isso é esperado numa release beta de um projeto open source sem orçamento pra
-certificados — não indica nenhum problema com o instalador em si.
+Isso é esperado num projeto open source sem orçamento para certificados — não indica
+nenhum problema com o instalador em si.
 
 ## Estrutura do empacotamento
 
