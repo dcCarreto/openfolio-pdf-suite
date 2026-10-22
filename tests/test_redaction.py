@@ -17,7 +17,7 @@ from pypdf.generic import (
 from reportlab.pdfgen import canvas as rl_canvas
 
 from core import redaction
-from core.base import EncryptedPDFError
+from core.base import EncryptedPDFError, add_object
 from core.geometry import PageGeometry
 from core.redaction import (
     FindSensitiveData,
@@ -434,7 +434,7 @@ def _annotation(writer, subtype: str, **entries):
     )
     for key, value in entries.items():
         annotation[NameObject(f"/{key}")] = value
-    return writer._add_object(annotation)
+    return add_object(writer, annotation)
 
 
 def _hostile_pdf(path, tmp_path) -> None:
@@ -446,7 +446,7 @@ def _hostile_pdf(path, tmp_path) -> None:
     page = writer.pages[0]
 
     # JavaScript ao abrir a página (/AA da própria página).
-    page[NameObject("/AA")] = DictionaryObject({NameObject("/O"): writer._add_object(_js("page_open()"))})
+    page[NameObject("/AA")] = DictionaryObject({NameObject("/O"): add_object(writer, _js("page_open()"))})
 
     # Link de URL com JavaScript encadeado em /Next, e link de JavaScript seguido de URL.
     uri_then_js = DictionaryObject(
@@ -476,7 +476,7 @@ def _hostile_pdf(path, tmp_path) -> None:
         {
             NameObject("/Type"): NameObject("/Filespec"),
             NameObject("/F"): TextStringObject("segredo.txt"),
-            NameObject("/EF"): DictionaryObject({NameObject("/F"): writer._add_object(embedded)}),
+            NameObject("/EF"): DictionaryObject({NameObject("/F"): add_object(writer, embedded)}),
         }
     )
     attachment = _annotation(writer, "/FileAttachment", FS=filespec)
@@ -484,7 +484,8 @@ def _hostile_pdf(path, tmp_path) -> None:
     attachment.get_object()[NameObject("/Popup")] = popup
 
     # Campo de formulário com JavaScript no campo-pai (não no widget).
-    field_parent = writer._add_object(
+    field_parent = add_object(
+        writer,
         DictionaryObject(
             {
                 NameObject("/T"): TextStringObject("cliente"),
@@ -593,7 +594,7 @@ def test_sanitize_keeps_xmp_metadata_only_when_asked(tmp_path):
     xmp.set_data(b"<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><dc:title>Titulo XMP</dc:title></x:xmpmeta>")
     xmp[NameObject("/Type")] = NameObject("/Metadata")
     xmp[NameObject("/Subtype")] = NameObject("/XML")
-    writer.root_object[NameObject("/Metadata")] = writer._add_object(xmp)
+    writer.root_object[NameObject("/Metadata")] = add_object(writer, xmp)
     path_in = tmp_path / "xmp.pdf"
     with open(path_in, "wb") as f:
         writer.write(f)

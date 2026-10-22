@@ -1,7 +1,7 @@
 import pytest
 from pypdf import PdfReader, PdfWriter
 
-from core.base import EncryptedPDFError
+from core.base import EncryptedPDFError, add_object
 from core.create import CreateBlankPDF
 from core.form_fields import (
     AddFormField,
@@ -462,7 +462,7 @@ def _hierarchical_form(tmp_path):
     pdf_path = tmp_path / "base.pdf"
     CreateBlankPDF().run(str(pdf_path), page_count=1, width=400, height=400)
     writer = PdfWriter(clone_from=str(pdf_path))
-    parent_ref = writer._add_object(DictionaryObject({NameObject("/T"): TextStringObject("cliente")}))
+    parent_ref = add_object(writer, DictionaryObject({NameObject("/T"): TextStringObject("cliente")}))
     widget = DictionaryObject(
         {
             NameObject("/Type"): NameObject("/Annot"),
@@ -476,7 +476,7 @@ def _hierarchical_form(tmp_path):
             NameObject("/P"): writer.pages[0].indirect_reference,
         }
     )
-    widget_ref = writer._add_object(widget)
+    widget_ref = add_object(writer, widget)
     parent_ref.get_object()[NameObject("/Kids")] = ArrayObject([widget_ref])
     writer.pages[0][NameObject("/Annots")] = ArrayObject([widget_ref])
     helv = DictionaryObject(

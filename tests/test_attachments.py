@@ -12,7 +12,7 @@ from core.attachments import (
     RemoveAttachment,
     safe_attachment_filename,
 )
-from core.base import EncryptedPDFError
+from core.base import EncryptedPDFError, add_object
 
 
 def _make_plain_pdf(path) -> None:
@@ -197,17 +197,17 @@ def _pdf_with_attachment_in_kids(tmp_path, key: str, filename: str):
             NameObject("/Type"): NameObject("/Filespec"),
             NameObject("/F"): TextStringObject(filename),
             NameObject("/UF"): TextStringObject(filename),
-            NameObject("/EF"): DictionaryObject({NameObject("/F"): writer._add_object(embedded)}),
+            NameObject("/EF"): DictionaryObject({NameObject("/F"): add_object(writer, embedded)}),
         }
     )
     leaf = DictionaryObject(
         {
-            NameObject("/Names"): ArrayObject([TextStringObject(key), writer._add_object(filespec)]),
+            NameObject("/Names"): ArrayObject([TextStringObject(key), add_object(writer, filespec)]),
             NameObject("/Limits"): ArrayObject([TextStringObject(key), TextStringObject(key)]),
         }
     )
     writer.root_object[NameObject("/Names")] = DictionaryObject(
-        {NameObject("/EmbeddedFiles"): DictionaryObject({NameObject("/Kids"): ArrayObject([writer._add_object(leaf)])})}
+        {NameObject("/EmbeddedFiles"): DictionaryObject({NameObject("/Kids"): ArrayObject([add_object(writer, leaf)])})}
     )
     path = tmp_path / "kids.pdf"
     with open(path, "wb") as f:

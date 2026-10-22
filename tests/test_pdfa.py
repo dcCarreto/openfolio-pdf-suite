@@ -224,7 +224,7 @@ def test_lzw_streams_are_recoded(tmp_path):
     lzw = StreamObject()
     lzw._data = _lzw_encode(data)
     lzw[NameObject("/Filter")] = NameObject("/LZWDecode")
-    page[NameObject("/Contents")] = writer._add_object(lzw)
+    page[NameObject("/Contents")] = add_object(writer, lzw)
     writer.write(str(path_in))
     path_out = tmp_path / "out.pdf"
 

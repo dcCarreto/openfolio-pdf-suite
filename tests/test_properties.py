@@ -5,7 +5,7 @@ from pypdf import PdfWriter
 from pypdf.constants import UserAccessPermissions
 from reportlab.pdfgen import canvas as rl_canvas
 
-from core.base import EncryptedPDFError, forget_password, remember_password
+from core.base import EncryptedPDFError, add_object, forget_password, remember_password
 from core.fonts import SANS, register_fonts
 from core.properties import ReadDocumentProperties
 
@@ -102,7 +102,7 @@ def test_newer_catalog_version_wins_over_the_header(make_pdf, tmp_path):
 
     path = tmp_path / "v.pdf"
     writer = PdfWriter(clone_from=str(make_pdf("p.pdf", [(100, 100)])))
-    writer._root_object[NameObject("/Version")] = NameObject("/2.0")
+    writer.root_object[NameObject("/Version")] = NameObject("/2.0")
     with open(path, "wb") as f:
         writer.write(f)
 
@@ -126,22 +126,22 @@ def test_subsets_of_one_font_and_near_equal_page_sizes_are_one_line(tmp_path):
     writer = PdfWriter()
     for width, prefix in ((595.0, "ABCDEF"), (595.6, "GHIJKL")):
         page = writer.add_blank_page(width, 842)
-        font_file = writer._add_object(DecodedStreamObject())
+        font_file = add_object(writer, DecodedStreamObject())
         descriptor = DictionaryObject({NameObject("/FontFile2"): font_file})
         font = DictionaryObject(
             {
                 NameObject("/Type"): NameObject("/Font"),
                 NameObject("/Subtype"): NameObject("/TrueType"),
                 NameObject("/BaseFont"): NameObject(f"/{prefix}+Contrato"),
-                NameObject("/FontDescriptor"): writer._add_object(descriptor),
+                NameObject("/FontDescriptor"): add_object(writer, descriptor),
             }
         )
         page[NameObject("/Resources")] = DictionaryObject(
-            {NameObject("/Font"): DictionaryObject({NameObject("/F1"): writer._add_object(font)})}
+            {NameObject("/Font"): DictionaryObject({NameObject("/F1"): add_object(writer, font)})}
         )
         content = DecodedStreamObject()
         content.set_data(b"BT /F1 12 Tf (x) Tj ET")
-        page[NameObject("/Contents")] = writer._add_object(content)
+        page[NameObject("/Contents")] = add_object(writer, content)
     path = tmp_path / "montado.pdf"
     with open(path, "wb") as f:
         writer.write(f)

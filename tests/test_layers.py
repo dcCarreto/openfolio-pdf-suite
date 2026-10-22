@@ -4,7 +4,7 @@ import pytest
 from pypdf import PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject, TextStringObject
 
-from core.base import EncryptedPDFError
+from core.base import EncryptedPDFError, add_object
 from core.layers import ListLayers, SetLayerVisibility
 
 
@@ -18,7 +18,7 @@ def _make_pdf_with_layers(path, names: list[str], off: list[str] | None = None) 
         ocg = DictionaryObject()
         ocg[NameObject("/Type")] = NameObject("/OCG")
         ocg[NameObject("/Name")] = TextStringObject(name)
-        ocg_refs.append(writer._add_object(ocg))
+        ocg_refs.append(add_object(writer, ocg))
 
     on_refs = ArrayObject(ref for ref, name in zip(ocg_refs, names) if name not in off)
     off_refs = ArrayObject(ref for ref, name in zip(ocg_refs, names) if name in off)

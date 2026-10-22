@@ -2,7 +2,7 @@ import pytest
 from PIL import Image
 from pypdf import PdfReader
 
-from core.base import EncryptedPDFError
+from core.base import EncryptedPDFError, add_object
 from core.convert import ConvertFromImages
 from core.extract_images import ExtractImages, ListEmbeddedImages, ReplaceEmbeddedImage
 
@@ -168,7 +168,7 @@ def test_inline_image_has_a_clear_error(tmp_path):
     page = writer.add_blank_page(width=100, height=100)
     content = DecodedStreamObject()
     content.set_data(b"q 50 0 0 50 0 0 cm BI /W 2 /H 2 /CS /G /BPC 8 ID \x00\xff\xff\x00 EI Q")
-    page[NameObject("/Contents")] = writer._add_object(content)
+    page[NameObject("/Contents")] = add_object(writer, content)
     pdf_path = tmp_path / "inline.pdf"
     writer.write(str(pdf_path))
     new_image_path = tmp_path / "nova.png"

@@ -14,6 +14,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 from core import ocr
 from core.accessibility import FixBasicAccessibilityIssues
 from core.annotations import AddAnnotations, AnnotationSpec
+from core.base import add_object
 from core.bookmarks import AddBookmarks
 from core.compress import CompressPDF
 from core.crop import CropPages, ScalePages
@@ -56,7 +57,8 @@ def rich_pdf(tmp_path):
     writer.set_page_label(2, 3, style="/D", start=1)
     writer.root_object[NameObject("/Lang")] = TextStringObject("pt-BR")
 
-    layer = writer._add_object(
+    layer = add_object(
+        writer,
         DictionaryObject({NameObject("/Type"): NameObject("/OCG"), NameObject("/Name"): TextStringObject("Camada A")})
     )
     writer.root_object[NameObject("/OCProperties")] = DictionaryObject(

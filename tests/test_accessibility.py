@@ -11,7 +11,7 @@ from pypdf.generic import (
 )
 
 from core.accessibility import CheckAccessibility, FixBasicAccessibilityIssues
-from core.base import EncryptedPDFError
+from core.base import EncryptedPDFError, add_object
 
 
 def _make_plain_pdf(path) -> None:
@@ -32,12 +32,12 @@ def _make_tagged_pdf(path, figures_alt: list) -> None:
         figure[NameObject("/S")] = NameObject("/Figure")
         if alt is not None:
             figure[NameObject("/Alt")] = TextStringObject(alt)
-        kids.append(writer._add_object(figure))
+        kids.append(add_object(writer, figure))
 
     struct_root = DictionaryObject()
     struct_root[NameObject("/Type")] = NameObject("/StructTreeRoot")
     struct_root[NameObject("/K")] = kids
-    writer.root_object[NameObject("/StructTreeRoot")] = writer._add_object(struct_root)
+    writer.root_object[NameObject("/StructTreeRoot")] = add_object(writer, struct_root)
 
     mark_info = DictionaryObject()
     mark_info[NameObject("/Marked")] = BooleanObject(True)
@@ -134,7 +134,7 @@ def test_figures_inside_an_indirect_kids_array_are_checked(tmp_path):
     _make_tagged_pdf(pdf_path, figures_alt=[None])
     writer = PdfWriter(clone_from=str(pdf_path))
     root = writer.root_object["/StructTreeRoot"].get_object()
-    root[NameObject("/K")] = writer._add_object(ArrayObject(root["/K"]))  # /K indireto
+    root[NameObject("/K")] = add_object(writer, ArrayObject(root["/K"]))  # /K indireto
     writer.write(str(pdf_path))
 
     report = CheckAccessibility().run(str(pdf_path))

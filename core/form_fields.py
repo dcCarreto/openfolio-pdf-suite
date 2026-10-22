@@ -24,7 +24,7 @@ from pypdf.generic import (
 )
 from reportlab.pdfgen import canvas
 
-from .base import READ, PDFOperation, atomic_output, open_reader, require_valid_page_index, write_pdf
+from .base import READ, PDFOperation, add_object, atomic_output, open_reader, require_valid_page_index, write_pdf
 from .document import remove_widgets_from_form
 from .messages import Message
 from .tabular import escape_formula, write_table
@@ -128,7 +128,7 @@ class AddFormField(PDFOperation):
 
         acroform = writer.root_object.get("/AcroForm")
         if acroform is None:
-            acroform = writer._add_object(overlay_acroform.clone(writer))
+            acroform = add_object(writer, overlay_acroform.clone(writer))
             acroform_obj = cast(DictionaryObject, acroform.get_object())
             acroform_obj[NameObject("/Fields")] = ArrayObject(new_annots)
             writer.root_object[NameObject("/AcroForm")] = acroform
@@ -267,13 +267,13 @@ class AddRadioGroup(PDFOperation):
         if "/V" in overlay_parent:
             parent[NameObject("/V")] = overlay_parent.raw_get("/V")
         parent[NameObject("/Kids")] = ArrayObject(kid_refs)
-        parent_ref = writer._add_object(parent)
+        parent_ref = add_object(writer, parent)
         for kid_ref in kid_refs:
             cast(DictionaryObject, kid_ref.get_object())[NameObject("/Parent")] = parent_ref
 
         acroform = writer.root_object.get("/AcroForm")
         if acroform is None:
-            acroform = writer._add_object(overlay_acroform.clone(writer))
+            acroform = add_object(writer, overlay_acroform.clone(writer))
             acroform_obj = cast(DictionaryObject, acroform.get_object())
             acroform_obj[NameObject("/Fields")] = ArrayObject([parent_ref])
             writer.root_object[NameObject("/AcroForm")] = acroform
