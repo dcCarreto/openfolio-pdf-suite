@@ -1,5 +1,6 @@
 """Licenças e código-fonte das bibliotecas que o app leva de fora do Python: o Tesseract com
-as dependências dele e, no Linux, as bibliotecas do sistema de que o Qt precisa.
+as dependências dele e, no Linux, as bibliotecas do sistema de que o Qt precisa. Também as do
+próprio Python e do Qt, cujos textos de licença os pacotes Python não trazem.
 
 Quem diz de que pacote veio cada biblioteca é o gerenciador de pacotes da máquina de build
 (MSYS2 no Windows, dpkg no Linux, Homebrew no macOS), com a licença, os textos dela e o
@@ -14,13 +15,17 @@ que grava em build/third-party/ (e o app leva a pasta):
 
 import functools
 import json
+import os
+import platform
 import re
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from importlib import metadata
 from pathlib import Path
 
+LICENSES_DIR = Path(__file__).resolve().parent.parent / "licenses"  # textos da GPL 3 e da LGPL 3
 DPKG_DIR = Path("/var/lib/dpkg")
 DOC_DIR = Path("/usr/share/doc")
 MSYS2_SOURCES = "https://repo.msys2.org/mingw/sources/"
@@ -41,6 +46,7 @@ class Package:
     license: str
     license_files: list[Path]
     source: str  # o que packaging/fetch_sources.sh baixa: uma URL ou, no Linux, pacote=versão
+    notice: str = ""  # vai no texto, antes das licenças
 
 
 def needs_source(text: str) -> bool:
@@ -153,6 +159,32 @@ def _homebrew_owner(path: Path) -> Package | None:
     )
 
 
+def _python_package() -> Package | None:
+    """O próprio Python: a licença PSF traz os avisos do que ele leva (OpenSSL, libffi...)."""
+    executable_dir = Path(getattr(sys, "_base_executable", sys.executable)).parent
+    # Na raiz da instalação no Windows; junto da biblioteca padrão no Linux e no macOS.
+    folders = [Path(sys.base_prefix), executable_dir, Path(os.__file__).parent]
+    found = next((f / "LICENSE.txt" for f in folders if (f / "LICENSE.txt").is_file()), None)
+    if found is None:
+        return None
+    return Package("Python", platform.python_version(), "PSF-2.0", [found], source="")
+
+
+def _qt_package() -> Package:
+    """O Qt que vem no PySide6. Os wheels não trazem o texto da LGPL nem o código-fonte, que
+    é grande demais para anexar: a GPL 3 (seção 6d) aceita indicar onde ele está."""
+    version = ".".join(metadata.version("PySide6").split(".")[:3])
+    minor = ".".join(version.split(".")[:2])
+    notice = (
+        "\nCódigo-fonte desta versão:\n"
+        f"- Qt: https://download.qt.io/official_releases/qt/{minor}/{version}/single/\n"
+        f"  (as versões antigas passam para https://download.qt.io/archive/qt/{minor}/{version}/single/)\n"
+        f"- PySide6 e Shiboken6: https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-{version}-src/\n"
+    )
+    files = [LICENSES_DIR / "LGPL-3.0.txt", LICENSES_DIR / "GPL-3.0.txt"]
+    return Package("Qt", version, "LGPL-3.0-only", files, source="", notice=notice)
+
+
 def collect(binaries: list[str], out_dir: Path) -> list[str]:
     """Grava em `out_dir` as licenças e o código-fonte dos pacotes de onde vieram os
     `binaries`; devolve os que nenhum gerenciador de pacotes conhece (fora os dos pacotes
@@ -167,17 +199,23 @@ def collect(binaries: list[str], out_dir: Path) -> list[str]:
             packages[package.name] = package
         elif not any(path.is_relative_to(d) for d in _PYTHON_DIRS):
             unknown.append(binary)
+    packages["Qt"] = _qt_package()
+    python = _python_package()
+    if python is None:
+        unknown.append("LICENSE.txt do Python")
+    else:
+        packages["Python"] = python
 
     shutil.rmtree(out_dir, ignore_errors=True)
     out_dir.mkdir(parents=True)
     rows, sources = [], []
     for package in sorted(packages.values(), key=lambda p: p.name.lower()):
-        text = f"{package.name} {package.version}\nLicença: {package.license}\n" + "".join(
+        text = f"{package.name} {package.version}\nLicença: {package.license}\n{package.notice}" + "".join(
             f"\n===== {f.name} =====\n\n{f.read_text(encoding='utf-8', errors='replace')}" for f in package.license_files
         )
         (out_dir / f"{package.name}.txt").write_text(text, encoding="utf-8")
         rows.append([package.name, package.version, package.license])
-        if needs_source(text):
+        if package.source and needs_source(text):  # o texto da PSF fala em "GPL-compatible"
             sources.append(package.source)
     (out_dir / "components.json").write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
     # "\n" mesmo no Windows: o fetch_sources.sh lê com o bash.

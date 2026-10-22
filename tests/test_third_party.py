@@ -3,7 +3,9 @@ leva de fora do Python, a partir do banco do gerenciador de pacotes."""
 
 import importlib.util
 import json
+import platform
 import sys
+from importlib import metadata
 from pathlib import Path
 
 import pytest
@@ -53,7 +55,8 @@ def test_msys2_packages_give_the_license_texts_and_the_gpl_sources(tmp_path, mon
     unknown = third_party.collect([str(b) for b in binaries], out)
 
     assert unknown == [str(stray)]
-    assert json.loads((out / "components.json").read_text(encoding="utf-8")) == [
+    rows = json.loads((out / "components.json").read_text(encoding="utf-8"))
+    assert [row for row in rows if row[0] not in ("Python", "Qt")] == [
         ["gcc-libs", "15.2.0-8", "GPL-3.0-or-later WITH GCC-exception-3.1"],
         ["jbigkit", "2.1-5", "GPL-2.0-or-later"],
         ["libpng", "1.6.50-1", "libpng-2.0"],
@@ -79,8 +82,24 @@ def test_dpkg_packages_use_the_copyright_file_and_the_source_package(tmp_path, m
     out = tmp_path / "third-party"
     assert third_party.collect([str(library)], out) == []
 
-    assert json.loads((out / "components.json").read_text(encoding="utf-8")) == [["libjbig0", "2.1-6.1build1", "GPL-2+"]]
+    assert ["libjbig0", "2.1-6.1build1", "GPL-2+"] in json.loads((out / "components.json").read_text(encoding="utf-8"))
     assert (out / "sources.txt").read_text(encoding="utf-8") == "jbigkit=2.1-6.1\n"
+
+
+def test_python_and_qt_get_their_license_texts_and_qt_where_its_source_is(tmp_path):
+    out = tmp_path / "third-party"
+    assert third_party.collect([], out) == []
+
+    rows = json.loads((out / "components.json").read_text(encoding="utf-8"))
+    qt_version = ".".join(metadata.version("PySide6").split(".")[:3])
+    assert rows == [["Python", platform.python_version(), "PSF-2.0"], ["Qt", qt_version, "LGPL-3.0-only"]]
+    assert "PYTHON SOFTWARE FOUNDATION LICENSE" in (out / "Python.txt").read_text(encoding="utf-8")
+    qt = (out / "Qt.txt").read_text(encoding="utf-8")
+    assert "GNU LESSER GENERAL PUBLIC LICENSE" in qt and "GNU GENERAL PUBLIC LICENSE" in qt
+    assert f"/PySide6-{qt_version}-src/" in qt and f"/{qt_version}/single/" in qt
+    # Nenhum dos dois vai para o .tar: o texto da PSF fala em "GPL-compatible", e o fonte do Qt
+    # (grande demais) fica indicado no texto.
+    assert (out / "sources.txt").read_text(encoding="utf-8") == ""
 
 
 @pytest.mark.parametrize(

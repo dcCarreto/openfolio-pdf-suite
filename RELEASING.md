@@ -65,8 +65,11 @@ O gerenciador de pacotes também diz de que pacote veio cada biblioteca que vai 
 `build/third-party/`, que o app leva (Ajuda > Sobre > Licenças das bibliotecas), e a lista do
 código-fonte dos pacotes GPL e LGPL, que `bash packaging/fetch_sources.sh <plataforma>` baixa
 para `dist/installer/OpenFolioPDFSuite-codigo-fonte-<plataforma>.tar`; o workflow anexa esse
-arquivo à release, como a GPL pede. Uma biblioteca sem pacote de origem (o Tesseract do
-instalador do UB Mannheim, por exemplo) só gera um aviso no build local; no CI, reprova.
+arquivo à release, como a GPL pede. O Python e o Qt entram também: a licença PSF do Python
+instalado e, para o Qt, os textos da LGPL 3 e da GPL 3 (`packaging/licenses/`, que os wheels do
+PySide6 não trazem) com os endereços do código-fonte daquela versão. Uma biblioteca sem pacote
+de origem (o Tesseract do instalador do UB Mannheim, por exemplo) só gera um aviso no build
+local; no CI, reprova.
 
 ### Windows
 

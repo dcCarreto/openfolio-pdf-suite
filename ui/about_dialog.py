@@ -7,7 +7,7 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QUrl, qVersion
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog,
@@ -30,15 +30,14 @@ CHANGELOG_URL = "https://github.com/dcCarreto/openfolio-pdf-suite/blob/main/CHAN
 # O que vai no app e não é um pacote Python (os pacotes vêm dos metadados instalados) nem
 # biblioteca de um gerenciador de pacotes (vêm de THIRD_PARTY_DIR).
 OTHER_COMPONENTS = [
-    ("Qt", qVersion(), "LGPL-3.0-only"),
     ("PDFium", "—", "BSD-3-Clause"),
     ("Tesseract tessdata (eng, por, osd)", "4.1.0", "Apache-2.0"),
     ("DejaVu Fonts", "2.37", "Bitstream Vera"),
     ("sRGB v2 micro (Compact-ICC-Profiles)", "—", "CC0-1.0"),
 ]
 
-# O Tesseract e as bibliotecas dele (e, no Linux, as do sistema que o Qt usa), com os textos
-# das licenças: só no app empacotado (packaging/pyinstaller/third_party.py).
+# O Tesseract e as bibliotecas dele (e, no Linux, as do sistema que o Qt usa), o Python e o Qt,
+# com os textos das licenças: só no app empacotado (packaging/pyinstaller/third_party.py).
 _BUNDLE = getattr(sys, "_MEIPASS", None)
 THIRD_PARTY_DIR = Path(_BUNDLE) / "third-party" if _BUNDLE else None
 

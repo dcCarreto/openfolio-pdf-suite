@@ -4,7 +4,6 @@ from importlib import metadata
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import qVersion
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from core.version import APP_VERSION
@@ -47,7 +46,6 @@ def test_about_shows_the_version_the_log_file_and_the_components(tmp_path, monke
     assert dialog.log_edit.text() == str(log_file)
     rows = _rows(dialog)
     assert ("tesseract-ocr", "5.5.1-1", "Apache-2.0") in rows
-    assert ("Qt", qVersion(), "LGPL-3.0-only") in rows
     assert any(name == "pypdf" for name, _version, _license in rows)
     button = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Licenças das bibliotecas")
     assert button.isEnabled()

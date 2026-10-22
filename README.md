@@ -443,8 +443,9 @@ Contribuições são bem-vindas. Veja [CONTRIBUTING.md](CONTRIBUTING.md) para ma
 
 Distribuído sob a licença [MIT](LICENSE). As fontes DejaVu incluídas em `core/data/fonts`
 têm licença própria, livre ([LICENSE-DejaVu.txt](core/data/fonts/LICENSE-DejaVu.txt)), e o
-perfil de cor em `core/data/icc` é de domínio público (CC0). Os instaladores levam o Tesseract e
-as bibliotecas dele, cada uma com a sua licença: os textos ficam em Ajuda > Sobre > Licenças das
-bibliotecas, e o código-fonte das que são GPL ou LGPL vai junto em cada
+perfil de cor em `core/data/icc` é de domínio público (CC0). Os instaladores levam o Python, o Qt,
+o Tesseract e as bibliotecas dele, cada um com a sua licença: os textos ficam em Ajuda > Sobre >
+Licenças das bibliotecas, e o código-fonte das que são GPL ou LGPL vai junto em cada
 [release](https://github.com/dcCarreto/openfolio-pdf-suite/releases)
-(`OpenFolioPDFSuite-codigo-fonte-<plataforma>.tar`).
+(`OpenFolioPDFSuite-codigo-fonte-<plataforma>.tar`); o do Qt, grande demais para anexar, fica
+indicado no texto da licença dele.
