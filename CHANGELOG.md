@@ -36,6 +36,9 @@ Ainda não publicada.
   as páginas escolhidas (ou as selecionadas nas miniaturas).
 - Marca d'água com imagem ou logotipo, cor do texto, nos cantos ou em mosaico, atrás do
   conteúdo, só nas páginas escolhidas e com pré-visualização.
+- A numeração de páginas escolhe a posição, algarismos romanos, a fonte e o tamanho, pula
+  a capa, numera só as páginas escolhidas e pode escrever os rótulos de página do
+  documento.
 - No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
 - No Linux, o AppImage oferece aparecer no menu de aplicativos e na escolha do programa para
   abrir PDF (Ajuda > Mostrar no menu de aplicativos).

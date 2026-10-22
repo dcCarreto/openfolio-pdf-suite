@@ -176,3 +176,12 @@ def test_watermark_with_a_logo_on_chosen_pages(make_pdf, tmp_path, capsys):
     assert [bool(page.images) for page in PdfReader(str(output)).pages] == [False, True, True]
     assert main(["watermark", str(source), "-o", str(tmp_path / "x.pdf")]) == 1
     assert "--texto ou --imagem" in capsys.readouterr().err
+
+
+def test_number_in_roman_numerals_after_the_cover(make_pdf, tmp_path):
+    source = make_pdf("doc.pdf", [(300, 300)] * 3)
+    output = tmp_path / "numerado.pdf"
+
+    assert main(["number", str(source), "-o", str(output), "--algarismos", "ROMANOS", "--pular", "1", "-q"]) == 0
+
+    assert [page.extract_text().strip() for page in PdfReader(str(output)).pages] == ["", "I", "II"]

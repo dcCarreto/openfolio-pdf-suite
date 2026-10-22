@@ -181,3 +181,89 @@ def test_overlay_text_outside_latin1_is_kept(make_pdf, tmp_path):
     AddHeaderFooter().run(str(pdf_path), str(output_path), text="Łódź ő Ω {page}")
 
     assert "Łódź ő Ω 1" in PdfReader(str(output_path)).pages[0].extract_text()
+
+
+def _texts(path) -> list[str]:
+    return [page.extract_text().strip() for page in PdfReader(str(path)).pages]
+
+
+def test_roman_numerals_skip_the_cover(make_pdf, tmp_path):
+    output_path = tmp_path / "out.pdf"
+    AddPageNumbers().run(str(make_pdf("doc.pdf", [(300, 300)] * 5)), str(output_path), style="roman", skip_first=1)
+
+    assert _texts(output_path) == ["", "i", "ii", "iii", "iv"]
+
+
+def test_to_roman():
+    from core.page_numbers import to_roman
+
+    assert [to_roman(n) for n in (1, 4, 9, 14, 40, 90, 400, 1994, 3999)] == [
+        "I", "IV", "IX", "XIV", "XL", "XC", "CD", "MCMXCIV", "MMMCMXCIX"
+    ]  # fmt: skip
+    with pytest.raises(ValueError):
+        to_roman(0)
+
+
+def test_only_the_chosen_pages_are_numbered_in_sequence(make_pdf, tmp_path):
+    output_path = tmp_path / "out.pdf"
+    AddPageNumbers().run(str(make_pdf("doc.pdf", [(300, 300)] * 5)), str(output_path), style="ROMAN", pages=[4, 1, 2])
+
+    assert _texts(output_path) == ["", "I", "II", "", "III"]
+
+
+def test_page_labels_are_written_as_they_are(make_pdf, tmp_path):
+    from pypdf import PdfWriter
+    from pypdf.constants import PageLabelStyle
+
+    writer = PdfWriter(clone_from=str(make_pdf("doc.pdf", [(300, 300)] * 4)))
+    writer.set_page_label(0, 1, style=PageLabelStyle.LOWERCASE_ROMAN)
+    writer.set_page_label(2, 3, style=PageLabelStyle.DECIMAL, prefix="A-")
+    labelled = tmp_path / "rotulos.pdf"
+    writer.write(labelled)
+    output_path = tmp_path / "out.pdf"
+
+    AddPageNumbers().run(str(labelled), str(output_path), use_page_labels=True, skip_first=1)
+
+    assert _texts(output_path) == ["", "ii", "A-1", "A-2"]
+
+
+def test_position_and_font_of_the_page_number(make_text_pdf, tmp_path):
+    pdf_path = make_text_pdf("doc.pdf", [])
+    output_path = tmp_path / "out.pdf"
+    AddPageNumbers().run(str(pdf_path), str(output_path), position="header-right", font="OpenFolioMono")
+
+    geometry, (left, bottom, right, top) = _visual_text_box(output_path, "1")
+    assert right > geometry.width - 40 and top > geometry.height - 40
+    fonts = PdfReader(str(output_path)).pages[0]["/Resources"]["/Font"]
+    assert any("Mono" in str(fonts[name].get_object()["/BaseFont"]) for name in fonts)
+
+
+def test_skipping_every_page_is_an_error(make_pdf, tmp_path):
+    with pytest.raises(ValueError, match="Nenhuma página"):
+        AddPageNumbers().run(str(make_pdf("doc.pdf", [(300, 300)] * 2)), str(tmp_path / "out.pdf"), skip_first=2)
+
+
+def test_page_numbers_tab_numbers_the_selected_pages(make_pdf, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    from ui.document_session import DocumentSession
+    from ui.pages.page_numbers_page import PageNumbersPage
+    from ui.tasks import wait_for_tasks
+
+    QApplication.instance() or QApplication([])
+    monkeypatch.setattr(QMessageBox, "information", lambda *_args: None)
+    session = DocumentSession()
+    session.open(str(make_pdf("doc.pdf", [(300, 300)] * 4)))
+    session.set_selected_pages([1, 3])
+    page = PageNumbersPage(session)
+    output_path = tmp_path / "numerado.pdf"
+    monkeypatch.setattr(page.output_picker, "path", lambda: str(output_path))
+
+    page.number_style_combo.setCurrentIndex(page.number_style_combo.findData("roman"))
+    page.number_selection_button.click()
+    page._apply()
+    assert wait_for_tasks()
+
+    assert _texts(output_path) == ["", "i", "", "ii"]
+    page.page_labels_check.setChecked(True)
+    assert not page.number_style_combo.isEnabled() and not page.start_at_spin.isEnabled()

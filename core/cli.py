@@ -185,9 +185,22 @@ def _watermark(args):
 
 
 def _number(args):
+    from .fonts import MONO, SANS, SANS_BOLD
     from .page_numbers import AddPageNumbers
 
-    AddPageNumbers().run(args.input, _output(args), start_at=args.inicio, font_size=args.tamanho)
+    pages = _pages(args, args.input, args.paginas)
+    AddPageNumbers().run(
+        args.input,
+        _output(args),
+        start_at=args.inicio,
+        font_size=args.tamanho,
+        position=args.posicao,
+        style={"arabicos": "arabic", "romanos": "roman", "ROMANOS": "ROMAN"}[args.algarismos],
+        skip_first=args.pular,
+        pages=sorted(set(pages)) if pages is not None else None,
+        use_page_labels=args.rotulos,
+        font={"normal": SANS, "negrito": SANS_BOLD, "mono": MONO}[args.fonte],
+    )
     return f"Páginas numeradas: {args.output}."
 
 
@@ -358,9 +371,19 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_argument("--atras", action="store_true", help="por baixo do conteúdo")
     sub.add_argument("--paginas", help="padrão: todas")
 
-    sub = command("number", _number, "numera as páginas no rodapé")
+    sub = command("number", _number, "numera as páginas")
     sub.add_argument("--inicio", type=int, default=1)
     sub.add_argument("--tamanho", type=int, default=10)
+    sub.add_argument(
+        "--posicao",
+        choices=("header-left", "header-center", "header-right", "footer-left", "footer-center", "footer-right"),
+        default="footer-center",
+    )
+    sub.add_argument("--algarismos", choices=("arabicos", "romanos", "ROMANOS"), default="arabicos")
+    sub.add_argument("--pular", type=int, default=0, metavar="N", help="deixa as N primeiras páginas sem número")
+    sub.add_argument("--paginas", help="só estas páginas, numeradas em sequência (padrão: todas)")
+    sub.add_argument("--rotulos", action="store_true", help="escreve os rótulos de página do documento")
+    sub.add_argument("--fonte", choices=("normal", "negrito", "mono"), default="normal")
 
     sub = command("ocr", _ocr, "reconhece o texto de páginas escaneadas (Tesseract)")
     sub.add_argument("--idioma", default="por", help="idioma do Tesseract (padrão por; vários: por+eng)")

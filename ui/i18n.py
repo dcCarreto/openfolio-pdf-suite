@@ -280,6 +280,22 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Escolha a imagem da marca d'água.": "Choose the watermark image.",
     "Informe as páginas a marcar.": "Enter the pages to mark.",
     "Informe o texto ou a imagem da marca d'água.": "Enter the text or the image of the watermark.",
+    # Numeração (M20)
+    "Arábicos (1, 2, 3)": "Arabic (1, 2, 3)",
+    "Romanos minúsculos (i, ii, iii)": "Lowercase Roman (i, ii, iii)",
+    "Romanos maiúsculos (I, II, III)": "Uppercase Roman (I, II, III)",
+    "Algarismos:": "Numerals:",
+    "Usar os rótulos de página do documento": "Use the document's page labels",
+    "Escreve o número que o visualizador mostra para cada página (como iii ou A-1), em vez de contar.": (
+        "Writes the number the viewer shows for each page (such as iii or A-1), instead of counting."
+    ),
+    "Pular as primeiras:": "Skip the first:",
+    "A capa e as páginas de abertura ficam sem número; a contagem começa depois delas.": (
+        "The cover and the opening pages get no number; the count starts after them."
+    ),
+    "Algarismos romanos vão de 1 a 3999.": "Roman numerals go from 1 to 3999.",
+    "Informe as páginas a numerar.": "Enter the pages to number.",
+    "Nenhuma página sobrou para numerar.": "No page is left to number.",
     # Pages (rotate/reorder/remove/insert/replace)
     "Rotacionar": "Rotate",
     "Reordenar": "Reorder",
