@@ -30,6 +30,8 @@ Ainda não publicada.
 - Novas conversões: PDF para Word, Excel e texto; HTML, Markdown e texto para PDF.
 - Mesclar escolhe as páginas de cada arquivo, pode criar um marcador por arquivo (com os
   marcadores dele dentro) e intercala frentes e versos escaneados em arquivos separados.
+- Dividir também por intervalos (ou as páginas selecionadas nas miniaturas), por tamanho
+  máximo de arquivo e a cada página em branco de um lote escaneado.
 - No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
 - No Linux, o AppImage oferece aparecer no menu de aplicativos e na escolha do programa para
   abrir PDF (Ajuda > Mostrar no menu de aplicativos).

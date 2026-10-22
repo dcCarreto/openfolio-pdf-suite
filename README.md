@@ -126,7 +126,7 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | --- | --- |
 | 🆕 Criar PDF | Cria um novo PDF em branco, com uma ou mais páginas, no tamanho que você escolher |
 | 📄 Mesclar | Combina vários PDFs em um único arquivo, na ordem que você definir, com as páginas escolhidas de cada um, um marcador por arquivo ou intercalando frentes e versos escaneados à parte |
-| ✂️ Dividir | Separa um PDF em vários arquivos menores (uma ou N páginas por arquivo, ou um arquivo por marcador de nível superior do sumário) |
+| ✂️ Dividir | Separa um PDF em vários arquivos menores: N páginas por arquivo, um arquivo por marcador de nível superior do sumário, por intervalos (ou as páginas selecionadas nas miniaturas), por tamanho máximo de arquivo ou a cada página em branco de um lote escaneado |
 | 🔃 Páginas | Rotaciona, reordena, remove, insere ou substitui páginas de um PDF (inserção/substituição usando páginas de outro PDF). As páginas são contadas a partir de 1, como no visualizador, e aceitam intervalos como `1-3, 5, 8-` |
 | 🔲 Organizar páginas | Grade de miniaturas do documento: arraste para reordenar, gire, duplique, exclua, insira páginas em branco ou extraia as selecionadas para outro arquivo. Antes de aplicar, Ctrl+Z desfaz cada mudança na grade; ao clicar em Aplicar, tudo entra no documento num passo só, que Ctrl+Z também desfaz |
 | 🗜️ Comprimir | Reduz o tamanho de um PDF em três níveis: leve (sem perda), médio e forte (imagens reamostradas para 150 ou 100 DPI, pelo tamanho com que aparecem na página, e regravadas em JPEG; imagens sem cor passam a escala de cinza). Não grava nada se o arquivo não ficar menor |

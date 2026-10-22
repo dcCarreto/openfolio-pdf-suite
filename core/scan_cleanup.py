@@ -76,8 +76,7 @@ class CleanScannedPages:
                     gray = pdfium_page.render(scale=_SCALE).to_pil().convert("L")
                     pdfium_page.close()
                 mask = ink_mask(gray)
-                ink = mask.histogram()[255]
-                if ink <= _BLANK_FRACTION * mask.width * mask.height:
+                if is_blank(mask):
                     if remove_blank:
                         result.removed.append(index)
                     continue
@@ -118,6 +117,33 @@ class CleanScannedPages:
             writer = pages_writer([(cleaned, kept)])
         write_pdf(writer, output_path)
         return result
+
+
+def is_blank(mask: Image.Image) -> bool:
+    """Quase nenhuma tinta na máscara de `ink_mask`."""
+    return mask.histogram()[255] <= _BLANK_FRACTION * mask.width * mask.height
+
+
+def find_blank_pages(input_path: str, progress: Progress | None = None) -> list[int]:
+    """As páginas (a partir de 0) que parecem em branco, com o mesmo critério da limpeza."""
+    progress = ensure_progress(progress)
+    blanks = []
+    with PDFIUM_LOCK:
+        pdfium_doc = open_pdfium(input_path)
+    try:
+        total = len(pdfium_doc)
+        for index in range(total):
+            progress.update(index, total, "Procurando páginas em branco")
+            with PDFIUM_LOCK:
+                pdfium_page = pdfium_doc[index]
+                gray = pdfium_page.render(scale=_SCALE).to_pil().convert("L")
+                pdfium_page.close()
+            if is_blank(ink_mask(gray)):
+                blanks.append(index)
+    finally:
+        with PDFIUM_LOCK:
+            pdfium_doc.close()
+    return blanks
 
 
 def ink_mask(gray: Image.Image) -> Image.Image:
