@@ -47,7 +47,7 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#AppExeName}
-; A tarefa "associatepdf" registra o app em "Abrir com" para .pdf.
+; A tarefa "associatepdf" registra o app como leitor de PDF ("Abrir com" e aplicativos padrão).
 ChangesAssociations=yes
 
 [Languages]
@@ -55,10 +55,14 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
-brazilianportuguese.AssociatePdf=Mostrar o OpenFolio em "Abrir com" para arquivos PDF
-english.AssociatePdf=Show OpenFolio in "Open with" for PDF files
+brazilianportuguese.AssociatePdf=Registrar o OpenFolio como leitor de PDF ("Abrir com" e aplicativos padrão do Windows)
+english.AssociatePdf=Register OpenFolio as a PDF reader ("Open with" and Windows default apps)
+brazilianportuguese.DefaultPdf=Escolher o OpenFolio como programa padrão para PDF
+english.DefaultPdf=Choose OpenFolio as the default program for PDF
 brazilianportuguese.PdfFile=Documento PDF
 english.PdfFile=PDF document
+brazilianportuguese.AppDescription=Visualizador e editor de PDF, 100% local
+english.AppDescription=PDF viewer and editor, 100% local
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -71,6 +75,14 @@ Root: HKA; Subkey: "Software\Classes\OpenFolioPDFSuite.pdf"; ValueType: string; 
 Root: HKA; Subkey: "Software\Classes\OpenFolioPDFSuite.pdf\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName},0"; Tasks: associatepdf
 Root: HKA; Subkey: "Software\Classes\OpenFolioPDFSuite.pdf\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: associatepdf
 Root: HKA; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".pdf"; ValueData: ""; Flags: uninsdeletekey; Tasks: associatepdf
+; Aparece em Configurações > Aplicativos > Aplicativos padrão, onde o usuário pode torná-lo o padrão
+; para .pdf. O Windows não deixa o instalador fazer essa escolha por ele.
+Root: HKA; Subkey: "Software\OpenFolioPDFSuite"; Flags: uninsdeletekey; Tasks: associatepdf
+Root: HKA; Subkey: "Software\OpenFolioPDFSuite\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "{#AppName}"; Tasks: associatepdf
+Root: HKA; Subkey: "Software\OpenFolioPDFSuite\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "{cm:AppDescription}"; Tasks: associatepdf
+Root: HKA; Subkey: "Software\OpenFolioPDFSuite\Capabilities"; ValueType: string; ValueName: "ApplicationIcon"; ValueData: "{app}\{#AppExeName},0"; Tasks: associatepdf
+Root: HKA; Subkey: "Software\OpenFolioPDFSuite\Capabilities\FileAssociations"; ValueType: string; ValueName: ".pdf"; ValueData: "OpenFolioPDFSuite.pdf"; Tasks: associatepdf
+Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "OpenFolioPDFSuite"; ValueData: "Software\OpenFolioPDFSuite\Capabilities"; Flags: uninsdeletevalue; Tasks: associatepdf
 
 [InstallDelete]
 ; Numa atualização, as bibliotecas da instalação anterior saem antes: uma DLL que a versão nova
@@ -88,5 +100,9 @@ Name: "{autodesktop}\OpenFolio PDF Suite"; Filename: "{app}\{#AppExeName}"; Task
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,OpenFolio PDF Suite}"; Flags: nowait postinstall skipifsilent
+; Abre a página do OpenFolio nos aplicativos padrão (Windows 11; no 10, a lista geral), onde um
+; clique o torna o padrão para .pdf.
+Filename: "ms-settings:defaultapps?registeredAppMachine=OpenFolioPDFSuite"; Description: "{cm:DefaultPdf}"; Flags: shellexec nowait postinstall skipifsilent runasoriginaluser; Tasks: associatepdf; Check: IsAdminInstallMode
+Filename: "ms-settings:defaultapps?registeredAppUser=OpenFolioPDFSuite"; Description: "{cm:DefaultPdf}"; Flags: shellexec nowait postinstall skipifsilent runasoriginaluser; Tasks: associatepdf; Check: not IsAdminInstallMode
 ; Atualização feita pelo app (/SILENT): ele fechou para instalar e abre de novo.
 Filename: "{app}\{#AppExeName}"; Flags: nowait skipifnotsilent

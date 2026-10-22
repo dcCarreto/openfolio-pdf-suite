@@ -76,8 +76,17 @@ gravar o resultado de uma ferramenta direto em outro arquivo, use "Procurar..." 
 saída dela. Páginas selecionadas nas miniaturas (Ctrl ou Shift + clique) podem ser usadas como
 entrada da aba Páginas.
 
-Dá para abrir um PDF arrastando-o para a janela, pelo menu **Arquivo > Abrir recente**, ou
-pelo "Abrir com" do sistema (no Windows, o instalador oferece incluir o OpenFolio nessa lista).
+Dá para abrir um PDF arrastando-o para a janela, pelo menu **Arquivo > Abrir recente**, pelo
+"Abrir com" do sistema ou com um duplo clique, se o OpenFolio for o seu programa padrão para PDF:
+
+- **Windows**: o instalador registra o OpenFolio como leitor de PDF e, ao final, oferece abrir
+  a tela de aplicativos padrão já nele; um clique o torna o padrão (o Windows não deixa um
+  instalador fazer essa escolha sozinho).
+- **Linux** (`.deb`): escolha-o nas configurações de aplicativos padrão do sistema, ou rode
+  `xdg-mime default openfolio-pdf-suite.desktop application/pdf`.
+- **macOS**: em **Obter Informações** de um PDF, escolha o OpenFolio em "Abrir com" e clique
+  em **Alterar Tudo**.
+
 O app lembra o idioma, a última pasta usada e os arquivos recentes. **Arquivo > Imprimir**
 (Ctrl+P) imprime o documento de trabalho inteiro, um intervalo, a página atual ou as páginas
 selecionadas nas miniaturas, com anotações e campos preenchidos, ajustando cada página ao

@@ -28,6 +28,7 @@ Ainda não publicada.
   escaneados, comparar dois documentos lado a lado, comentários existentes e XFDF,
   propriedades do documento.
 - Novas conversões: PDF para Word, Excel e texto; HTML, Markdown e texto para PDF.
+- No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
 - Tema claro ou o do sistema, modo apresentação, página dupla e livro, paleta de comandos
   (Ctrl+K) e atalhos de teclado configuráveis.
 - Linha de comando (`openfolio`) para usar as ferramentas em scripts.
