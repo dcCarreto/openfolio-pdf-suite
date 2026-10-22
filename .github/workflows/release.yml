@@ -16,6 +16,10 @@ name: Release
 # build instala o Tesseract pelo gerenciador de pacotes da VM, baixa os idiomas
 # (packaging/fetch_tessdata.py) e o PyInstaller leva o binario com as bibliotecas dele. Um
 # teste de fumaca roda o Tesseract de dentro do build antes de empacotar.
+#
+# A release so e publicada se o CI inteiro (ci.yml: lint, testes nos tres SOs e testes com o
+# Tesseract) passar no commit da tag: o app instala as atualizacoes, entao um build quebrado
+# chegaria direto a quem aceitou. Os builds rodam em paralelo com os testes.
 
 on:
   push:
@@ -44,6 +48,9 @@ jobs:
             exit 1
           fi
           python3 packaging/release_notes.py "$expected" > /dev/null
+
+  tests:
+    uses: ./.github/workflows/ci.yml
 
   build-windows:
     needs: version
@@ -151,7 +158,7 @@ jobs:
           path: dist/installer/*.dmg
 
   release:
-    needs: [version, build-windows, build-linux, build-macos]
+    needs: [version, tests, build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

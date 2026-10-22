@@ -23,8 +23,9 @@ para saber se há atualização, mostra ao usuário o que ela traz e só a insta
    git push origin v2026.11.3
    ```
 
-   O workflow recusa a release se a tag não bater com o `pyproject.toml` ou se o
-   `CHANGELOG.md` não tiver o trecho dela (`packaging/release_notes.py`).
+   O workflow recusa a release se a tag não bater com o `pyproject.toml`, se o
+   `CHANGELOG.md` não tiver o trecho dela (`packaging/release_notes.py`) ou se o CI
+   (`ci.yml`, chamado pelo próprio workflow de release) reprovar no commit da tag.
 
 5. O workflow `.github/workflows/release.yml` builda automaticamente, um job por
    plataforma (cada um na VM nativa daquele SO):

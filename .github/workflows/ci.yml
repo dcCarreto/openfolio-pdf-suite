@@ -2,12 +2,14 @@ name: CI
 
 # Roda a suite de testes (pytest) a cada push em main e em desenvolvimento (onde o trabalho
 # e integrado, ver CONTRIBUTING.md) e a cada pull request, para pegar regressao antes do
-# merge. O job lint roda o ruff e o mypy (configurados no pyproject.toml).
+# merge. O job lint roda o ruff e o mypy (configurados no pyproject.toml). O release.yml
+# tambem o chama (workflow_call): nenhuma atualizacao e publicada com o CI reprovado.
 
 on:
   push:
     branches: [main, desenvolvimento]
   pull_request:
+  workflow_call:
 
 jobs:
   lint:
