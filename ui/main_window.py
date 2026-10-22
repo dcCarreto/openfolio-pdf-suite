@@ -50,7 +50,7 @@ from ui.properties_dialog import DocumentPropertiesDialog
 from ui.redaction_state import RedactionState
 from ui.shortcuts import CommandPalette, ShortcutsDialog
 from ui.tasks import TaskManager, call, run_task
-from ui import theme
+from ui import desktop_integration, theme
 from ui.theme import apply_titlebar
 from ui.update_dialog import UpdateDialog
 from ui.viewer import pdf_viewer as viewer_layouts
@@ -385,6 +385,11 @@ class MainWindow(QMainWindow):
         self._update_on_start_action.setCheckable(True)
         self._update_on_start_action.setChecked(self._preferences.check_updates_on_start())
         self._update_on_start_action.toggled.connect(self._preferences.set_check_updates_on_start)
+        if desktop_integration.appimage_path():
+            self._app_menu_action = command(help_menu, "help.app_menu", tr("Mostrar no menu de aplicativos"))
+            self._app_menu_action.setCheckable(True)
+            self._app_menu_action.setChecked(desktop_integration.is_integrated())
+            self._app_menu_action.toggled.connect(self._set_in_app_menu)
         help_menu.addSeparator()
         command(help_menu, "help.about", tr("Sobre o OpenFolio PDF Suite")).triggered.connect(self._show_about)
 
@@ -863,6 +868,42 @@ class MainWindow(QMainWindow):
         # Inno Setup sem perguntas: atualiza por cima, apaga os arquivos da instalação anterior
         # e abre o app de novo (packaging/windows/installer.iss).
         QProcess.startDetached(str(target), ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
+
+    def offer_app_menu(self) -> None:
+        """No AppImage: na primeira vez, pergunta se o app deve aparecer no menu de aplicativos
+        (e na escolha do programa para PDF); depois, só acompanha o arquivo se ele mudar de
+        lugar."""
+        appimage = desktop_integration.appimage_path()
+        if appimage is None:
+            return
+        if self._preferences.app_menu_offered():
+            try:
+                desktop_integration.follow(appimage)
+            except OSError:
+                logger.warning("Não foi possível atualizar a entrada do menu de aplicativos", exc_info=True)
+            return
+        self._preferences.set_app_menu_offered(True)
+        answer = QMessageBox.question(
+            self,
+            tr("Menu de aplicativos"),
+            tr("Mostrar o OpenFolio no menu de aplicativos e na lista de programas para abrir PDF?\n\n"
+               "Dá para mudar depois em Ajuda > Mostrar no menu de aplicativos."),
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._app_menu_action.setChecked(True)
+
+    def _set_in_app_menu(self, checked: bool) -> None:
+        appimage = desktop_integration.appimage_path()
+        try:
+            if checked and appimage:
+                desktop_integration.integrate(appimage)
+            else:
+                desktop_integration.remove()
+        except OSError as exc:
+            show_error(self, tr("Menu de aplicativos"), tr("Não foi possível mudar o menu de aplicativos: {error}"), exc)
+            self._app_menu_action.blockSignals(True)
+            self._app_menu_action.setChecked(desktop_integration.is_integrated())
+            self._app_menu_action.blockSignals(False)
 
     def _show_about(self):
         AboutDialog(log_path(), self).exec()

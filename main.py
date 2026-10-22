@@ -44,6 +44,7 @@ def main():
 
     windows = AppWindows(make_window)
     windows.open([])
+    windows.windows()[0].offer_app_menu()
     if preferences.check_updates_on_start():
         windows.windows()[0].check_for_updates(manual=False)
 

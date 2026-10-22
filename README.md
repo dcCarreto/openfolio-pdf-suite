@@ -260,7 +260,7 @@ repositório:
 | Sistema | Arquivo |
 | --- | --- |
 | Windows | `OpenFolioPDFSuite-Setup.exe` — instalador com atalho no menu Iniciar e desinstalador |
-| Linux | `OpenFolioPDFSuite-x86_64.AppImage` (roda em qualquer distro, sem instalar nada) ou `openfolio-pdf-suite_amd64.deb` (Debian/Ubuntu) |
+| Linux | `OpenFolioPDFSuite-x86_64.AppImage` (roda em qualquer distro, sem instalar nada; na primeira vez, oferece aparecer no menu de aplicativos e na escolha do programa para PDF, o que se muda depois em Ajuda > Mostrar no menu de aplicativos) ou `openfolio-pdf-suite_amd64.deb` (Debian/Ubuntu) |
 | macOS | `OpenFolioPDFSuite.dmg` |
 
 Nenhum dos três é assinado digitalmente (isso exige certificados pagos que este projeto

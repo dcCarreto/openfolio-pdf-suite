@@ -1574,6 +1574,13 @@ _EN_TRANSLATIONS: dict[str, str] = {
     # A17 — verificação de atualização
     "Verificar atualizações...": "Check for updates...",
     "Verificar atualizações ao iniciar": "Check for updates at startup",
+    "Mostrar no menu de aplicativos": "Show in the applications menu",
+    "Menu de aplicativos": "Applications menu",
+    "Mostrar o OpenFolio no menu de aplicativos e na lista de programas para abrir PDF?\n\n"
+    "Dá para mudar depois em Ajuda > Mostrar no menu de aplicativos.":
+        "Show OpenFolio in the applications menu and in the list of programs to open PDFs?\n\n"
+        "You can change this later in Help > Show in the applications menu.",
+    "Não foi possível mudar o menu de aplicativos: {error}": "Could not change the applications menu: {error}",
     "Verificar atualizações": "Check for updates",
     "Não foi possível verificar atualizações. Confira a conexão e tente de novo.": "Could not check for updates. Check your connection and try again.",
     "Atualização disponível": "Update available",

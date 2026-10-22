@@ -83,6 +83,15 @@ class Preferences:
     def set_check_updates_on_start(self, enabled: bool) -> None:
         self._set("updates/check_on_start", "true" if enabled else "false")
 
+    # -- menu de aplicativos do Linux (AppImage) -----------------------------------
+
+    def app_menu_offered(self) -> bool:
+        """Se o AppImage já perguntou se deve aparecer no menu de aplicativos (pergunta uma vez)."""
+        return str(self._get("linux/app_menu_offered", "false")).lower() == "true"
+
+    def set_app_menu_offered(self, offered: bool) -> None:
+        self._set("linux/app_menu_offered", "true" if offered else "false")
+
     # -- atalhos de teclado (A18) -------------------------------------------------
 
     def shortcut(self, command: str) -> str | None:
