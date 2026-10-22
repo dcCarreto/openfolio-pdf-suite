@@ -34,6 +34,8 @@ Ainda não publicada.
   máximo de arquivo e a cada página em branco de um lote escaneado.
 - PDF para imagens grava também JPEG ou um TIFF com todas as páginas e pode converter só
   as páginas escolhidas (ou as selecionadas nas miniaturas).
+- Marca d'água com imagem ou logotipo, cor do texto, nos cantos ou em mosaico, atrás do
+  conteúdo, só nas páginas escolhidas e com pré-visualização.
 - No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
 - No Linux, o AppImage oferece aparecer no menu de aplicativos e na escolha do programa para
   abrir PDF (Ajuda > Mostrar no menu de aplicativos).

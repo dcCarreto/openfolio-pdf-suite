@@ -258,6 +258,28 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "JPEG (uma imagem por página, menor)": "JPEG (one image per page, smaller)",
     "TIFF (um arquivo com todas as páginas)": "TIFF (one file with every page)",
     "Informe as páginas a converter.": "Enter the pages to convert.",
+    # Marca d'água (M19)
+    "Imagem ou logotipo": "Image or logo",
+    "Imagem:": "Image:",
+    "Largura da imagem em relação à largura da página.": "Width of the image relative to the width of the page.",
+    "Centro": "Center",
+    "Canto superior esquerdo": "Top left corner",
+    "Canto superior direito": "Top right corner",
+    "Canto inferior esquerdo": "Bottom left corner",
+    "Canto inferior direito": "Bottom right corner",
+    "Mosaico (repetida pela página)": "Tiled (repeated across the page)",
+    "Atrás do conteúdo": "Behind the content",
+    "Como um papel timbrado: o texto da página fica por cima. Some em páginas escaneadas, que cobrem a página inteira.": (
+        "Like letterhead: the text of the page stays on top. It disappears on scanned pages, which cover the whole page."
+    ),
+    "Pré-visualizar": "Preview",
+    "Mostra a página atual do visualizador com a marca d'água, sem gravar nada.": (
+        "Shows the viewer's current page with the watermark, without saving anything."
+    ),
+    "Marca d'água:": "Watermark:",
+    "Escolha a imagem da marca d'água.": "Choose the watermark image.",
+    "Informe as páginas a marcar.": "Enter the pages to mark.",
+    "Informe o texto ou a imagem da marca d'água.": "Enter the text or the image of the watermark.",
     # Pages (rotate/reorder/remove/insert/replace)
     "Rotacionar": "Rotate",
     "Reordenar": "Reorder",

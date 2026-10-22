@@ -163,3 +163,16 @@ def test_protect_asks_the_password_twice_when_it_is_not_given(make_pdf, tmp_path
     assert "não conferem" in capsys.readouterr().err
     assert main(["protect", str(source), "-o", str(tmp_path / "p.pdf")]) == 0
     assert PdfReader(str(tmp_path / "p.pdf")).is_encrypted
+
+
+def test_watermark_with_a_logo_on_chosen_pages(make_pdf, tmp_path, capsys):
+    source = make_pdf("doc.pdf", [(300, 300)] * 3)
+    logo = tmp_path / "logo.png"
+    Image.new("RGBA", (40, 20), (255, 0, 0, 128)).save(logo)
+    output = tmp_path / "marcado.pdf"
+
+    assert main(["watermark", str(source), "-o", str(output), "--imagem", str(logo), "--posicao", "tile", "--paginas", "2-3"]) == 0
+
+    assert [bool(page.images) for page in PdfReader(str(output)).pages] == [False, True, True]
+    assert main(["watermark", str(source), "-o", str(tmp_path / "x.pdf")]) == 1
+    assert "--texto ou --imagem" in capsys.readouterr().err

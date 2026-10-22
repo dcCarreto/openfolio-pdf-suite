@@ -131,7 +131,7 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | 🔲 Organizar páginas | Grade de miniaturas do documento: arraste para reordenar, gire, duplique, exclua, insira páginas em branco ou extraia as selecionadas para outro arquivo. Antes de aplicar, Ctrl+Z desfaz cada mudança na grade; ao clicar em Aplicar, tudo entra no documento num passo só, que Ctrl+Z também desfaz |
 | 🗜️ Comprimir | Reduz o tamanho de um PDF em três níveis: leve (sem perda), médio e forte (imagens reamostradas para 150 ou 100 DPI, pelo tamanho com que aparecem na página, e regravadas em JPEG; imagens sem cor passam a escala de cinza). Não grava nada se o arquivo não ficar menor |
 | 🖼️ Converter | Converte entre PDF e imagens (PNG ou JPEG, uma por página, ou um TIFF multipágina, de todas as páginas ou só das escolhidas; no sentido contrário, com tamanho de página A4, Carta, Ofício ou o da imagem, margem, orientação da câmera e fundo branco em imagens transparentes), Word/Excel/PowerPoint (.docx, .xlsx, .pptx) e PDF, e XML e PDF (linhas longas quebradas com recuo). Também leva o texto de um PDF para Word (parágrafos reunidos), Excel (uma planilha por página, com as colunas no lugar e números como números) ou texto com layout, e gera PDF a partir de HTML, Markdown ou texto puro, com texto pesquisável |
-| 💧 Marca d'água | Adiciona um texto de marca d'água (opacidade, tamanho e rotação configuráveis) |
+| 💧 Marca d'água | Adiciona um texto (com cor e tamanho) ou uma imagem, como um logotipo, com opacidade e rotação, no centro, num canto ou em mosaico, por cima ou atrás do conteúdo, em todas as páginas ou só nas escolhidas, com pré-visualização da página atual |
 | 🔒 Proteger | Protege um PDF com senha (AES-256), define permissões granulares (impressão, edição, cópia, formulários) com senha de proprietário separada, ou remove a senha de um PDF protegido |
 | 🏷️ Metadados | Lê e edita título, autor, assunto, palavras-chave e os aplicativos de origem de um PDF (também no XMP), e mostra as datas de criação e modificação |
 | 🔢 Numeração | Adiciona números de página no rodapé (com página inicial configurável), numeração Bates (prefixo + sequência global, para uso jurídico), ou um texto livre de cabeçalho/rodapé (com placeholders `{page}`/`{pages}`) |
@@ -192,8 +192,12 @@ O resultado mostra o tamanho real antes e depois da compressão:
 
 ### Marca d'água
 
-Texto, opacidade, tamanho de fonte e rotação são configuráveis antes de aplicar sobre todas as
-páginas do PDF:
+A marca é um texto (com tamanho de fonte e cor) ou uma imagem, como um logotipo com fundo
+transparente (com a largura em porcentagem da página). Opacidade, rotação e posição (centro,
+um dos cantos ou mosaico, repetida pela página) valem para os dois. "Atrás do conteúdo" a põe
+por baixo do texto da página, como um papel timbrado; ela some em páginas escaneadas, que são
+uma imagem cobrindo a página toda. O campo Páginas limita a marca às páginas escolhidas, e
+Pré-visualizar mostra a página atual com a marca, sem gravar nada:
 
 <p align="center">
   <img src="assets/screenshots/06-marca-dagua.png" alt="Aba Marca d'água configurada com o texto CONFIDENCIAL" width="720">

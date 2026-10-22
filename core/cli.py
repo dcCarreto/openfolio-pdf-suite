@@ -164,13 +164,22 @@ def _unlock(args):
 def _watermark(args):
     from .watermark import AddWatermark
 
+    if not (args.texto or args.imagem):
+        raise _Failure("informe --texto ou --imagem.")
+    pages = _pages(args, args.input, args.paginas)
     AddWatermark().run(
         args.input,
         _output(args),
-        args.texto,
+        args.texto or "",
         opacity=args.opacidade,
         font_size=args.tamanho,
         rotation=args.rotacao,
+        color=args.cor,
+        image_path=args.imagem,
+        image_width=args.largura / 100,
+        position=args.posicao,
+        behind=args.atras,
+        pages=sorted(set(pages)) if pages is not None else None,
     )
     return f"Marca d'água aplicada: {args.output}."
 
@@ -332,11 +341,22 @@ def _parser() -> argparse.ArgumentParser:
 
     command("unlock", _unlock, "tira a senha (pergunta a senha se --senha faltar)")
 
-    sub = command("watermark", _watermark, "aplica uma marca d'água de texto")
-    sub.add_argument("--texto", required=True)
+    sub = command("watermark", _watermark, "aplica uma marca d'água de texto ou imagem")
+    sub.add_argument("--texto")
+    sub.add_argument("--imagem", help="um logotipo (PNG, JPEG...) no lugar do texto")
+    sub.add_argument("--largura", type=float, default=30, help="da imagem, em %% da largura da página (padrão: 30)")
     sub.add_argument("--opacidade", type=float, default=0.3)
     sub.add_argument("--tamanho", type=int, default=40)
     sub.add_argument("--rotacao", type=float, default=45)
+    sub.add_argument("--cor", default="000000", help="do texto, em hexadecimal (padrão: 000000, preto)")
+    sub.add_argument(
+        "--posicao",
+        choices=("center", "top-left", "top-right", "bottom-left", "bottom-right", "tile"),
+        default="center",
+        help="tile repete a marca pela página",
+    )
+    sub.add_argument("--atras", action="store_true", help="por baixo do conteúdo")
+    sub.add_argument("--paginas", help="padrão: todas")
 
     sub = command("number", _number, "numera as páginas no rodapé")
     sub.add_argument("--inicio", type=int, default=1)
