@@ -14,7 +14,8 @@ para saber se há atualização, mostra ao usuário o que ela traz e só a insta
    que o usuário lê antes de aceitar.
 2. Ponha o mesmo identificador em `pyproject.toml` (`version = "2026.11.3"`), o único lugar
    dele: o app o lê dos metadados do pacote (`core/version.py`).
-3. Faça o commit dessas mudanças em `main`.
+3. Faça o commit dessas mudanças em `desenvolvimento` e leve `desenvolvimento` para `main`
+   (merge): a tag sai de `main`.
 4. Crie e publique a tag `v` + identificador:
 
    ```bash

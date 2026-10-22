@@ -1,9 +1,12 @@
 # Contribuindo
 
 1. Abra uma issue descrevendo o problema ou a proposta antes de enviar um PR grande.
-2. Faça um fork e crie uma branch a partir de `main`.
+2. Faça um fork e crie uma branch a partir de `desenvolvimento`, onde o trabalho é integrado;
+   `main` só recebe o que vai ser publicado como atualização (ver [RELEASING.md](RELEASING.md)).
 3. Mantenha os commits pequenos e com mensagens objetivas.
-4. Abra o PR descrevendo o que foi alterado e por quê.
+4. Abra o PR para `desenvolvimento`, descrevendo o que foi alterado e por quê. Se a mudança
+   for visível para quem usa o app, acrescente-a em "Próxima atualização" no
+   [CHANGELOG.md](CHANGELOG.md).
 
 ## Padrões de código
 

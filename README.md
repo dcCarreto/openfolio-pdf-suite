@@ -432,7 +432,7 @@ fumaça que garante que a janela principal monta todas as seções sem erros. Um
 preservação passa cada operação por um PDF com sumário, metadados, anexo, formulário, rótulos
 de página e camadas, e confere que nada disso se perde no caminho. Um teste de traduções
 confere que todo texto da interface e toda mensagem do `core` têm versão em inglês. A suíte também
-roda automaticamente a cada push em `main` e a cada pull request, em Windows, Linux e macOS
+roda automaticamente a cada push em `main` e em `desenvolvimento` e a cada pull request, em Windows, Linux e macOS
 (veja [.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
 ## Contribuição
