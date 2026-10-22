@@ -147,7 +147,6 @@ def _check(window, monkeypatch, tmp_path, payload, manual, accept=True, installs
     opened, started = [], []
     monkeypatch.setattr("ui.main_window.QDesktopServices.openUrl", lambda url: opened.append(url.toString()))
     monkeypatch.setattr("ui.main_window.QProcess.startDetached", lambda program, args: started.append((program, args)))
-    monkeypatch.setattr(window, "close", lambda: True)
     assert window.check_for_updates(manual=manual)
     assert not window.check_for_updates(manual=manual)  # uma consulta por vez
     while window._update_reply is not None or getattr(window, "_update_download", None) is not None:

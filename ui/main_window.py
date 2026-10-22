@@ -49,7 +49,7 @@ from ui.printing import page_count_for_printing, pages_to_print, print_pages
 from ui.properties_dialog import DocumentPropertiesDialog
 from ui.redaction_state import RedactionState
 from ui.shortcuts import CommandPalette, ShortcutsDialog
-from ui.tasks import call, run_task, task_manager
+from ui.tasks import TaskManager, call, run_task
 from ui import theme
 from ui.theme import apply_titlebar
 from ui.update_dialog import UpdateDialog
@@ -189,7 +189,7 @@ class MainWindow(QMainWindow):
         self.redaction_state = RedactionState()
         self.measure_state = MeasureState()
         self.area_pick_state = AreaPickState()
-        self._tasks = task_manager()
+        self._tasks = TaskManager(self)  # o das abas desta janela (run_task o acha como filho)
 
         self._row_of = {class_name: row for row, (*_rest, class_name) in enumerate(_SECTIONS)}
         self._annotations_row = self._row_of["AnnotationsPage"]
@@ -856,8 +856,10 @@ class MainWindow(QMainWindow):
             tr("A atualização foi baixada e conferida. O app vai fechar para instalá-la e abre de novo "
                "quando terminar."),
         )
-        if not self.close():  # o usuário preferiu não fechar (alterações não salvas)
-            return
+        # Todas as janelas: o instalador não atualiza com o app aberto.
+        QApplication.closeAllWindows()
+        if any(isinstance(w, MainWindow) and w.isVisible() for w in QApplication.topLevelWidgets()):
+            return  # o usuário preferiu não fechar alguma (alterações não salvas)
         # Inno Setup sem perguntas: atualiza por cima, apaga os arquivos da instalação anterior
         # e abre o app de novo (packaging/windows/installer.iss).
         QProcess.startDetached(str(target), ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])

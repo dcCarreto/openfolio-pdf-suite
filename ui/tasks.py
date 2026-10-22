@@ -5,9 +5,10 @@ ou o LibreOffice deixavam a janela "Não está respondendo", sem progresso nem c
 
 Agora as abas entregam a operação a `run_task`, que a executa numa thread de trabalho:
 
-- Uma operação por vez no app inteiro. Duas operações gravando ao mesmo tempo (ou uma
-  alterando o arquivo que a outra lê) não fazem sentido para o usuário, e assim o painel
-  de ferramentas fica desabilitado enquanto uma roda (ver `MainWindow`).
+- Uma operação por vez em cada janela. Duas operações gravando ao mesmo tempo no mesmo
+  documento (ou uma alterando o arquivo que a outra lê) não fazem sentido para o usuário, e
+  assim o painel de ferramentas fica desabilitado enquanto uma roda (ver `MainWindow`). Cada
+  janela tem o seu `TaskManager`: uma operação numa janela não trava a outra.
 - O andamento chega pelo `Progress` de `core/progress.py`; "Cancelar" o sinaliza, e a
   operação para no próximo ponto seguro sem gravar nada (as gravações são atômicas).
 - Os resultados e erros voltam para a thread da interface por sinais: `on_success` e
@@ -16,10 +17,11 @@ Agora as abas entregam a operação a `run_task`, que a executa numa thread de t
 
 import logging
 import threading
+import weakref
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import QCoreApplication, QEventLoop, QObject, QRunnable, QThreadPool, QTimer, Signal
+from PySide6.QtCore import QCoreApplication, QEventLoop, QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import QMessageBox, QWidget
 
 from core.base import EncryptedPDFError
@@ -74,6 +76,7 @@ class TaskManager(QObject):
         self._signals: _Signals | None = None
         self._on_success: Callable[[Any], object] | None = None
         self._on_error: Callable[[BaseException], None] | None = None
+        _managers.add(self)
 
     def is_busy(self) -> bool:
         return self._busy
@@ -158,10 +161,18 @@ class TaskManager(QObject):
 
 
 _manager: TaskManager | None = None
+_managers: "weakref.WeakSet[TaskManager]" = weakref.WeakSet()
 
 
-def task_manager() -> TaskManager:
-    """O gerenciador único do app (criado na primeira chamada, na thread da interface)."""
+def task_manager(widget: QWidget | None = None) -> TaskManager:
+    """O gerenciador da janela de `widget` (o `TaskManager` filho dela, ver `MainWindow`) ou,
+    fora de uma janela que tenha um, o do app (criado na primeira chamada, na thread da
+    interface)."""
+    while widget is not None:
+        own = widget.findChild(TaskManager, "", Qt.FindChildOption.FindDirectChildrenOnly)
+        if own is not None:
+            return own
+        widget = widget.parentWidget()
     global _manager
     if _manager is None:
         _manager = TaskManager()
@@ -196,7 +207,7 @@ def run_task(
     menos que `on_error` trate o erro. Cancelamentos não mostram diálogo: a barra de status
     já informa.
     """
-    manager = task_manager()
+    manager = task_manager(parent)
     if manager.is_busy():
         QMessageBox.information(
             parent,
@@ -216,5 +227,5 @@ def run_task(
 
 
 def wait_for_tasks(timeout_ms: int = 60_000) -> bool:
-    """Espera a operação em andamento terminar (testes e fechamento da janela)."""
-    return task_manager().wait(timeout_ms)
+    """Espera as operações em andamento, de todas as janelas, terminarem (testes)."""
+    return all([manager.wait(timeout_ms) for manager in list(_managers)])

@@ -3,12 +3,13 @@
 import logging
 import sys
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import QApplication
 
 from core.version import APP_VERSION
 from ui.app_events import FileOpenFilter, pdf_paths_from_arguments
 from ui.diagnostics import install_exception_hooks, setup_logging
+from ui.instances import AppWindows, InstanceServer, send_to_running_instance
 from ui.main_window import MainWindow
 from ui.preferences import Preferences
 from ui.theme import apply_theme
@@ -21,6 +22,12 @@ def main():
     app.setApplicationName("OpenFolio PDF Suite")
     app.setApplicationVersion(APP_VERSION)
 
+    # "Abrir com" / duplo clique num PDF: o arquivo chega como argumento (Windows, Linux)
+    # ou como evento FileOpen (macOS). Com o app já aberto, é ele que abre.
+    paths = pdf_paths_from_arguments(sys.argv[1:])
+    if send_to_running_instance(paths):
+        return
+
     log_file = setup_logging()
     install_exception_hooks()
     # O identificador da atualização (a data) não aparece na interface; no log, ajuda o suporte.
@@ -29,17 +36,21 @@ def main():
     settings = QSettings()
     preferences = Preferences(settings)
     apply_theme(app, preferences.theme())
-    window = MainWindow(settings=settings)
-    window.show()
-    if preferences.check_updates_on_start():
-        window.check_for_updates(manual=False)
 
-    # "Abrir com" / duplo clique num PDF: o arquivo chega como argumento (Windows, Linux)
-    # ou como evento FileOpen (macOS).
-    file_open_filter = FileOpenFilter(window.session.open)
+    def make_window():
+        window = MainWindow(settings=settings)
+        window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        return window
+
+    windows = AppWindows(make_window)
+    windows.open([])
+    if preferences.check_updates_on_start():
+        windows.windows()[0].check_for_updates(manual=False)
+
+    file_open_filter = FileOpenFilter(lambda path: windows.open([path]))
     app.installEventFilter(file_open_filter)
-    for path in pdf_paths_from_arguments(sys.argv[1:])[:1]:
-        window.session.open(path)
+    _server = InstanceServer(windows.open)  # vive até o app fechar
+    windows.open(paths)
     sys.exit(app.exec())
 
 

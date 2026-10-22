@@ -29,6 +29,8 @@ Ainda não publicada.
   propriedades do documento.
 - Novas conversões: PDF para Word, Excel e texto; HTML, Markdown e texto para PDF.
 - No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
+- Com o OpenFolio já aberto, abrir outro PDF (duplo clique, "Abrir com") abre uma janela nova
+  no app aberto, mais rápido; uma operação numa janela não trava as outras.
 - Tema claro ou o do sistema, modo apresentação, página dupla e livro, paleta de comandos
   (Ctrl+K) e atalhos de teclado configuráveis.
 - Linha de comando (`openfolio`) para usar as ferramentas em scripts.
