@@ -1,10 +1,13 @@
 """Ajuda > Sobre (M48): versão, arquivo de log e componentes de terceiros com as licenças."""
 
+import json
 import re
+import sys
 from importlib import metadata
+from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, qVersion
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog,
@@ -24,16 +27,31 @@ from ui.i18n import tr
 
 CHANGELOG_URL = "https://github.com/dcCarreto/openfolio-pdf-suite/blob/main/CHANGELOG.md"
 
-# O que vai no app e não é um pacote Python (os pacotes vêm dos metadados instalados).
+# O que vai no app e não é um pacote Python (os pacotes vêm dos metadados instalados) nem
+# biblioteca de um gerenciador de pacotes (vêm de THIRD_PARTY_DIR).
 OTHER_COMPONENTS = [
-    ("Qt", "6", "LGPL-3.0-only"),
+    ("Qt", qVersion(), "LGPL-3.0-only"),
     ("PDFium", "—", "BSD-3-Clause"),
-    ("Tesseract OCR", "5", "Apache-2.0"),
     ("Tesseract tessdata (eng, por, osd)", "4.1.0", "Apache-2.0"),
-    ("Leptonica", "—", "BSD-2-Clause"),
     ("DejaVu Fonts", "2.37", "Bitstream Vera"),
     ("sRGB v2 micro (Compact-ICC-Profiles)", "—", "CC0-1.0"),
 ]
+
+# O Tesseract e as bibliotecas dele (e, no Linux, as do sistema que o Qt usa), com os textos
+# das licenças: só no app empacotado (packaging/pyinstaller/third_party.py).
+_BUNDLE = getattr(sys, "_MEIPASS", None)
+THIRD_PARTY_DIR = Path(_BUNDLE) / "third-party" if _BUNDLE else None
+
+
+def bundled_components() -> list[tuple[str, str, str]]:
+    """(nome, versão, licença) de cada biblioteca de fora do Python que vai no app."""
+    if THIRD_PARTY_DIR is None:
+        return []
+    try:
+        rows = json.loads((THIRD_PARTY_DIR / "components.json").read_text(encoding="utf-8"))
+        return [(name, version, license) for name, version, license in rows]
+    except (OSError, ValueError):
+        return []  # um build local sem os pacotes de origem (o spec avisa)
 
 
 def _license(dist: metadata.Distribution) -> str:
@@ -101,7 +119,7 @@ class AboutDialog(QDialog):
         self.components_table.setHorizontalHeaderLabels([tr("Componente"), tr("Versão"), tr("Licença")])
         self.components_table.verticalHeader().setVisible(False)
         self.components_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        for row, values in enumerate(OTHER_COMPONENTS + python_components()):
+        for row, values in enumerate(OTHER_COMPONENTS + bundled_components() + python_components()):
             self.components_table.insertRow(row)
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -121,8 +139,18 @@ class AboutDialog(QDialog):
         layout.addLayout(log_row)
         layout.addWidget(QLabel(tr("Componentes de terceiros:")))
         layout.addWidget(self.components_table, 1)
-        note = QLabel(tr("Os textos das licenças dos pacotes Python vão junto com o app, nos metadados de cada um."))
+        note = QLabel(
+            tr("Os textos das licenças dos pacotes Python vão junto com o app, nos metadados de cada um.")
+            + " "
+            + tr("O código-fonte das bibliotecas GPL e LGPL está em cada atualização, na página de releases.")
+        )
         note.setWordWrap(True)
         note.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(note)
+        licenses = QPushButton(tr("Licenças das bibliotecas"))
+        licenses.setEnabled(THIRD_PARTY_DIR is not None and THIRD_PARTY_DIR.is_dir())
+        licenses.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(THIRD_PARTY_DIR))))
+        note_row = QHBoxLayout()
+        note_row.addWidget(note, 1)
+        note_row.addWidget(licenses)
+        layout.addLayout(note_row)
         layout.addWidget(buttons)

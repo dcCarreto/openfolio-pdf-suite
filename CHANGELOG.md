@@ -47,4 +47,6 @@ Ainda não publicada.
   aceitar; no Windows, o app baixa, confere o arquivo e instala sozinho. A verificação ao
   iniciar continua desligada até você ligá-la.
 - Ajuda > Sobre mostra o arquivo de log, para anexar ao relatar um problema, e as licenças
-  dos componentes de terceiros.
+  dos componentes de terceiros, com a versão exata do Qt, do Tesseract e das bibliotecas
+  dele e os textos das licenças. O código-fonte das bibliotecas GPL e LGPL vai junto em cada
+  atualização, na página de releases.

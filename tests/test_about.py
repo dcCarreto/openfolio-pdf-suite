@@ -4,9 +4,11 @@ from importlib import metadata
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import qVersion
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from core.version import APP_VERSION
+from ui import about_dialog
 from ui.about_dialog import AboutDialog, python_components
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -33,16 +35,22 @@ def _rows(dialog):
     return [tuple(table.item(row, column).text() for column in range(3)) for row in range(table.rowCount())]
 
 
-def test_about_shows_the_version_the_log_file_and_the_components(tmp_path):
+def test_about_shows_the_version_the_log_file_and_the_components(tmp_path, monkeypatch):
     QApplication.instance() or QApplication([])
     log_file = tmp_path / "openfolio.log"
+    # Como no app empacotado: as bibliotecas de fora do Python que o build coletou.
+    (tmp_path / "components.json").write_text('[["tesseract-ocr", "5.5.1-1", "Apache-2.0"]]', encoding="utf-8")
+    monkeypatch.setattr(about_dialog, "THIRD_PARTY_DIR", tmp_path)
 
     dialog = AboutDialog(log_file)
 
     assert dialog.log_edit.text() == str(log_file)
     rows = _rows(dialog)
-    assert ("Tesseract OCR", "5", "Apache-2.0") in rows
+    assert ("tesseract-ocr", "5.5.1-1", "Apache-2.0") in rows
+    assert ("Qt", qVersion(), "LGPL-3.0-only") in rows
     assert any(name == "pypdf" for name, _version, _license in rows)
+    button = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Licenças das bibliotecas")
+    assert button.isEnabled()
     assert APP_VERSION not in dialog.header.text()  # o usuário não vê número de versão
     assert "CHANGELOG.md" in dialog.header.text()
 
@@ -54,4 +62,7 @@ def test_about_without_a_log_file_disables_open_folder():
 
     assert dialog.log_edit.text() == "(sem arquivo de log)"
     button = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Abrir pasta")
+    assert not button.isEnabled()
+    # Rodando do código-fonte, o Tesseract é o do sistema e não vai junto com nada.
+    button = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Licenças das bibliotecas")
     assert not button.isEnabled()

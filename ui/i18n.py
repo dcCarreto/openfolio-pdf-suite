@@ -1627,6 +1627,10 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Os textos das licenças dos pacotes Python vão junto com o app, nos metadados de cada um.": (
         "The license texts of the Python packages ship with the app, in each package's metadata."
     ),
+    "O código-fonte das bibliotecas GPL e LGPL está em cada atualização, na página de releases.": (
+        "The source code of the GPL and LGPL libraries is in each update, on the releases page."
+    ),
+    "Licenças das bibliotecas": "Library licenses",
     # Sem programas externos (LibreOffice, Ghostscript, veraPDF)
     "A conversão leva o texto, os títulos, as listas e as tabelas de arquivos .docx, .xlsx e .pptx, mas não a "
     "formatação visual exata, as imagens nem os cabeçalhos e rodapés.": (

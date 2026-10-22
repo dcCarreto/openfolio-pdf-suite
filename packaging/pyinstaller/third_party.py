@@ -1,0 +1,185 @@
+"""Licenças e código-fonte das bibliotecas que o app leva de fora do Python: o Tesseract com
+as dependências dele e, no Linux, as bibliotecas do sistema de que o Qt precisa.
+
+Quem diz de que pacote veio cada biblioteca é o gerenciador de pacotes da máquina de build
+(MSYS2 no Windows, dpkg no Linux, Homebrew no macOS), com a licença, os textos dela e o
+código-fonte daquela versão. O spec do PyInstaller chama `collect` com os binários do app,
+que grava em build/third-party/ (e o app leva a pasta):
+- um .txt por pacote com os textos das licenças (Ajuda > Sobre abre a pasta);
+- components.json, as linhas da tabela do Sobre;
+- sources.txt, o código-fonte dos pacotes GPL e LGPL, que packaging/fetch_sources.sh baixa e
+  o workflow anexa à release: a GPL pede oferecer o fonte, e oferecê-lo no mesmo lugar do
+  binário cumpre isso.
+"""
+
+import functools
+import json
+import re
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+DPKG_DIR = Path("/var/lib/dpkg")
+DOC_DIR = Path("/usr/share/doc")
+MSYS2_SOURCES = "https://repo.msys2.org/mingw/sources/"
+# Os pacotes Python levam as licenças nos próprios metadados (ui/about_dialog.py); o
+# sys.path inclui a pasta das extensões do próprio Python (DLLs, no Windows).
+_PYTHON_DIRS = {
+    Path(p).resolve()
+    for p in (*sys.path, sys.prefix, sys.base_prefix, Path(getattr(sys, "_base_executable", sys.executable)).parent)
+    if p
+}
+_LICENSE_FILE = re.compile(r"(LICEN[CS]E|COPYING|COPYRIGHT|NOTICE)", re.IGNORECASE)
+
+
+@dataclass
+class Package:
+    name: str
+    version: str
+    license: str
+    license_files: list[Path]
+    source: str  # o que packaging/fetch_sources.sh baixa: uma URL ou, no Linux, pacote=versão
+
+
+def needs_source(text: str) -> bool:
+    """GPL e LGPL pedem oferecer o código-fonte; a exceção de runtime do GCC (libgcc,
+    libstdc++) dispensa."""
+    return "GPL" in text and "GCC-exception" not in text and "RUNTIME LIBRARY EXCEPTION" not in text.upper()
+
+
+def _pacman_fields(path: Path) -> dict[str, list[str]]:
+    """Os campos de um arquivo do banco local do pacman (`%NOME%` seguido dos valores)."""
+    fields: dict[str, list[str]] = {}
+    current = None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if re.fullmatch(r"%[A-Z0-9]+%", line):
+            current = fields.setdefault(line.strip("%"), [])
+        elif line and current is not None:
+            current.append(line)
+    return fields
+
+
+@functools.cache
+def _msys2_index(root: Path) -> dict[Path, Path]:
+    """Cada arquivo instalado no MSYS2 -> a pasta do pacote dele no banco do pacman."""
+    index = {}
+    for entry in (root / "var/lib/pacman/local").iterdir():
+        if (entry / "files").is_file():
+            for name in _pacman_fields(entry / "files").get("FILES", []):
+                index[(root / name).resolve()] = entry
+    return index
+
+
+def _msys2_owner(path: Path) -> Package | None:
+    root = next((p for p in path.parents if (p / "var/lib/pacman/local").is_dir()), None)
+    entry = _msys2_index(root).get(path) if root else None
+    if entry is None:
+        return None
+    desc = _pacman_fields(entry / "desc")
+    files = _pacman_fields(entry / "files")["FILES"]
+    version = desc["VERSION"][0]
+    return Package(
+        name=re.sub(r"^mingw-w64-(?:[a-z]+-)?(?:x86_64|aarch64|i686)-", "", desc["NAME"][0]),
+        version=version,
+        license=" AND ".join(item.removeprefix("spdx:") for item in desc.get("LICENSE", [])) or "?",
+        license_files=[root / name for name in files if "/share/licenses/" in name and not name.endswith("/")],
+        source=f"{MSYS2_SOURCES}{desc['BASE'][0]}-{version}.src.tar.zst",
+    )
+
+
+@functools.cache
+def _dpkg_index() -> dict[Path, str]:
+    """Cada biblioteca instalada pelo dpkg -> o nome do pacote (os caminhos resolvidos: com o
+    /usr unificado, a lista diz /lib e o arquivo está em /usr/lib)."""
+    index = {}
+    for listing in (DPKG_DIR / "info").glob("*.list"):
+        for line in listing.read_text(encoding="utf-8", errors="replace").splitlines():
+            if ".so" in line:
+                index[Path(line).resolve()] = listing.stem.split(":")[0]
+    return index
+
+
+@functools.cache
+def _dpkg_status() -> dict[str, dict[str, str]]:
+    status = {}
+    for stanza in (DPKG_DIR / "status").read_text(encoding="utf-8", errors="replace").split("\n\n"):
+        fields = dict(re.findall(r"^([A-Za-z-]+): *(.*)$", stanza, re.MULTILINE))
+        if "Package" in fields:
+            status[fields["Package"]] = fields
+    return status
+
+
+def _dpkg_owner(path: Path) -> Package | None:
+    name = _dpkg_index().get(path)
+    if name is None:
+        return None
+    fields = _dpkg_status()[name]
+    copyright_file = DOC_DIR / name / "copyright"
+    text = copyright_file.read_text(encoding="utf-8", errors="replace") if copyright_file.is_file() else ""
+    # Source: "pacote" ou "pacote (versão)", quando a versão do fonte é outra.
+    source = re.fullmatch(r"(\S+)(?: \((\S+)\))?", fields.get("Source", name))
+    return Package(
+        name=name,
+        version=fields["Version"],
+        license=", ".join(dict.fromkeys(re.findall(r"^License: *(\S.*)$", text, re.MULTILINE))) or "?",
+        license_files=[copyright_file] if text else [],
+        source=f"{source.group(1)}={source.group(2) or fields['Version']}",  # type: ignore[union-attr]
+    )
+
+
+@functools.cache
+def _homebrew_info(formula: str) -> dict:
+    output = subprocess.run(["brew", "info", "--json=v2", formula], capture_output=True, text=True, check=True).stdout
+    return json.loads(output)["formulae"][0]
+
+
+def _homebrew_owner(path: Path) -> Package | None:
+    parts = path.parts
+    if "Cellar" not in parts:
+        return None
+    at = parts.index("Cellar")
+    formula, version = parts[at + 1], parts[at + 2]
+    keg = Path(*parts[: at + 3])
+    info = _homebrew_info(formula)
+    license = info.get("license") or "?"
+    return Package(
+        name=formula,
+        version=version,
+        license=license if isinstance(license, str) else json.dumps(license),
+        license_files=sorted(p for p in keg.iterdir() if p.is_file() and _LICENSE_FILE.match(p.name)),
+        source=info["urls"]["stable"]["url"],
+    )
+
+
+def collect(binaries: list[str], out_dir: Path) -> list[str]:
+    """Grava em `out_dir` as licenças e o código-fonte dos pacotes de onde vieram os
+    `binaries`; devolve os que nenhum gerenciador de pacotes conhece (fora os dos pacotes
+    Python)."""
+    owner = {"win32": _msys2_owner, "darwin": _homebrew_owner}.get(sys.platform, _dpkg_owner)
+    packages: dict[str, Package] = {}
+    unknown = []
+    for binary in binaries:
+        path = Path(binary).resolve()
+        package = owner(path)
+        if package is not None:
+            packages[package.name] = package
+        elif not any(path.is_relative_to(d) for d in _PYTHON_DIRS):
+            unknown.append(binary)
+
+    shutil.rmtree(out_dir, ignore_errors=True)
+    out_dir.mkdir(parents=True)
+    rows, sources = [], []
+    for package in sorted(packages.values(), key=lambda p: p.name.lower()):
+        text = f"{package.name} {package.version}\nLicença: {package.license}\n" + "".join(
+            f"\n===== {f.name} =====\n\n{f.read_text(encoding='utf-8', errors='replace')}" for f in package.license_files
+        )
+        (out_dir / f"{package.name}.txt").write_text(text, encoding="utf-8")
+        rows.append([package.name, package.version, package.license])
+        if needs_source(text):
+            sources.append(package.source)
+    (out_dir / "components.json").write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
+    # "\n" mesmo no Windows: o fetch_sources.sh lê com o bash.
+    (out_dir / "sources.txt").write_text("".join(f"{s}\n" for s in dict.fromkeys(sources)), encoding="utf-8", newline="\n")
+    return unknown

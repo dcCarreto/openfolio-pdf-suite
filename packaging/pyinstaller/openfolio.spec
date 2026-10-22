@@ -7,11 +7,14 @@ formato que os empacotadores de cada plataforma esperam como entrada:
 - Linux:   packaging/linux/build_appimage.sh e build_deb.sh
 - macOS:   packaging/macos/build_dmg.sh
 
-Rodar a partir da raiz do projeto, com o Tesseract instalado na máquina de build:
+Rodar a partir da raiz do projeto, com o Tesseract instalado na máquina de build pelo
+gerenciador de pacotes (MSYS2 no Windows, apt no Linux, Homebrew no macOS), que diz a
+licença e o código-fonte de cada biblioteca que vai junto:
     python packaging/fetch_tessdata.py
     pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -19,7 +22,11 @@ from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 
 PROJECT_ROOT = Path(SPECPATH).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, SPECPATH)
+import third_party  # noqa: E402
+
 ICONS_DIR = PROJECT_ROOT / "packaging" / "icons"
+THIRD_PARTY_DIR = PROJECT_ROOT / "build" / "third-party"
 
 APP_NAME = "OpenFolioPDFSuite"
 
@@ -73,6 +80,16 @@ a = Analysis(
     excludes=[],
     noarchive=False,
 )
+
+# Licenças e código-fonte das bibliotecas de fora do Python (packaging/pyinstaller/third_party.py).
+# Uma biblioteca sem pacote de origem não tem licença conhecida: a release não sai com ela.
+unknown = third_party.collect([source for _dest, source, _kind in a.binaries], THIRD_PARTY_DIR)
+if unknown:
+    message = "Bibliotecas sem pacote de origem (licença desconhecida): " + ", ".join(unknown)
+    if os.environ.get("CI"):
+        raise SystemExit(message)
+    print("AVISO:", message)
+a.datas += [(f"third-party/{f.name}", str(f), "DATA") for f in THIRD_PARTY_DIR.iterdir()]
 
 pyz = PYZ(a.pure)
 

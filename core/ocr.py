@@ -44,6 +44,7 @@ _TESSERACT_CANDIDATES = [
     "tesseract",
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
     r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    r"C:\msys64\ucrt64\bin\tesseract.exe",  # o que o build do Windows leva (release.yml)
 ]
 
 DEFAULT_DPI = 300  # resolução padrão de qualidade para OCR

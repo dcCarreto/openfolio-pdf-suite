@@ -39,8 +39,11 @@ para saber se há atualização, mostra ao usuário o que ela traz e só a insta
    GitHub publica para ele e o roda com `/SILENT` (atualiza por cima e abre o app de novo).
 6. Depois de publicar, abra uma seção `## Próxima atualização` no topo do `CHANGELOG.md`.
 
+Para ensaiar antes da primeira tag (ou depois de mudar o workflow ou o empacotamento), rode
+Actions > Release > Run workflow: ele passa pelo CI, pelos três builds, pela coleta das
+licenças e pelo código-fonte, e deixa os arquivos como artefatos do run, sem publicar nada.
 Uma release marcada como pré-release no GitHub é ignorada pela verificação do app: serve
-para testar um build sem oferecê-lo a ninguém.
+para testar um build publicado sem oferecê-lo a ninguém.
 
 ## Build local (por plataforma)
 
@@ -53,10 +56,17 @@ pip install -c requirements-lock.txt -e ".[build]"
 python packaging/fetch_tessdata.py
 ```
 
-O Tesseract vem do instalador do UB Mannheim no Windows (no CI, `choco install tesseract`, e
-o `llvm-strip --strip-debug` tira os ~90 MB de símbolos de depuração das DLLs), do
-`apt install tesseract-ocr` no Linux e do `brew install tesseract` no macOS. O spec recusa o
-build sem o Tesseract ou sem os idiomas.
+O Tesseract vem do gerenciador de pacotes: do MSYS2 no Windows (`pacman -S
+mingw-w64-ucrt-x86_64-tesseract-ocr`, em `C:\msys64`), do `apt install tesseract-ocr` no Linux
+e do `brew install tesseract` no macOS. O spec recusa o build sem o Tesseract ou sem os idiomas.
+
+O gerenciador de pacotes também diz de que pacote veio cada biblioteca que vai no app
+(`packaging/pyinstaller/third_party.py`): o spec grava os textos das licenças em
+`build/third-party/`, que o app leva (Ajuda > Sobre > Licenças das bibliotecas), e a lista do
+código-fonte dos pacotes GPL e LGPL, que `bash packaging/fetch_sources.sh <plataforma>` baixa
+para `dist/installer/OpenFolioPDFSuite-codigo-fonte-<plataforma>.tar`; o workflow anexa esse
+arquivo à release, como a GPL pede. Uma biblioteca sem pacote de origem (o Tesseract do
+instalador do UB Mannheim, por exemplo) só gera um aviso no build local; no CI, reprova.
 
 ### Windows
 
