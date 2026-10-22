@@ -1,8 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 """Spec do PyInstaller para o OpenFolio PDF Suite.
 
-Gera um build "onedir" (uma pasta com o executável e todas as dependências), o mesmo
-formato que os empacotadores de cada plataforma esperam como entrada:
+Gera um build "onedir" (uma pasta com o executável do app, o da linha de comando `openfolio`
+e todas as dependências), o mesmo formato que os empacotadores de cada plataforma esperam
+como entrada:
 - Windows: packaging/windows/installer.iss (Inno Setup)
 - Linux:   packaging/linux/build_appimage.sh e build_deb.sh
 - macOS:   packaging/macos/build_dmg.sh
@@ -81,9 +82,18 @@ a = Analysis(
     noarchive=False,
 )
 
+# O comando `openfolio` (core/cli.py): um executável de console na mesma pasta, que usa as
+# mesmas bibliotecas, o Tesseract e os dados do app.
+cli = Analysis(
+    [str(PROJECT_ROOT / "packaging" / "pyinstaller" / "openfolio_cli.py")],
+    pathex=[str(PROJECT_ROOT)],
+    hiddenimports=["pyhanko_certvalidator", "asn1crypto", "oscrypto"],
+    noarchive=False,
+)
+
 # Licenças e código-fonte das bibliotecas de fora do Python (packaging/pyinstaller/third_party.py).
 # Uma biblioteca sem pacote de origem não tem licença conhecida: a release não sai com ela.
-unknown = third_party.collect([source for _dest, source, _kind in a.binaries], THIRD_PARTY_DIR)
+unknown = third_party.collect([source for _dest, source, _kind in a.binaries + cli.binaries], THIRD_PARTY_DIR)
 if unknown:
     message = "Bibliotecas sem pacote de origem (licença desconhecida): " + ", ".join(unknown)
     if os.environ.get("CI"):
@@ -107,10 +117,27 @@ exe = EXE(
     icon=app_icon,
 )
 
+cli_exe = EXE(
+    PYZ(cli.pure),
+    cli.scripts,
+    [],
+    exclude_binaries=True,
+    name="openfolio",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,
+    icon=app_icon,
+)
+
 coll = COLLECT(
     exe,
+    cli_exe,
     a.binaries,
     a.datas,
+    cli.binaries,
+    cli.datas,
     strip=False,
     upx=False,
     name=APP_NAME,

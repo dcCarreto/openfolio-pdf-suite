@@ -99,6 +99,9 @@ jobs:
           $env:TESSDATA_PREFIX = "$internal\tessdata"
           $langs = & "$internal\tesseract.exe" --list-langs
           if ($LASTEXITCODE -or -not ($langs -match "^por$")) { $langs; exit 1 }
+      - name: Testar o comando openfolio
+        shell: bash
+        run: bash packaging/smoke_cli.sh dist/OpenFolioPDFSuite/openfolio.exe
       - name: Instalar Inno Setup
         run: choco install innosetup -y
       - name: Compilar instalador
@@ -140,6 +143,8 @@ jobs:
           # Como o app empacotado roda: o bootloader do PyInstaller poe _internal no
           # LD_LIBRARY_PATH, e o processo do Tesseract herda.
           LD_LIBRARY_PATH="$internal" TESSDATA_PREFIX="$internal/tessdata" "$internal/tesseract" --list-langs | grep -x por
+      - name: Testar o comando openfolio
+        run: bash packaging/smoke_cli.sh dist/OpenFolioPDFSuite/openfolio
       - name: Build AppImage
         run: bash packaging/linux/build_appimage.sh
       - name: Build .deb
@@ -174,6 +179,8 @@ jobs:
           frameworks=dist/OpenFolioPDFSuite.app/Contents/Frameworks
           otool -L "$frameworks/tesseract"
           TESSDATA_PREFIX="$frameworks/tessdata" "$frameworks/tesseract" --list-langs | grep -x por
+      - name: Testar o comando openfolio
+        run: bash packaging/smoke_cli.sh dist/OpenFolioPDFSuite.app/Contents/MacOS/openfolio
       - name: Build dmg
         run: bash packaging/macos/build_dmg.sh
       - name: Codigo-fonte das bibliotecas GPL e LGPL

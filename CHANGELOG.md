@@ -35,7 +35,8 @@ Ainda não publicada.
   no app aberto, mais rápido; uma operação numa janela não trava as outras.
 - Tema claro ou o do sistema, modo apresentação, página dupla e livro, paleta de comandos
   (Ctrl+K) e atalhos de teclado configuráveis.
-- Linha de comando (`openfolio`) para usar as ferramentas em scripts.
+- Linha de comando (`openfolio`) para usar as ferramentas em scripts, que vem com os
+  instaladores (no Windows, a tarefa opcional do instalador a põe no PATH).
 
 ### Sem depender de outros programas
 

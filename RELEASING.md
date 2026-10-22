@@ -117,6 +117,8 @@ nenhum problema com o instalador em si.
 ```text
 packaging/
   pyinstaller/openfolio.spec   Spec compartilhado entre as 3 plataformas (leva o Tesseract junto)
+  pyinstaller/openfolio_cli.py O executável de console da linha de comando (openfolio)
+  smoke_cli.sh                 Teste de fumaça do openfolio empacotado (roda no workflow)
   fetch_tessdata.py            Baixa os idiomas do Tesseract (eng, por, osd) para build/tessdata
   icons/                       icon.ico, icon.icns e icon_256.png gerados a partir de assets/icon.png
   windows/installer.iss        Script do Inno Setup

@@ -312,8 +312,15 @@ de fábrica.
 
 ### Linha de comando
 
-A instalação pelo código-fonte também cria o comando `openfolio`, com as mesmas operações sem
-abrir a janela (útil em scripts e automação):
+O comando `openfolio` faz as mesmas operações sem abrir a janela (útil em scripts e automação).
+Ele vem com a instalação pelo código-fonte e com os instaladores:
+
+- **Windows**: `openfolio.exe`, na pasta do app; a tarefa "Adicionar o comando openfolio ao
+  PATH" do instalador (desmarcada por padrão) o deixa disponível em qualquer terminal.
+- **Linux**: o `.deb` instala `/usr/bin/openfolio`; no AppImage, é o `--cli` no início
+  (`./OpenFolioPDFSuite-x86_64.AppImage --cli merge a.pdf b.pdf -o c.pdf`).
+- **macOS**: fica dentro do app; para usá-lo como `openfolio`, crie o link
+  `ln -s /Applications/OpenFolioPDFSuite.app/Contents/MacOS/openfolio /usr/local/bin/openfolio`.
 
 ```bash
 openfolio merge capa.pdf contrato.pdf anexos.pdf -o completo.pdf

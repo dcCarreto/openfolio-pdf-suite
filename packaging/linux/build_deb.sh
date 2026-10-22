@@ -28,6 +28,8 @@ cp -r "$DIST_DIR"/* "$PKG_DIR/opt/openfolio-pdf-suite/"
 chmod +x "$PKG_DIR/opt/openfolio-pdf-suite/OpenFolioPDFSuite"
 
 ln -sf ../../opt/openfolio-pdf-suite/OpenFolioPDFSuite "$PKG_DIR/usr/bin/openfolio-pdf-suite"
+# A linha de comando (core/cli.py), o mesmo "openfolio" do pip install.
+ln -sf ../../opt/openfolio-pdf-suite/openfolio "$PKG_DIR/usr/bin/openfolio"
 
 cp "$ROOT_DIR/packaging/linux/openfolio-pdf-suite.desktop" \
    "$PKG_DIR/usr/share/applications/openfolio-pdf-suite.desktop"

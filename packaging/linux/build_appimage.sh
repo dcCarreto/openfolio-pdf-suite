@@ -24,6 +24,11 @@ cp "$ROOT_DIR/packaging/icons/icon_256.png" "$APPDIR/openfolio-pdf-suite.png"
 cat > "$APPDIR/AppRun" <<'EOF'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
+# "OpenFolioPDFSuite-x86_64.AppImage --cli merge a.pdf b.pdf -o c.pdf": a linha de comando.
+if [ "${1:-}" = "--cli" ]; then
+  shift
+  exec "$HERE/usr/bin/openfolio" "$@"
+fi
 exec "$HERE/usr/bin/OpenFolioPDFSuite" "$@"
 EOF
 chmod +x "$APPDIR/AppRun"
