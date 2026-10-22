@@ -287,7 +287,7 @@ tesseract-ocr tesseract-ocr-por`; no macOS, `brew install tesseract tesseract-la
 ```bash
 git clone https://github.com/dcCarreto/openfolio-pdf-suite.git
 cd openfolio-pdf-suite
-pip install -e .
+pip install -c requirements-lock.txt -e .
 ```
 
 Isso instala o pacote em modo editável junto com todas as dependências (`pypdf`, `PySide6`,
@@ -423,7 +423,7 @@ MergePDF().run(
 ## Testes
 
 ```bash
-pip install -e ".[test]"
+pip install -c requirements-lock.txt -e ".[test]"
 pytest
 ```
 

@@ -62,7 +62,7 @@ jobs:
           python-version: "3.11"
       - name: Instalar dependencias
         run: |
-          pip install -e ".[build]"
+          pip install -c requirements-lock.txt -e ".[build]"
       - name: Tesseract (vai dentro do app)
         shell: pwsh
         run: |
@@ -109,7 +109,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends tesseract-ocr
       - name: Instalar dependencias Python
         run: |
-          pip install -e ".[build]"
+          pip install -c requirements-lock.txt -e ".[build]"
           python packaging/fetch_tessdata.py
       - name: Build PyInstaller
         run: pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
@@ -141,7 +141,7 @@ jobs:
       - name: Instalar dependencias
         run: |
           brew install tesseract
-          pip install -e ".[build]"
+          pip install -c requirements-lock.txt -e ".[build]"
           python packaging/fetch_tessdata.py
       - name: Build PyInstaller
         run: pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm

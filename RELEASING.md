@@ -49,7 +49,7 @@ leva uma cópia dele (o usuário final não instala nada). Os idiomas que vão j
 antes, com o SHA-256 conferido:
 
 ```bash
-pip install -e ".[build]"
+pip install -c requirements-lock.txt -e ".[build]"
 python packaging/fetch_tessdata.py
 ```
 

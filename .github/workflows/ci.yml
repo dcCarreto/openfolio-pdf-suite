@@ -4,6 +4,10 @@ name: CI
 # e integrado, ver CONTRIBUTING.md) e a cada pull request, para pegar regressao antes do
 # merge. O job lint roda o ruff e o mypy (configurados no pyproject.toml). O release.yml
 # tambem o chama (workflow_call): nenhuma atualizacao e publicada com o CI reprovado.
+#
+# As dependencias vem do requirements-lock.txt (versoes exatas, as mesmas dos builds de
+# release): uma versao nova de biblioteca so entra quando o lock e atualizado, e o CI testa
+# do Python 3.10 (o minimo do pyproject.toml) ao 3.14.
 
 on:
   push:
@@ -20,7 +24,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Instalar dependencias Python
-        run: pip install -e ".[lint]"
+        run: pip install -c requirements-lock.txt -e ".[lint]"
       - name: Ruff (bugs comuns)
         run: ruff check .
       - name: Mypy (tipos)
@@ -31,6 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     runs-on: ${{ matrix.os }}
     env:
       QT_QPA_PLATFORM: offscreen
@@ -38,14 +43,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
       - name: Instalar dependencias do sistema (necessarias so pra importar o PySide6)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libopengl0 libxkbcommon0 libxcb-cursor0 libgl1
       - name: Instalar dependencias Python
-        run: pip install -e ".[test]"
+        run: pip install -c requirements-lock.txt -e ".[test]"
       - name: Rodar testes
         run: pytest
 
@@ -74,7 +79,7 @@ jobs:
           tesseract --version
           tesseract --list-langs
       - name: Instalar dependencias Python
-        run: pip install -e ".[test]"
+        run: pip install -c requirements-lock.txt -e ".[test]"
       - name: Rodar testes com cobertura
         run: pytest --cov
       - name: Resumo da cobertura

@@ -16,12 +16,23 @@
 - Antes do PR, rode o que o CI confere:
 
   ```bash
-  pip install -e ".[test,lint]"
+  pip install -c requirements-lock.txt -e ".[test,lint]"
   ruff check .   # bugs comuns (nomes indefinidos, imports sem uso, armadilhas do flake8-bugbear)
   mypy           # tipos de core/ e ui/ (configuração no pyproject.toml)
   pytest
   pytest --cov   # opcional: lista os arquivos com linhas sem teste, dos menos cobertos
   ```
+
+- As versões exatas das dependências ficam no `requirements-lock.txt`, que o CI e os builds
+  de release usam (`-c`: ele só fixa versões, quem diz o que instalar é o `pyproject.toml`).
+  Ao mudar as dependências do `pyproject.toml`, ou para trazer versões novas, gere o lock de
+  novo com o [uv](https://docs.astral.sh/uv/) e rode os testes antes do commit:
+
+  ```bash
+  uv pip compile pyproject.toml --universal --python-version 3.10 --extra test --extra build --extra lint -o requirements-lock.txt --upgrade
+  ```
+
+  Sem `--upgrade`, o uv mantém as versões que já estão no lock e só resolve o que mudou.
 
 - O app não chama nenhum programa instalado, exceto o Tesseract no OCR, e os instaladores
   levam uma cópia dele (`packaging/fetch_tessdata.py` baixa os idiomas antes do PyInstaller).
