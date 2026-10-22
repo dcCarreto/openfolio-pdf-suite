@@ -6,10 +6,14 @@
 ;
 ;   ISCC.exe packaging\windows\installer.iss
 ;
-; A versão pode ser sobrescrita na hora do build (o workflow do GitHub Actions faz isso
-; a partir da tag do release):
+; O usuário não vê número de versão: o assistente e o arquivo se chamam só "OpenFolio PDF
+; Suite". AppVersion é o identificador interno da atualização (a data, como no pyproject.toml),
+; que o Windows guarda no registro da instalação; o workflow de release o passa a partir da tag:
 ;
-;   ISCC.exe /DAppVersion=0.2.0-beta.1 packaging\windows\installer.iss
+;   ISCC.exe /DAppVersion=2026.10.21 packaging\windows\installer.iss
+;
+; O app instala as atualizações rodando este instalador com /SILENT (ui/main_window.py): ele
+; atualiza por cima, apaga os arquivos da versão anterior e abre o app de novo.
 
 #ifndef AppVersion
   #define AppVersion "0.0.0-dev"
@@ -25,6 +29,7 @@
 AppId={{11DE5939-B472-4426-A60C-1BC43D637BCB}
 AppName={#AppName}
 AppVersion={#AppVersion}
+AppVerName={#AppName}
 AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}
@@ -34,7 +39,7 @@ DefaultGroupName=OpenFolio PDF Suite
 DisableProgramGroupPage=yes
 LicenseFile={#RepoRoot}\LICENSE
 OutputDir={#RepoRoot}\dist\installer
-OutputBaseFilename=OpenFolioPDFSuite-Setup-{#AppVersion}
+OutputBaseFilename=OpenFolioPDFSuite-Setup
 SetupIconFile={#RepoRoot}\packaging\icons\icon.ico
 Compression=lzma2
 SolidCompression=yes
@@ -67,6 +72,11 @@ Root: HKA; Subkey: "Software\Classes\OpenFolioPDFSuite.pdf\DefaultIcon"; ValueTy
 Root: HKA; Subkey: "Software\Classes\OpenFolioPDFSuite.pdf\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: associatepdf
 Root: HKA; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".pdf"; ValueData: ""; Flags: uninsdeletekey; Tasks: associatepdf
 
+[InstallDelete]
+; Numa atualização, as bibliotecas da instalação anterior saem antes: uma DLL que a versão nova
+; não usa mais poderia ser carregada no lugar da certa.
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Files]
 Source: "{#RepoRoot}\dist\OpenFolioPDFSuite\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#RepoRoot}\dist\OpenFolioPDFSuite\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -78,3 +88,5 @@ Name: "{autodesktop}\OpenFolio PDF Suite"; Filename: "{app}\{#AppExeName}"; Task
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,OpenFolio PDF Suite}"; Flags: nowait postinstall skipifsilent
+; Atualização feita pelo app (/SILENT): ele fechou para instalar e abre de novo.
+Filename: "{app}\{#AppExeName}"; Flags: nowait skipifnotsilent

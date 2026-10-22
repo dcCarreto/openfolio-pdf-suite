@@ -174,13 +174,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Sair": "Quit",
     "Ajuda": "Help",
     "Sobre o OpenFolio PDF Suite": "About OpenFolio PDF Suite",
-    (
-        "<b>OpenFolio PDF Suite</b> — versão {version}<br><br>"
-        "Suite completa e open source de manipulação de PDF, 100% local, sem paywall."
-    ): (
-        "<b>OpenFolio PDF Suite</b> — version {version}<br><br>"
-        "Complete, open source PDF manipulation suite, 100% local, no paywall."
-    ),
     # Shared widgets: FilePicker / FileListEditor
     "Nenhum arquivo selecionado": "No file selected",
     "Nenhum destino selecionado": "No destination selected",
@@ -1612,9 +1605,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Verificar atualizações ao iniciar": "Check for updates at startup",
     "Verificar atualizações": "Check for updates",
     "Não foi possível verificar atualizações. Confira a conexão e tente de novo.": "Could not check for updates. Check your connection and try again.",
-    "Você já usa a versão mais nova ({version}).": "You already have the latest version ({version}).",
     "Atualização disponível": "Update available",
-    "A versão {version} do OpenFolio PDF Suite está disponível (você usa a {current}). Abrir a página de download?": "OpenFolio PDF Suite {version} is available (you have {current}). Open the download page?",
     # A18 — paleta de comandos e atalhos
     "Atalhos de teclado...": "Keyboard shortcuts...",
     "Paleta de comandos...": "Command palette...",
@@ -1627,6 +1618,44 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Restaurar padrões": "Restore defaults",
     "O atalho {keys} já é usado pelo visualizador.": "The shortcut {keys} is already used by the viewer.",
     "O atalho {keys} já é usado por \"{command}\".": "The shortcut {keys} is already used by \"{command}\".",
+    # M48 — Sobre
+    "Suite completa e open source de manipulação de PDF, 100% local, sem paywall.": (
+        "Complete open source PDF suite, 100% local, no paywall."
+    ),
+    "O que mudou em cada atualização": "What changed in each update",
+    # Atualizações sem número de versão, com consentimento
+    "O OpenFolio PDF Suite já está atualizado.": "OpenFolio PDF Suite is up to date.",
+    "Há uma atualização do OpenFolio PDF Suite. O que mudou:": "An update to OpenFolio PDF Suite is available. What changed:",
+    "(A atualização não traz descrição.)": "(The update has no description.)",
+    "Se você aceitar, o app baixa a atualização, confere o arquivo e fecha para instalá-la; ao terminar, ele abre de novo. Seus documentos não são tocados.": (
+        "If you accept, the app downloads the update, checks the file and closes to install it; when it is done, "
+        "it opens again. Your documents are not touched."
+    ),
+    "Baixar e instalar": "Download and install",
+    "Se você aceitar, a página da atualização abre no navegador para você baixá-la.": (
+        "If you accept, the update page opens in your browser for you to download it."
+    ),
+    "Abrir a página": "Open the page",
+    "Agora não": "Not now",
+    "Baixando a atualização...": "Downloading the update...",
+    "Atualização": "Update",
+    "Não foi possível baixar a atualização: o arquivo não chegou inteiro ou não confere com o publicado. Nada foi instalado; tente de novo mais tarde.": (
+        "Could not download the update: the file did not arrive complete or does not match the published one. "
+        "Nothing was installed; try again later."
+    ),
+    "A atualização foi baixada e conferida. O app vai fechar para instalá-la e abre de novo quando terminar.": (
+        "The update was downloaded and checked. The app will close to install it and open again when it is done."
+    ),
+    "(sem arquivo de log)": "(no log file)",
+    "Abrir pasta": "Open folder",
+    "Componente": "Component",
+    "Versão": "Version",
+    "Licença": "License",
+    "Arquivo de log (anexe-o ao relatar um problema):": "Log file (attach it when reporting a problem):",
+    "Componentes de terceiros:": "Third-party components:",
+    "Os textos das licenças dos pacotes Python vão junto com o app, nos metadados de cada um.": (
+        "The license texts of the Python packages ship with the app, in each package's metadata."
+    ),
     # Sem programas externos (LibreOffice, Ghostscript, veraPDF)
     "A conversão leva o texto, os títulos, as listas e as tabelas de arquivos .docx, .xlsx e .pptx, mas não a "
     "formatação visual exata, as imagens nem os cabeçalhos e rodapés.": (

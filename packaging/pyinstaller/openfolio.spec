@@ -15,7 +15,7 @@ Rodar a partir da raiz do projeto, com o Tesseract instalado na máquina de buil
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 
 PROJECT_ROOT = Path(SPECPATH).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -55,6 +55,9 @@ a = Analysis(
         # de cor sRGB dos arquivos PDF/A (core/pdfa.py).
         (str(PROJECT_ROOT / "core" / "data" / "fonts"), "core/data/fonts"),
         (str(PROJECT_ROOT / "core" / "data" / "icc"), "core/data/icc"),
+        # Metadados do app (a versão vem deles, core/version.py) e de cada dependência, que
+        # trazem os textos das licenças listadas em Ajuda > Sobre (ui/about_dialog.py).
+        *copy_metadata("openfolio-pdf-suite", recursive=True),
     ],
     hiddenimports=[
         "pyhanko_certvalidator",

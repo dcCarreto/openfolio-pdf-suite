@@ -41,10 +41,14 @@
 O OpenFolio PDF Suite é um aplicativo desktop (Windows/Linux/macOS, via PySide6) que reúne as
 operações de PDF mais comuns — mesclar, dividir, comprimir, proteger, converter, preencher,
 anotar, redigir, assinar — sem depender de ferramentas online, sem enviar seus arquivos para
-servidor nenhum e sem paywall. Tudo roda localmente, na sua máquina. O app só acessa a internet
-para ver se há versão nova, e só quando você pede (**Ajuda > Verificar atualizações**) ou liga
-a verificação ao iniciar, que vem desligada; ele consulta a lista pública de releases do GitHub
-e não envia nada sobre você ou seus documentos.
+servidor nenhum e sem paywall. Tudo roda localmente, na sua máquina.
+
+Não há número de versão: o OpenFolio PDF Suite é uma versão só, que recebe atualizações. O app só
+acessa a internet para ver se há atualização, e só quando você pede (**Ajuda > Verificar
+atualizações**) ou liga a verificação ao iniciar, que vem desligada; ele consulta a lista pública
+de releases do GitHub e não envia nada sobre você ou seus documentos. Antes de instalar qualquer
+coisa, ele mostra o que a atualização traz e pergunta; no Windows, se você aceitar, ele baixa,
+confere o arquivo e instala sozinho. Tudo o que mudou fica em [CHANGELOG.md](CHANGELOG.md).
 
 <p align="center">
   <img src="assets/screenshots/01-visao-geral.png" alt="Janela principal do OpenFolio PDF Suite: sidebar, visualizador central com um PDF aberto e a aba Anotações" width="900">
@@ -246,13 +250,13 @@ repositório:
 
 | Sistema | Arquivo |
 | --- | --- |
-| Windows | `OpenFolioPDFSuite-Setup-<versão>.exe` — instalador com atalho no menu Iniciar e desinstalador |
-| Linux | `OpenFolioPDFSuite-<versão>-x86_64.AppImage` (roda em qualquer distro, sem instalar nada) ou `openfolio-pdf-suite_<versão>_amd64.deb` (Debian/Ubuntu) |
-| macOS | `OpenFolioPDFSuite-<versão>.dmg` |
+| Windows | `OpenFolioPDFSuite-Setup.exe` — instalador com atalho no menu Iniciar e desinstalador |
+| Linux | `OpenFolioPDFSuite-x86_64.AppImage` (roda em qualquer distro, sem instalar nada) ou `openfolio-pdf-suite_amd64.deb` (Debian/Ubuntu) |
+| macOS | `OpenFolioPDFSuite.dmg` |
 
 Nenhum dos três é assinado digitalmente (isso exige certificados pagos que este projeto
 não tem). O Windows pode avisar via SmartScreen e o macOS via Gatekeeper no primeiro
-uso — isso é esperado numa release beta open source, veja como prosseguir em
+uso — isso é esperado num projeto open source sem certificado, veja como prosseguir em
 [RELEASING.md](RELEASING.md#sobre-a-assinatura-de-código).
 
 ## Requisitos
@@ -356,7 +360,8 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
   xfdf.py          Exportação e importação de comentários em XFDF
   properties.py    Propriedades do documento: proteção, fontes, tamanhos de página
   cli.py           Linha de comando (openfolio merge/split/compress/...), sem Qt
-  updates.py       Escolha da release mais nova na lista do GitHub (verificação opt-in)
+  version.py       Identificador interno da atualização (a data, do pyproject.toml)
+  updates.py       Escolha da atualização mais nova na lista do GitHub e conferência do instalador
   ocr.py           Reconhecimento de texto (Tesseract) com camada de texto invisível
   redaction.py     Redação real (rasterização + verificação) e sanitização de PDFs
   signature.py     Assinatura digital (pyhanko) e verificação completa das assinaturas
@@ -378,6 +383,8 @@ ui/              Interface gráfica (PySide6)
   page_ranges.py       Leitura de listas de páginas digitadas ("1-3, 5, 8-")
   tasks.py             Execução das operações numa thread de trabalho, uma por vez
   diagnostics.py       Log em arquivo e tratamento global de exceções
+  about_dialog.py      Ajuda > Sobre: arquivo de log, o que mudou e licenças de terceiros
+  update_dialog.py     Aviso de atualização: o que mudou e o consentimento do usuário
   widget_state.py      Preserva o que foi preenchido nas abas ao trocar de idioma
   viewer/              Visualizador central: renderização, painel lateral (miniaturas,
                        marcadores, anexos), busca, zoom, seleção de texto

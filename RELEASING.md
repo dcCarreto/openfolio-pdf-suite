@@ -1,28 +1,44 @@
 # Releases
 
-Como gerar uma nova release (beta ou estável) do OpenFolio PDF Suite.
+Como publicar uma atualização do OpenFolio PDF Suite.
+
+O app não tem número de versão para o usuário: há uma versão só, que recebe atualizações.
+Cada atualização é identificada, por dentro, pela data em que é publicada (`AAAA.MM.DD`; uma
+segunda no mesmo dia vira `AAAA.MM.DD.1`). O app compara esse identificador com o das releases
+para saber se há atualização, mostra ao usuário o que ela traz e só a instala se ele aceitar.
 
 ## Passo a passo
 
-1. Atualize a versão em `pyproject.toml` (`version = "..."`) e em `ui/main_window.py`
-   (`APP_VERSION = "..."`), se ainda não estiver correta.
-2. Faça o commit dessa mudança em `main`.
-3. Crie e publique uma tag começando com `v`:
+1. No `CHANGELOG.md`, troque o título `## Próxima atualização` pela data da publicação
+   (`## 2026-11-03`), tire a linha "Ainda não publicada." e revise o texto: é exatamente o
+   que o usuário lê antes de aceitar.
+2. Ponha o mesmo identificador em `pyproject.toml` (`version = "2026.11.3"`), o único lugar
+   dele: o app o lê dos metadados do pacote (`core/version.py`).
+3. Faça o commit dessas mudanças em `main`.
+4. Crie e publique a tag `v` + identificador:
 
    ```bash
-   git tag v0.2.0-beta.1
-   git push origin v0.2.0-beta.1
+   git tag v2026.11.3
+   git push origin v2026.11.3
    ```
 
-4. O workflow `.github/workflows/release.yml` builda automaticamente, um job por
-   plataforma (cada um na VM nativa daquele SO):
-   - **Windows**: instalador `OpenFolioPDFSuite-Setup-<versão>.exe` (Inno Setup)
-   - **Linux**: `OpenFolioPDFSuite-<versão>-x86_64.AppImage` e
-     `openfolio-pdf-suite_<versão>_amd64.deb`
-   - **macOS**: `OpenFolioPDFSuite-<versão>.dmg` (sem assinatura/notarização)
+   O workflow recusa a release se a tag não bater com o `pyproject.toml` ou se o
+   `CHANGELOG.md` não tiver o trecho dela (`packaging/release_notes.py`).
 
-   e publica os quatro arquivos numa GitHub Release com o mesmo nome da tag. Se a
-   versão contiver `beta`, a release é marcada automaticamente como pré-release.
+5. O workflow `.github/workflows/release.yml` builda automaticamente, um job por
+   plataforma (cada um na VM nativa daquele SO):
+   - **Windows**: instalador `OpenFolioPDFSuite-Setup.exe` (Inno Setup)
+   - **Linux**: `OpenFolioPDFSuite-x86_64.AppImage` e `openfolio-pdf-suite_amd64.deb`
+   - **macOS**: `OpenFolioPDFSuite.dmg` (sem assinatura/notarização)
+
+   e publica os quatro arquivos numa GitHub Release, com o trecho do `CHANGELOG.md` como
+   descrição. Os nomes dos arquivos não mudam de uma atualização para outra; o app do
+   Windows baixa o `OpenFolioPDFSuite-Setup.exe` da release nova, confere o SHA-256 que o
+   GitHub publica para ele e o roda com `/SILENT` (atualiza por cima e abre o app de novo).
+6. Depois de publicar, abra uma seção `## Próxima atualização` no topo do `CHANGELOG.md`.
+
+Uma release marcada como pré-release no GitHub é ignorada pela verificação do app: serve
+para testar um build sem oferecê-lo a ninguém.
 
 ## Build local (por plataforma)
 
@@ -44,24 +60,24 @@ build sem o Tesseract ou sem os idiomas.
 
 ```powershell
 pyinstaller packaging\pyinstaller\openfolio.spec --noconfirm
-& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=0.2.0-beta.1 packaging\windows\installer.iss
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=2026.10.21 packaging\windows\installer.iss
 ```
 
-Gera `dist\installer\OpenFolioPDFSuite-Setup-0.2.0-beta.1.exe`.
+Gera `dist\installer\OpenFolioPDFSuite-Setup.exe`.
 
 ### Linux
 
 ```bash
 pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
-bash packaging/linux/build_appimage.sh 0.2.0-beta.1
-bash packaging/linux/build_deb.sh 0.2.0-beta.1
+bash packaging/linux/build_appimage.sh
+bash packaging/linux/build_deb.sh 2026.10.21
 ```
 
 ### macOS
 
 ```bash
 pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
-bash packaging/macos/build_dmg.sh 0.2.0-beta.1
+bash packaging/macos/build_dmg.sh
 ```
 
 ## Sobre a assinatura de código

@@ -22,7 +22,8 @@ def main():
 
     log_file = setup_logging()
     install_exception_hooks()
-    logging.getLogger("openfolio").info("OpenFolio PDF Suite %s iniciado (log: %s)", APP_VERSION, log_file)
+    # O identificador da atualização (a data) não aparece na interface; no log, ajuda o suporte.
+    logging.getLogger("openfolio").info("OpenFolio PDF Suite iniciado (atualização %s, log: %s)", APP_VERSION, log_file)
 
     settings = QSettings()
     preferences = Preferences(settings)

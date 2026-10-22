@@ -3,21 +3,25 @@
 import importlib
 import json
 import logging
+import shutil
+import sys
 from pathlib import Path
 from typing import cast
 
-from PySide6.QtCore import QByteArray, QSettings, QSize, Qt, QUrl
+from PySide6.QtCore import QByteArray, QProcess, QSettings, QSize, QStandardPaths, Qt, QUrl
 from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QGuiApplication, QKeySequence
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QHBoxLayout,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QScrollArea,
     QSplitter,
@@ -26,11 +30,14 @@ from PySide6.QtWidgets import (
 )
 
 from core import updates
+from core.version import APP_VERSION
 from core.properties import ReadDocumentProperties
 from ui import i18n, sidebar_icons
 from ui.annotation_state import AnnotationState
+from ui.about_dialog import AboutDialog
 from ui.app_events import pdf_paths_from_mime
 from ui.area_pick_state import AreaPickState
+from ui.diagnostics import log_path
 from ui.document_session import DocumentSession
 from ui.flags import build_br_flag_icon, build_us_flag_icon
 from ui.errors import show_error
@@ -45,13 +52,13 @@ from ui.shortcuts import CommandPalette, ShortcutsDialog
 from ui.tasks import call, run_task, task_manager
 from ui import theme
 from ui.theme import apply_titlebar
+from ui.update_dialog import UpdateDialog
 from ui.viewer import pdf_viewer as viewer_layouts
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.widget_state import capture_state, restore_state
 from ui.widgets.page_container import PageContainer
 from ui.widgets.task_status import TaskStatus
 
-APP_VERSION = "0.2.0"
 
 # Abas que marcam áreas arrastando no visualizador (ver ui/area_pick_state.py).
 _AREA_PICK_PAGES = {"EditPage", "FormFieldsPage", "CropPage", "SignaturePage", "FillSignPage"}
@@ -145,6 +152,16 @@ _SIDEBAR_WIDTH = 210
 _PANEL_WIDTH = 480
 _PANEL_MIN_WIDTH = 340
 _VIEWER_MIN_WIDTH = 320
+
+
+def _installs_updates() -> bool:
+    """O app instalado no Windows baixa e instala a atualização; no Linux, no macOS e rodando
+    do código-fonte, a página da atualização abre no navegador."""
+    return sys.platform == "win32" and bool(getattr(sys, "frozen", False))
+
+
+def _update_folder() -> Path:
+    return Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.CacheLocation)) / "update"
 
 
 class MainWindow(QMainWindow):
@@ -243,7 +260,7 @@ class MainWindow(QMainWindow):
 
         self.task_status = TaskStatus(self._tasks)
         self.statusBar().addPermanentWidget(self.task_status)
-        self.statusBar().showMessage(f"OpenFolio PDF Suite {APP_VERSION}")
+        self.statusBar().showMessage("OpenFolio PDF Suite")
 
         # Largura que mostra o nome mais longo inteiro mesmo com a barra de rolagem vertical
         # (que aparece em telas baixas, como 1280x720).
@@ -744,9 +761,10 @@ class MainWindow(QMainWindow):
             theme.apply_theme(cast(QApplication, QApplication.instance()), theme.SYSTEM)
 
     def check_for_updates(self, manual: bool = True) -> bool:
-        """Ajuda > Verificar atualizações (e ao iniciar, se o usuário ligou). Só baixa a lista
-        pública de releases do GitHub; nada é instalado. Sem `manual`, só avisa se houver
-        versão nova. Devolve False se já houver uma consulta em andamento."""
+        """Ajuda > Verificar atualizações (e ao iniciar, se o usuário ligou). Consulta a lista
+        pública de releases do GitHub; nada é baixado nem instalado sem o usuário ver o que
+        mudou e aceitar. Sem `manual`, só avisa se houver atualização. Devolve False se já
+        houver uma consulta em andamento."""
         if getattr(self, "_update_reply", None) is not None:
             return False
         if getattr(self, "_network", None) is None:
@@ -778,34 +796,74 @@ class MainWindow(QMainWindow):
                     tr("Não foi possível verificar atualizações. Confira a conexão e tente de novo."),
                 )
             return
-        found = updates.newest_release(releases, APP_VERSION)
-        if found is None:
+        update = updates.newest_update(releases, APP_VERSION)
+        if update is None:
             if manual:
-                QMessageBox.information(
-                    self,
-                    tr("Verificar atualizações"),
-                    tr("Você já usa a versão mais nova ({version}).").format(version=APP_VERSION),
-                )
+                QMessageBox.information(self, tr("Verificar atualizações"), tr("O OpenFolio PDF Suite já está atualizado."))
             return
-        version, url = found
-        answer = QMessageBox.question(
+        can_install = _installs_updates() and update.installer_url is not None
+        if UpdateDialog(update, can_install, self).exec() != QDialog.DialogCode.Accepted:
+            return
+        if can_install:
+            self._download_update(update)
+        else:
+            QDesktopServices.openUrl(QUrl(update.page))
+
+    def _download_update(self, update: updates.Update) -> None:
+        """Baixa o instalador da atualização, com andamento e Cancelar, para conferir e
+        instalar (`_on_update_downloaded`)."""
+        folder = _update_folder()
+        shutil.rmtree(folder, ignore_errors=True)  # só o instalador da última atualização fica
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / updates.INSTALLER_NAME
+        output = open(target, "wb")
+        assert update.installer_url is not None  # só chamado quando a release traz o instalador
+        request = QNetworkRequest(QUrl(update.installer_url))
+        request.setHeader(QNetworkRequest.KnownHeaders.UserAgentHeader, f"OpenFolio-PDF-Suite/{APP_VERSION}")
+        reply = self._network.get(request)
+        self._update_download: QNetworkReply | None = reply
+        progress = QProgressDialog(tr("Baixando a atualização..."), tr("Cancelar"), 0, 100, self)
+        progress.setWindowTitle(tr("Atualização"))
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        reply.readyRead.connect(lambda: output.write(reply.readAll().data()))
+        reply.downloadProgress.connect(lambda done, total: progress.setValue(done * 100 // total) if total > 0 else None)
+        progress.canceled.connect(reply.abort)
+        reply.finished.connect(lambda: self._on_update_downloaded(reply, output, target, update, progress))
+
+    def _on_update_downloaded(self, reply, output, target: Path, update: updates.Update, progress) -> None:
+        output.write(reply.readAll().data())
+        output.close()
+        progress.close()
+        reply.deleteLater()
+        self._update_download = None
+        if reply.error() == QNetworkReply.NetworkError.OperationCanceledError:
+            shutil.rmtree(target.parent, ignore_errors=True)
+            return
+        if reply.error() != QNetworkReply.NetworkError.NoError or not updates.installer_is_intact(target, update):
+            logging.getLogger("openfolio").warning("Download da atualização falhou ou não confere: %s", reply.errorString())
+            shutil.rmtree(target.parent, ignore_errors=True)
+            QMessageBox.warning(
+                self,
+                tr("Atualização"),
+                tr("Não foi possível baixar a atualização: o arquivo não chegou inteiro ou não confere "
+                   "com o publicado. Nada foi instalado; tente de novo mais tarde."),
+            )
+            return
+        QMessageBox.information(
             self,
-            tr("Atualização disponível"),
-            tr("A versão {version} do OpenFolio PDF Suite está disponível (você usa a {current}). "
-               "Abrir a página de download?").format(version=version, current=APP_VERSION),
+            tr("Atualização"),
+            tr("A atualização foi baixada e conferida. O app vai fechar para instalá-la e abre de novo "
+               "quando terminar."),
         )
-        if answer == QMessageBox.StandardButton.Yes:
-            QDesktopServices.openUrl(QUrl(url))
+        if not self.close():  # o usuário preferiu não fechar (alterações não salvas)
+            return
+        # Inno Setup sem perguntas: atualiza por cima, apaga os arquivos da instalação anterior
+        # e abre o app de novo (packaging/windows/installer.iss).
+        QProcess.startDetached(str(target), ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
 
     def _show_about(self):
-        QMessageBox.about(
-            self,
-            tr("Sobre o OpenFolio PDF Suite"),
-            tr(
-                "<b>OpenFolio PDF Suite</b> — versão {version}<br><br>"
-                "Suite completa e open source de manipulação de PDF, 100% local, sem paywall."
-            ).format(version=APP_VERSION),
-        )
+        AboutDialog(log_path(), self).exec()
 
     # -- operações em andamento ------------------------------------------------------
 
