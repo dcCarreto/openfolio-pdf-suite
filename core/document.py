@@ -133,22 +133,25 @@ def pages_writer(
     *,
     properties_from: PdfReader | None = None,
     copy_attachments: bool = True,
+    titles: list[str | None] | None = None,
 ) -> PdfWriter:
     """Monta um documento com as páginas indicadas de cada leitor, na ordem dada.
 
     Os metadados, o XMP, o idioma e as preferências de exibição vêm de `properties_from`
     (por padrão, o primeiro documento); camadas e anexos (se `copy_attachments`) vêm de
     todos os documentos usados; os rótulos de página acompanham cada página de origem.
+    Um título em `titles` (um por parte) vira um marcador na primeira página da parte, com os
+    marcadores dela dentro.
     """
     writer = PdfWriter()
     labels: list[PageLabel | None] = []
     readers: list[PdfReader] = []
     label_cache: dict[int, list[PageLabel] | None] = {}
-    for reader, indices in parts:
+    for (reader, indices), title in zip(parts, titles or [None] * len(parts)):
         indices = list(indices)
         if not indices:
             continue
-        writer.append(reader, pages=indices)
+        writer.append(reader, outline_item=title, pages=indices)
         if id(reader) not in label_cache:
             label_cache[id(reader)] = page_label_specs(reader)
         specs = label_cache[id(reader)]

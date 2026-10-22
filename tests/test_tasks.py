@@ -199,7 +199,8 @@ def test_language_change_keeps_what_the_user_typed(tmp_path):
         watermark.font_size_spin.setValue(72)
         watermark.output_picker.restore((str(tmp_path / "saida.pdf"), None))
         merge = window.page(merge_row)
-        merge.file_list_editor.list_widget.addItems(["a.pdf", "b.pdf"])
+        for path in ("a.pdf", "b.pdf"):
+            merge.file_list_editor.add_path(path)
 
         i18n.set_language(i18n.EN_US)
 

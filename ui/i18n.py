@@ -211,6 +211,12 @@ _EN_TRANSLATIONS: dict[str, str] = {
     # Merge
     "Selecionar PDFs": "Select PDFs",
     "Arquivos a mesclar (na ordem desejada):": "Files to merge (in the desired order):",
+    "todas (ex.: 1-3, 5)": "all (e.g. 1-3, 5)",
+    "Páginas do arquivo selecionado:": "Pages of the selected file:",
+    "Um marcador para cada arquivo (com os marcadores dele dentro)": "One bookmark for each file (with its bookmarks inside)",
+    "Intercalar dois arquivos, página a página (frentes e versos escaneados à parte)": "Interleave two files, page by page (fronts and backs scanned separately)",
+    "Versos em ordem inversa (o maço virado no scanner)": "Backs in reverse order (the stack flipped in the scanner)",
+    "Para intercalar, deixe na lista só dois arquivos: o das frentes e o dos versos.": "To interleave, keep only two files in the list: the fronts and the backs.",
     "Adicione pelo menos um arquivo.": "Add at least one file.",
     "Falha ao mesclar: {error}": "Failed to merge: {error}",
     "PDFs mesclados com sucesso.": "PDFs merged successfully.",
@@ -1225,6 +1231,9 @@ _EN_TRANSLATIONS: dict[str, str] = {
         'Layer {number} does not exist: the document has {count} layer(s).'
     ),
     'Informe ao menos um arquivo PDF para mesclar.': 'Provide at least one PDF file to merge.',
+    "Para intercalar, informe exatamente dois arquivos: o das frentes e o dos versos.": "To interleave, provide exactly two files: the fronts and the backs.",
+    "Informe as páginas de cada arquivo (ou nenhuma).": "Provide the pages of each file (or none).",
+    "Nenhuma página escolhida.": "No page chosen.",
     'O PDF não tem marcadores de nível superior para dividir.': (
         'The PDF has no top-level bookmarks to split by.'
     ),
