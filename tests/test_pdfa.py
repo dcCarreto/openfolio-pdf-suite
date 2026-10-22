@@ -2,6 +2,7 @@
 
 import pytest
 from pypdf import PdfReader, PdfWriter
+from pypdf.actions import JavaScript
 from pypdf.generic import NameObject, StreamObject
 from reportlab.pdfgen import canvas as rl_canvas
 
@@ -28,7 +29,7 @@ def _pdf_with_js_and_attachment(path) -> None:
     _plain_pdf(plain_path)
 
     writer = PdfWriter(clone_from=plain_path)
-    writer.add_js('app.alert("oi");')
+    writer.add_open_action(JavaScript('app.alert("oi");'))
     writer.add_attachment("secreto.txt", b"dados anexados")
     writer.add_annotation(
         page_number=0,

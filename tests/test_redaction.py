@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pypdfium2 as pdfium
 import pytest
 from pypdf import PageObject, PdfReader, PdfWriter
+from pypdf.actions import JavaScript
 from pypdf.annotations import Highlight
 from pypdf.generic import (
     ArrayObject,
@@ -162,7 +163,7 @@ def _pdf_with_hidden_data(path) -> None:
     quads = ArrayObject([FloatObject(v) for v in [40, 260, 200, 260, 40, 240, 200, 240]])
     writer = PdfWriter(clone_from=src_text)
     writer.add_metadata({"/Title": "Segredo Confidencial", "/Author": "Fulano de Tal"})
-    writer.add_js('app.alert("oi");')
+    writer.add_open_action(JavaScript('app.alert("oi");'))
     writer.add_attachment("secreto.txt", b"dados sensiveis anexados")
     writer.add_annotation(
         page_number=0,
@@ -508,7 +509,7 @@ def _hostile_pdf(path, tmp_path) -> None:
             widget,
         ]
     )
-    writer.add_js("document_level()")
+    writer.add_open_action(JavaScript("document_level()"))
     writer.add_attachment("anexo_do_documento.txt", b"anexo do documento")
     writer.add_metadata({"/Title": "Titulo secreto"})
     with open(path, "wb") as f:
