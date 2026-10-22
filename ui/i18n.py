@@ -252,6 +252,12 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Nenhuma página em branco encontrada: não há onde dividir.": "No blank page found: there is nowhere to split.",
     "Medindo as partes": "Measuring the parts",
     "Procurando páginas em branco": "Looking for blank pages",
+    # PDF para imagens (M18)
+    "Formato:": "Format:",
+    "PNG (uma imagem por página)": "PNG (one image per page)",
+    "JPEG (uma imagem por página, menor)": "JPEG (one image per page, smaller)",
+    "TIFF (um arquivo com todas as páginas)": "TIFF (one file with every page)",
+    "Informe as páginas a converter.": "Enter the pages to convert.",
     # Pages (rotate/reorder/remove/insert/replace)
     "Rotacionar": "Rotate",
     "Reordenar": "Reorder",

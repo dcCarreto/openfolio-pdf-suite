@@ -18,6 +18,39 @@ def test_convert_to_images_creates_one_image_per_page(make_pdf, tmp_path):
         assert Path(path).exists()
 
 
+def test_jpeg_of_chosen_pages_keeps_the_page_numbers(make_pdf, tmp_path):
+    pdf_path = make_pdf("doc.pdf", [(200, 200), (300, 300), (400, 400)])
+
+    output_paths = ConvertToImages().run(str(pdf_path), str(tmp_path / "out"), scale=1, image_format="jpeg", pages=[2, 0])
+
+    assert [Path(path).name for path in output_paths] == ["doc_page3.jpg", "doc_page1.jpg"]
+    with Image.open(output_paths[0]) as image:
+        assert (image.format, image.size) == ("JPEG", (400, 400))
+
+
+def test_tiff_puts_every_page_in_one_file(make_pdf, tmp_path):
+    pdf_path = make_pdf("doc.pdf", [(200, 200), (300, 300), (400, 400)])
+
+    (output_path,) = ConvertToImages().run(str(pdf_path), str(tmp_path / "out"), scale=1, image_format="tiff", pages=[0, 2])
+
+    assert Path(output_path).name == "doc.tif"
+    with Image.open(output_path) as image:
+        sizes = []
+        for frame in range(image.n_frames):
+            image.seek(frame)
+            sizes.append(image.size)
+        assert image.format == "TIFF"
+    assert sizes == [(200, 200), (400, 400)]
+    assert list((tmp_path / "out").iterdir()) == [Path(output_path)]  # sem o temporário
+
+
+def test_a_page_outside_the_document_is_rejected(make_pdf, tmp_path):
+    pdf_path = make_pdf("doc.pdf", [(200, 200)])
+
+    with pytest.raises(ValueError, match="1 página"):
+        ConvertToImages().run(str(pdf_path), str(tmp_path / "out"), pages=[1])
+
+
 def test_convert_from_images_creates_multi_page_pdf(tmp_path):
     colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
     image_paths = []
@@ -119,3 +152,29 @@ def test_plain_jpeg_is_embedded_without_recompression(tmp_path):
 def test_invalid_page_size_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="Tamanho de página"):
         ConvertFromImages().run(["x.png"], str(tmp_path / "out.pdf"), page_size="A0")
+
+
+def test_convert_page_makes_jpegs_of_the_selected_thumbnails(make_pdf, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    from ui.document_session import DocumentSession
+    from ui.pages.convert_page import ConvertPage
+    from ui.tasks import wait_for_tasks
+
+    QApplication.instance() or QApplication([])
+    shown = []
+    monkeypatch.setattr(QMessageBox, "information", lambda _p, _t, text: shown.append(text))
+    session = DocumentSession()
+    session.open(str(make_pdf("doc.pdf", [(100, 100), (200, 200), (300, 300)])))
+    session.set_selected_pages([2, 0])
+    page = ConvertPage(session)
+    monkeypatch.setattr(page.images_output_picker, "path", lambda: str(tmp_path / "out"))
+
+    page.image_format_combo.setCurrentIndex(page.image_format_combo.findData("jpeg"))
+    page.image_selection_button.click()
+    assert page.image_pages_edit.text() == "1, 3"
+    page._convert_to_images()
+    assert wait_for_tasks()
+
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == ["doc_page1.jpg", "doc_page3.jpg"]
+    assert shown == ["2 imagem(ns) gerada(s) com sucesso."]

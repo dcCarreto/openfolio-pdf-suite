@@ -3,7 +3,7 @@
 import io
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, TiffImagePlugin
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 
@@ -11,30 +11,76 @@ from .base import READ, atomic_output, open_pdfium, open_reader
 from .progress import PDFIUM_LOCK, Progress, ensure_progress
 
 
+IMAGE_FORMATS = ("png", "jpeg", "tiff")
+
+
 class ConvertToImages:
-    """Converte páginas de um PDF em imagens."""
+    """Converte páginas de um PDF em imagens.
+
+    - `image_format`: "png" e "jpeg" gravam uma imagem por página (`<nome>_pageN`, com o
+      número da página no documento); "tiff" grava um arquivo só, multipágina (`<nome>.tif`),
+      como pedem sistemas de fax e de arquivo de documentos.
+    - `pages`: índices a partir de 0; None converte todas.
+    """
 
     def run(
-        self, input_path: str, output_dir: str, scale: float = 2.0, progress: Progress | None = None
+        self,
+        input_path: str,
+        output_dir: str,
+        scale: float = 2.0,
+        progress: Progress | None = None,
+        *,
+        image_format: str = "png",
+        pages: list[int] | None = None,
     ) -> list[str]:
         progress = ensure_progress(progress)
+        if image_format not in IMAGE_FORMATS:
+            raise ValueError(f"Formato de imagem inválido: {image_format}")
         open_reader(input_path, purpose=READ)  # recusa PDF que não abre, com mensagem clara
         stem = Path(input_path).stem
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(parents=True, exist_ok=True)
 
-        output_paths = []
         with PDFIUM_LOCK:
             pdf = open_pdfium(input_path)
             total_pages = len(pdf)
         try:
-            for index in progress.steps(range(total_pages), total_pages, "Convertendo páginas"):
-                with PDFIUM_LOCK:
-                    page = pdf[index]
-                    image = page.render(scale=scale).to_pil()
-                    page.close()
-                output_path = output_dir_path / f"{stem}_page{index + 1}.png"
-                image.save(output_path)
+            if pages is None:
+                pages = list(range(total_pages))
+            if not pages:
+                raise ValueError("Informe as páginas a converter.")
+            if not all(0 <= index < total_pages for index in pages):
+                raise ValueError(f"O documento tem {total_pages} página(s): confira as páginas informadas.")
+
+            def rendered():
+                for index in progress.steps(pages, len(pages), "Convertendo páginas"):
+                    with PDFIUM_LOCK:
+                        page = pdf[index]
+                        image = page.render(scale=scale).to_pil()
+                        page.close()
+                    yield index, image
+
+            if image_format == "tiff":
+                output_path = output_dir_path / f"{stem}.tif"
+                with atomic_output(str(output_path)) as temp_path, open(temp_path, "w+b") as file:
+                    # Uma página por vez na memória, em vez do save_all, que junta todas antes.
+                    # O arquivo é nosso e fica aberto até o writer sumir: o __del__ dele
+                    # fecha de novo e falharia num arquivo já fechado.
+                    tiff = TiffImagePlugin.AppendingTiffWriter(file)
+                    try:
+                        with tiff:
+                            for _index, image in rendered():
+                                image.save(tiff, format="TIFF", compression="tiff_deflate", dpi=(72 * scale,) * 2)
+                                tiff.newFrame()
+                    finally:
+                        del tiff
+                return [str(output_path)]
+
+            output_paths = []
+            suffix = "jpg" if image_format == "jpeg" else "png"
+            for index, image in rendered():
+                output_path = output_dir_path / f"{stem}_page{index + 1}.{suffix}"
+                image.save(output_path, quality=90, dpi=(72 * scale,) * 2)
                 output_paths.append(str(output_path))
         finally:
             with PDFIUM_LOCK:

@@ -32,6 +32,8 @@ Ainda não publicada.
   marcadores dele dentro) e intercala frentes e versos escaneados em arquivos separados.
 - Dividir também por intervalos (ou as páginas selecionadas nas miniaturas), por tamanho
   máximo de arquivo e a cada página em branco de um lote escaneado.
+- PDF para imagens grava também JPEG ou um TIFF com todas as páginas e pode converter só
+  as páginas escolhidas (ou as selecionadas nas miniaturas).
 - No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
 - No Linux, o AppImage oferece aparecer no menu de aplicativos e na escolha do programa para
   abrir PDF (Ajuda > Mostrar no menu de aplicativos).

@@ -212,7 +212,15 @@ def _images(args):
 
     if not 0 < args.escala <= 10:
         raise _Failure("--escala precisa estar entre 0 e 10.")
-    paths = ConvertToImages().run(args.input, _output_dir(args), scale=args.escala, progress=_progress(args))
+    pages = _pages(args, args.input, args.paginas)
+    paths = ConvertToImages().run(
+        args.input,
+        _output_dir(args),
+        scale=args.escala,
+        progress=_progress(args),
+        image_format=args.formato,
+        pages=sorted(set(pages)) if pages is not None else None,
+    )
     return f"{len(paths)} imagem(ns) em {args.output}."
 
 
@@ -344,8 +352,12 @@ def _parser() -> argparse.ArgumentParser:
     sub = command("text", _text, "extrai o texto para um .txt")
     sub.add_argument("--layout", action="store_true", help="mantém o layout das colunas")
 
-    sub = command("images", _images, "converte as páginas em imagens PNG (numa pasta)", output="pasta")
+    sub = command("images", _images, "converte as páginas em imagens (numa pasta)", output="pasta")
     sub.add_argument("--escala", type=float, default=2.0, help="2 = 144 DPI (padrão)")
+    sub.add_argument(
+        "--formato", choices=("png", "jpeg", "tiff"), default="png", help="png (padrão), jpeg ou tiff (um arquivo multipágina)"
+    )
+    sub.add_argument("--paginas", help="padrão: todas")
 
     sub = command("info", _info, "mostra as propriedades do documento", output=None)
     sub.add_argument("--json", action="store_true", help="saída em JSON, para scripts")

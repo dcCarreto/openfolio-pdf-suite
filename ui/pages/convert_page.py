@@ -6,7 +6,9 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -15,13 +17,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.base import READ, open_reader
 from core.convert import FIT_TO_IMAGE, ConvertFromImages, ConvertToImages
 from core.extract_text import ExtractText
 from core.office_convert import SUPPORTED_SUFFIXES, ConvertOfficeToPDF
 from core.pdf_export import ConvertPDFToExcel, ConvertPDFToWord
 from core.xml_convert import ConvertXMLToPDF
 from ui.i18n import tr, tr_message
-from ui.page_ranges import format_page_ranges
+from ui.page_ranges import format_page_ranges, parse_page_ranges
 from ui.tasks import call, call_with_progress, run_task
 from ui.text_to_pdf import SUFFIXES as TEXT_SUFFIXES
 from ui.text_to_pdf import convert_text_to_pdf
@@ -76,11 +79,32 @@ class ConvertPage(QWidget):
 
         self.pdf_source_bar = DocumentSourceBar(self.session)
         self.images_output_picker = FilePicker(mode="directory")
+        self.image_format_combo = QComboBox()
+        for label, value in (
+            ("PNG (uma imagem por página)", "png"),
+            ("JPEG (uma imagem por página, menor)", "jpeg"),
+            ("TIFF (um arquivo com todas as páginas)", "tiff"),
+        ):
+            self.image_format_combo.addItem(tr(label), value)
+        self.image_pages_edit = QLineEdit()
+        self.image_pages_edit.setPlaceholderText(tr("Páginas (vazio = todas), ex: 1, 3-5"))
+        self.image_selection_button = QPushButton(tr("Usar seleção"))
+        self.image_selection_button.setToolTip(tr("Preenche com as páginas selecionadas nas miniaturas (Ctrl ou Shift + clique)."))
+        self.image_selection_button.clicked.connect(
+            lambda: self.image_pages_edit.setText(format_page_ranges(self.session.selected_pages()))
+        )
+        pages_row = QHBoxLayout()
+        pages_row.addWidget(self.image_pages_edit, 1)
+        pages_row.addWidget(self.image_selection_button)
+        options = QFormLayout()
+        options.addRow(tr("Formato:"), self.image_format_combo)
+        options.addRow(tr("Páginas:"), pages_row)
         convert_button = QPushButton(tr("Converter"))
         convert_button.clicked.connect(self._convert_to_images)
 
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
         layout.addWidget(self.pdf_source_bar)
+        layout.addLayout(options)
         layout.addWidget(QLabel(tr("Pasta de saída das imagens:")))
         layout.addWidget(self.images_output_picker)
         layout.addWidget(convert_button)
@@ -268,7 +292,15 @@ class ConvertPage(QWidget):
             QMessageBox.warning(self, tr("Converter"), tr("Escolha a pasta de saída."))
             return
 
-        task = call_with_progress(ConvertToImages().run, input_path, output_dir)
+        image_format = self.image_format_combo.currentData()
+        text = self.image_pages_edit.text()
+
+        def task(progress):
+            pages = None
+            if text.strip():
+                total = len(open_reader(input_path, purpose=READ).pages)
+                pages = sorted(set(parse_page_ranges(text, total)))
+            return ConvertToImages().run(input_path, output_dir, progress=progress, image_format=image_format, pages=pages)
 
         def done(output_paths):
             QMessageBox.information(

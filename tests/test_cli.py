@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from PIL import Image
 from pypdf import PdfReader
 
 from core.cli import main
@@ -62,6 +63,18 @@ def test_split_and_images_need_an_empty_folder(make_pdf, tmp_path, capsys):
     assert main(["images", str(source), "-o", str(images), "--escala", "0.5", "-q"]) == 0
     assert len(list(images.glob("*.png"))) == 3
     assert capsys.readouterr().out == ""  # -q cala a mensagem final
+
+
+def test_images_in_tiff_with_chosen_pages(make_pdf, tmp_path, capsys):
+    source = make_pdf("doc.pdf", [(100, 100), (200, 200), (300, 300)])
+    images = tmp_path / "imagens"
+
+    assert main(["images", str(source), "-o", str(images), "--formato", "tiff", "--paginas", "3, 1-2"]) == 0
+
+    assert [p.name for p in images.iterdir()] == ["doc.tif"]
+    with Image.open(images / "doc.tif") as tiff:
+        assert tiff.n_frames == 3
+    assert "1 imagem(ns)" in capsys.readouterr().out
 
 
 def test_info_json_is_for_scripts(make_pdf, capsys):
