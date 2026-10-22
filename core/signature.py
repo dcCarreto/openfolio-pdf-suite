@@ -27,6 +27,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+from oscrypto import trust_list
 from pyhanko import stamp
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -34,6 +35,7 @@ from pyhanko.sign import fields, signers
 from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.validation import validate_pdf_signature
 from pyhanko.sign.validation.status import SignatureCoverageLevel
+from pyhanko_certvalidator import ValidationContext
 
 from .base import atomic_output, open_reader, require_valid_page_index
 from .geometry import PageGeometry, intersect_rects, normalize_rect
@@ -306,10 +308,16 @@ def _quiet_pyhanko_logs():
             logger.setLevel(level)
 
 
+def _trust_roots() -> list:
+    """Autoridades certificadoras do sistema: o repositório do Windows, as chaves do macOS ou o
+    pacote de CAs da distribuição Linux. O pyhanko vai deixar de buscá-las sozinho."""
+    return [cert for cert, _trust_oids, _reject_oids in trust_list.get_list()]
+
+
 def _describe(embedded, total_revisions: int) -> SignatureInfo:
     field_name = str(embedded.field_name or "")
     try:
-        status = validate_pdf_signature(embedded)
+        status = validate_pdf_signature(embedded, ValidationContext(trust_roots=_trust_roots()))
     except Exception as exc:
         return SignatureInfo(
             field_name=field_name, signer_name="", signing_time="", intact=False, error=str(exc)

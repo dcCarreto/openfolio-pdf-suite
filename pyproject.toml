@@ -15,6 +15,8 @@ dependencies = [
     "python-pptx>=1.0",
     "pytesseract>=0.3.10",
     "pyhanko>=0.25",
+    # As autoridades certificadoras do sistema, para a confiança nas assinaturas (core/signature.py).
+    "oscrypto>=1.3",
 ]
 
 [project.scripts]

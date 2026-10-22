@@ -1,14 +1,20 @@
 """Testes de core/signature.py: assinatura digital (CMS/PKCS#7) e verificação de integridade."""
 
+import datetime
 import io
 
 import pytest
+from asn1crypto import x509 as asn1_x509
 from cryptography import x509
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import (
     BestAvailableEncryption,
+    Encoding,
     load_pem_private_key,
     pkcs12,
 )
+from cryptography.x509.oid import NameOID
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas as rl_canvas
 
@@ -18,6 +24,7 @@ from core.signature import (
     VERDICT_WARNING,
     DescribeSignatures,
     SignDocument,
+    _trust_roots,
     generate_test_certificate,
 )
 
@@ -297,3 +304,63 @@ def test_signature_check_silences_only_the_pyhanko_loggers(tmp_path, caplog):
     assert any(r.name == "openfolio.teste" for r in caplog.records)
     assert logging.root.manager.disable == 0
     assert logging.getLogger("pyhanko").level == logging.NOTSET
+
+
+def _certificate_issued_by_a_test_authority(tmp_path):
+    """Uma autoridade certificadora de teste e um .pfx emitido por ela."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    def build(subject, issuer, public_key, signing_key, ca):
+        builder = (
+            x509.CertificateBuilder()
+            .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, subject)]))
+            .issuer_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, issuer)]))
+            .public_key(public_key)
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - datetime.timedelta(days=1))
+            .not_valid_after(now + datetime.timedelta(days=30))
+            .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
+            .add_extension(
+                x509.KeyUsage(
+                    digital_signature=not ca, content_commitment=not ca, key_encipherment=False,
+                    data_encipherment=False, key_agreement=False, key_cert_sign=ca, crl_sign=ca,
+                    encipher_only=False, decipher_only=False,
+                ),
+                critical=True,
+            )
+        )
+        return builder.sign(signing_key, hashes.SHA256())
+
+    ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    ca = build("AC de Teste", "AC de Teste", ca_key.public_key(), ca_key, ca=True)
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    cert = build("Fulano de Tal", "AC de Teste", key.public_key(), ca_key, ca=False)
+    pfx_path = tmp_path / "fulano.pfx"
+    pfx_path.write_bytes(pkcs12.serialize_key_and_certificates(
+        name=b"fulano", key=key, cert=cert, cas=[ca], encryption_algorithm=BestAvailableEncryption(b"senha"),
+    ))
+    return asn1_x509.Certificate.load(ca.public_bytes(Encoding.DER)), pfx_path
+
+
+def test_a_certificate_from_a_trusted_authority_is_trusted(tmp_path, monkeypatch):
+    authority, pfx_path = _certificate_issued_by_a_test_authority(tmp_path)
+    path_in, path_out = tmp_path / "doc.pdf", tmp_path / "assinado.pdf"
+    _make_pdf(path_in, "Contrato")
+    SignDocument().run(str(path_in), str(path_out), signer_name="Fulano de Tal",
+                       pfx_path=str(pfx_path), pfx_password="senha")
+
+    (untrusted,) = DescribeSignatures().run(str(path_out))
+    monkeypatch.setattr("core.signature._trust_roots", lambda: [authority])
+    (trusted,) = DescribeSignatures().run(str(path_out))
+
+    assert untrusted.valid and not untrusted.trusted  # a AC de teste não está no sistema
+    assert trusted.valid and trusted.trusted and trusted.issuer_name == "AC de Teste"
+
+
+def test_the_system_authorities_are_passed_to_pyhanko(tmp_path, recwarn):
+    assert _trust_roots()  # qualquer sistema tem autoridades instaladas
+
+    DescribeSignatures().run(str(_signed_with_test_certificate(tmp_path)))
+
+    # O pyhanko avisa (e vai deixar de funcionar) quando ninguém passa as autoridades.
+    assert not [w for w in recwarn if "trust_roots" in str(w.message)]
