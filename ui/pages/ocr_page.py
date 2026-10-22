@@ -33,12 +33,13 @@ _MODES = [
     ("auto", "Só as escaneadas"),
     ("force", "Todas (forçar OCR)"),
 ]
+# Os instaladores do app trazem o Tesseract; isto só aparece rodando do código-fonte.
 _INSTALL_HELP = (
-    "Para instalar no Windows: baixe o instalador do Tesseract em "
-    "https://github.com/UB-Mannheim/tesseract/wiki e, durante a instalação, marque em "
-    '"Additional language data" o idioma Portuguese (e "Orientation and script detection", '
-    "para páginas digitalizadas de lado). No Linux: sudo apt install tesseract-ocr "
-    "tesseract-ocr-por. Depois, reabra o app."
+    "Os instaladores do app já trazem o Tesseract. Rodando o código-fonte, instale-o no "
+    "sistema: no Windows, pelo instalador em https://github.com/UB-Mannheim/tesseract/wiki "
+    '(marque o idioma Portuguese e "Orientation and script detection"); no Linux, sudo apt '
+    "install tesseract-ocr tesseract-ocr-por; no macOS, brew install tesseract "
+    "tesseract-lang. Depois, reabra o app."
 )
 
 

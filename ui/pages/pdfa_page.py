@@ -1,7 +1,6 @@
 """Aba de conversão e verificação de PDF/A (arquivamento)."""
 
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QLabel,
     QMessageBox,
@@ -11,7 +10,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.pdfa import VALID_CONFORMANCE, ConvertToPDFA, ValidatePDFA, find_ghostscript, find_verapdf
+from core.pdfa import VALID_CONFORMANCE, ConvertToPDFA, ValidatePDFA
 from ui.i18n import tr, tr_message
 from ui.tasks import call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -83,12 +82,6 @@ class PDFAPage(QWidget):
         self.convert_conformance_combo = QComboBox()
         self._update_conformance_options()
 
-        self.ghostscript_check = QCheckBox(tr("Usar o Ghostscript"))
-        self.ghostscript_check.setToolTip(tr("Embute as fontes e achata a transparência, o que a conversão própria do app não faz."))
-        if not find_ghostscript():
-            self.ghostscript_check.setEnabled(False)
-            self.ghostscript_check.setToolTip(tr("Ghostscript não encontrado (ghostscript.com)."))
-
         apply_button = QPushButton(tr("Converter"))
         apply_button.clicked.connect(self._apply_convert)
 
@@ -99,7 +92,6 @@ class PDFAPage(QWidget):
         layout.addWidget(self.convert_part_combo)
         layout.addWidget(QLabel(tr("Nível de conformidade:")))
         layout.addWidget(self.convert_conformance_combo)
-        layout.addWidget(self.ghostscript_check)
         layout.addWidget(apply_button)
         return widget
 
@@ -116,15 +108,13 @@ class PDFAPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        if find_verapdf():
-            text = tr("veraPDF encontrado: além das verificações do app, o arquivo passa pela validação completa dele.")
-        else:
-            text = tr(
+        note = QLabel(
+            tr(
                 "Verifica os requisitos de PDF/A que o app cobre (declaração, perfil de cor, "
                 "fontes embutidas, transparência, ações e anexos proibidos, metadados) — não é "
-                "a validação ISO 19005 completa. Para ela, instale o veraPDF (verapdf.org)."
+                "a validação ISO 19005 completa."
             )
-        note = QLabel(text)
+        )
         note.setWordWrap(True)
 
         validate_button = QPushButton(tr("Validar"))
@@ -154,17 +144,11 @@ class PDFAPage(QWidget):
             output_path,
             part=self.convert_part_combo.currentData(),
             conformance=self.convert_conformance_combo.currentData(),
-            use_ghostscript=self.ghostscript_check.isChecked(),
         )
 
         def done(result):
             if not result.written:
                 message = tr("O documento não pôde ser convertido, e nada foi gravado:") + "\n" + _bullets(result.issues)
-                if not self.ghostscript_check.isChecked():
-                    if find_ghostscript():
-                        message += "\n\n" + tr('Tente de novo com "Usar o Ghostscript" marcado.')
-                    else:
-                        message += "\n\n" + tr("Com o Ghostscript instalado (ghostscript.com), o app consegue corrigir fontes e transparência.")
                 QMessageBox.warning(self, tr("PDF/A"), message)
                 return
             self.session.open(output_path)
@@ -191,13 +175,10 @@ class PDFAPage(QWidget):
 
         def done(result):
             if result.is_valid:
-                if result.verapdf_used:
-                    text = tr("O veraPDF confirmou a conformidade, e as verificações do app não encontraram problemas.")
-                else:
-                    text = tr(
-                        "Nenhum problema encontrado nas verificações do app. Elas não cobrem a "
-                        "norma inteira: para arquivamento legal, confirme com o veraPDF."
-                    )
+                text = tr(
+                    "Nenhum problema encontrado nas verificações do app. Elas não cobrem a "
+                    "norma inteira: para arquivamento legal, confirme com o veraPDF."
+                )
                 QMessageBox.information(self, tr("PDF/A"), text)
             else:
                 QMessageBox.warning(

@@ -6,12 +6,19 @@ substituído (monkeypatch) por dados simulados, e a detecção do binário é te
 sobrescrevendo `_TESSERACT_CANDIDATES` em vez de depender do que está instalado de verdade.
 """
 
+import io
+import os
+import sys
+
+import pypdfium2 as pdfium
 import pytest
 from pypdf import PdfReader
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 
 from core import ocr
 from core.base import EncryptedPDFError
+from tests.conftest import require_program
 
 
 def _make_pdf_with_text(path, text: str) -> None:
@@ -37,6 +44,24 @@ def _fake_ocr_data(words: list[tuple[str, int, int, int, int, int]]) -> dict:
 def test_find_tesseract_returns_none_when_not_found(monkeypatch):
     monkeypatch.setattr(ocr, "_TESSERACT_CANDIDATES", ["um-binario-que-nao-existe-xyz"])
     assert ocr.find_tesseract() is None
+
+
+def test_the_tesseract_bundled_with_the_app_comes_first(monkeypatch, tmp_path):
+    bundled = tmp_path / ("tesseract.exe" if sys.platform == "win32" else "tesseract")
+    bundled.write_text("fake")
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.setattr(ocr, "_TESSERACT_CANDIDATES", [__file__])  # um "instalado" que não deve ganhar
+    monkeypatch.setenv("TESSDATA_PREFIX", "idiomas de outro Tesseract")
+
+    assert ocr.find_tesseract() == str(bundled)
+    assert os.environ["TESSDATA_PREFIX"] == str(tmp_path / "tessdata")
+
+
+def test_without_the_bundled_copy_an_installed_tesseract_is_used(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)  # app empacotado sem a cópia
+    monkeypatch.setattr(ocr, "_TESSERACT_CANDIDATES", [__file__])
+
+    assert ocr.find_tesseract() == __file__
 
 
 def test_find_tesseract_finds_a_direct_file_path(monkeypatch, tmp_path):
@@ -364,3 +389,66 @@ def test_sideways_scan_text_follows_the_lines_in_the_image(monkeypatch, tmp_path
         assert right - left > top - bottom
     else:
         assert top - bottom > right - left  # a linha corre na vertical da página
+
+
+# --- Com o Tesseract de verdade -------------------------------------------------------
+
+
+_PARAGRAPH = [
+    "The quick brown fox jumps over the",
+    "lazy dog while the scanner keeps",
+    "turning every page of the report",
+    "into a picture without any text.",
+]
+
+
+def _scanned_pdf(path, lines: list[str], rotation: int = 0):
+    """Um escaneado de verdade: o texto vira uma imagem de 300 DPI (sem texto no PDF),
+    girada `rotation` graus como uma folha posta de lado no scanner."""
+    source = path.with_name("origem.pdf")
+    c = rl_canvas.Canvas(str(source), pagesize=(420, 300))
+    c.setFont("Helvetica", 18)
+    for index, line in enumerate(lines):
+        c.drawString(30, 260 - 32 * index, line)
+    c.save()
+    document = pdfium.PdfDocument(str(source))
+    image = document[0].render(scale=300 / 72).to_pil().convert("L")
+    document.close()
+    image = image.rotate(rotation, expand=True)
+    width, height = (420, 300) if rotation % 180 == 0 else (300, 420)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    c = rl_canvas.Canvas(str(path), pagesize=(width, height))
+    c.drawImage(ImageReader(buffer), 0, 0, width, height)
+    c.save()
+    return path
+
+
+def test_real_tesseract_makes_a_scanned_page_searchable(tmp_path):
+    require_program(ocr.find_tesseract(), "Tesseract")
+    path_in = _scanned_pdf(tmp_path / "scan.pdf", ["OpenFolio reads scanned pages", "Invoice number 2026"])
+    assert not PdfReader(str(path_in)).pages[0].extract_text().strip()
+    path_out = tmp_path / "out.pdf"
+
+    assert ocr.OCRDocument().run(str(path_in), str(path_out)) == 1
+
+    text = PdfReader(str(path_out)).pages[0].extract_text()
+    for word in ("OpenFolio", "scanned", "Invoice", "2026"):
+        assert word in text
+
+
+@pytest.mark.parametrize("rotation", [90, 180, 270])
+def test_real_tesseract_reads_a_sideways_scan(tmp_path, rotation):
+    require_program(ocr.find_tesseract() if ocr.has_orientation_data() else None, "Tesseract com o pacote osd")
+    # A detecção de orientação do Tesseract recusa páginas com pouco texto ("Too few
+    # characters"): um parágrafo, como numa folha de verdade.
+    lines = ["OpenFolio reads sideways pages", *_PARAGRAPH]
+    path_in = _scanned_pdf(tmp_path / "scan.pdf", lines, rotation=rotation)
+    path_out = tmp_path / "out.pdf"
+
+    assert ocr.OCRDocument().run(str(path_in), str(path_out), detect_orientation=True) == 1
+
+    text = PdfReader(str(path_out)).pages[0].extract_text()
+    for word in ("OpenFolio", "sideways", "pages"):
+        assert word in text

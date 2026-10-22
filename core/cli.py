@@ -136,7 +136,6 @@ def _compress(args):
         _output(args),
         level=args.nivel,
         grayscale=args.cinza,
-        use_ghostscript=args.ghostscript,
         progress=_progress(args),
     )
     if not result.written:
@@ -318,7 +317,6 @@ def _parser() -> argparse.ArgumentParser:
     sub = command("compress", _compress, "reduz o tamanho do arquivo")
     sub.add_argument("--nivel", choices=COMPRESSION_LEVELS, default="medium")
     sub.add_argument("--cinza", action="store_true", help="converte as imagens para tons de cinza")
-    sub.add_argument("--ghostscript", action="store_true", help="usa o Ghostscript (pode descartar anexos e campos)")
 
     sub = command("protect", _protect, "protege com senha (pergunta a senha se --senha-nova faltar)")
     sub.add_argument("--senha-nova", help="senha para abrir (fica no histórico do shell)")
@@ -382,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
         return _error(f"sem permissão para usar {exc.filename} (está aberto em outro programa?)")
     except PyPdfError as exc:
         return _error(f"não deu para ler o PDF (corrompido ou não é PDF): {exc}")
-    except (_Failure, ValueError, OSError, RuntimeError) as exc:  # RuntimeError: programa externo
+    except (_Failure, ValueError, OSError, RuntimeError) as exc:  # RuntimeError: Tesseract ausente
         return _error(str(exc))
     finally:
         if _shows_progress(args):

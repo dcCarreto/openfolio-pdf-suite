@@ -1,16 +1,5 @@
-"""Testes de ConvertOfficeToPDF.
+"""Testes de ConvertOfficeToPDF (conversão própria em Python puro, sem LibreOffice)."""
 
-Os testes de fallback forcam find_libreoffice() a retornar None via
-monkeypatch, para exercitar sempre o caminho em Python puro
-independente de a maquina que roda os testes ter o LibreOffice
-instalado. Os testes "via_libreoffice" rodam de verdade quando o
-LibreOffice esta disponivel, e sao pulados quando nao esta.
-"""
-
-import sys
-import threading
-import time
-from pathlib import Path
 
 import pytest
 from docx import Document
@@ -18,10 +7,7 @@ from openpyxl import Workbook
 from pptx import Presentation
 from pypdf import PdfReader
 
-import core.office_convert as office_convert
-from core.office_convert import ConvertOfficeToPDF, find_libreoffice
-from core.external import run_cancellable
-from core.progress import OperationCancelled, Progress
+from core.office_convert import ConvertOfficeToPDF
 
 
 def _make_docx(path):
@@ -57,8 +43,7 @@ def _normalized_text(page) -> str:
     return " ".join(page.extract_text().split())
 
 
-def test_docx_to_pdf_fallback(tmp_path, monkeypatch):
-    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
+def test_docx_to_pdf(tmp_path):
     docx_path = tmp_path / "doc.docx"
     _make_docx(docx_path)
 
@@ -71,8 +56,7 @@ def test_docx_to_pdf_fallback(tmp_path, monkeypatch):
     assert "Primeiro" in text and "de teste." in text
 
 
-def test_xlsx_to_pdf_fallback(tmp_path, monkeypatch):
-    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
+def test_xlsx_to_pdf(tmp_path):
     xlsx_path = tmp_path / "planilha.xlsx"
     _make_xlsx(xlsx_path)
 
@@ -83,8 +67,7 @@ def test_xlsx_to_pdf_fallback(tmp_path, monkeypatch):
     assert "Item 1" in _normalized_text(reader.pages[0])
 
 
-def test_pptx_to_pdf_fallback(tmp_path, monkeypatch):
-    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
+def test_pptx_to_pdf(tmp_path):
     pptx_path = tmp_path / "apresentacao.pptx"
     _make_pptx(pptx_path)
 
@@ -108,8 +91,7 @@ def _all_text(path) -> str:
     return " ".join(_normalized_text(page) for page in PdfReader(str(path)).pages)
 
 
-def test_docx_tables_are_converted_in_order(tmp_path, monkeypatch):
-    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
+def test_docx_tables_are_converted_in_order(tmp_path):
     document = Document()
     document.add_paragraph("Antes da tabela")
     table = document.add_table(rows=2, cols=2)
@@ -122,19 +104,17 @@ def test_docx_tables_are_converted_in_order(tmp_path, monkeypatch):
     document.save(docx_path)
     output_path = tmp_path / "tabela.pdf"
 
-    result = ConvertOfficeToPDF().run(str(docx_path), str(output_path))
+    ConvertOfficeToPDF().run(str(docx_path), str(output_path))
 
     text = _all_text(output_path)
-    assert not result.used_libreoffice
     for expected in ("Produto", "Preço", "Caneta", "R$ 2,50"):
         assert expected in text
     assert text.index("Antes da tabela") < text.index("Caneta") < text.index("Depois da tabela")
 
 
-def test_docx_images_and_headers_are_reported(tmp_path, monkeypatch):
+def test_docx_images_and_headers_are_reported(tmp_path):
     from PIL import Image
 
-    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
     image_path = tmp_path / "logo.png"
     Image.new("RGB", (40, 40), "red").save(image_path)
     document = Document()
@@ -150,8 +130,7 @@ def test_docx_images_and_headers_are_reported(tmp_path, monkeypatch):
     assert any("Cabeçalhos" in warning for warning in result.warnings)
 
 
-def test_pptx_long_text_continues_on_the_next_page(tmp_path, monkeypatch):
-    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
+def test_pptx_long_text_continues_on_the_next_page(tmp_path):
     presentation = Presentation()
     slide = presentation.slides.add_slide(presentation.slide_layouts[1])
     slide.shapes.title.text = "Muitos itens"
@@ -171,10 +150,9 @@ def test_pptx_long_text_continues_on_the_next_page(tmp_path, monkeypatch):
     assert any("continuaram" in warning for warning in result.warnings)
 
 
-def test_pptx_tables_are_included(tmp_path, monkeypatch):
+def test_pptx_tables_are_included(tmp_path):
     from pptx.util import Inches
 
-    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
     presentation = Presentation()
     slide = presentation.slides.add_slide(presentation.slide_layouts[5])
     slide.shapes.title.text = "Resultados"
@@ -193,116 +171,9 @@ def test_pptx_tables_are_included(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("suffix", [".xls", ".doc", ".odt"])
-def test_formats_that_need_libreoffice_have_a_clear_error(tmp_path, monkeypatch, suffix):
-    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: None)
+def test_formats_that_needed_libreoffice_are_rejected(tmp_path, suffix):
     path = tmp_path / f"antigo{suffix}"
     path.write_bytes(b"qualquer coisa")
 
-    with pytest.raises(ValueError, match="LibreOffice"):
+    with pytest.raises(ValueError, match="Formato não suportado"):
         ConvertOfficeToPDF().run(str(path), str(tmp_path / "out.pdf"))
-
-
-def test_libreoffice_is_used_for_opendocument_formats(tmp_path, monkeypatch):
-    commands = []
-
-    def fake_run(command, progress, timeout, program=""):
-        commands.append(command)
-        outdir = command[command.index("--outdir") + 1]
-        Path(outdir, "planilha.pdf").write_bytes(b"%PDF-1.4 convertido")
-        return 0, b""
-
-    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: "soffice")
-    monkeypatch.setattr(office_convert, "run_cancellable", fake_run)
-    ods_path = tmp_path / "planilha.ods"
-    ods_path.write_bytes(b"ods")
-    output_path = tmp_path / "out.pdf"
-
-    result = ConvertOfficeToPDF().run(str(ods_path), str(output_path))
-
-    assert result.used_libreoffice
-    assert output_path.read_bytes() == b"%PDF-1.4 convertido"
-
-
-def test_libreoffice_conversion_reports_the_soffice_error(tmp_path, monkeypatch):
-    monkeypatch.setattr(office_convert, "find_libreoffice", lambda: "soffice")
-    monkeypatch.setattr(office_convert, "run_cancellable", lambda *a, **k: (1, b"erro simulado do soffice"))
-    docx_path = tmp_path / "doc.docx"
-    _make_docx(docx_path)
-    output_path = tmp_path / "out.pdf"
-
-    with pytest.raises(RuntimeError, match="erro simulado do soffice"):
-        ConvertOfficeToPDF().run(str(docx_path), str(output_path))
-    assert not output_path.exists()
-
-
-def test_external_run_cancellable_returns_exit_code_and_stderr():
-    returncode, stderr = run_cancellable(
-        [sys.executable, "-c", "import sys; sys.stderr.write('falhou'); sys.exit(3)"], Progress(), timeout=30
-    )
-
-    assert returncode == 3
-    assert stderr.endswith(b"falhou")
-
-
-def test_external_run_cancellable_kills_the_process_on_timeout():
-    started = time.monotonic()
-    with pytest.raises(RuntimeError, match="timeout"):
-        run_cancellable([sys.executable, "-c", "import time; time.sleep(30)"], Progress(), timeout=0.5)
-    assert time.monotonic() - started < 10
-
-
-def test_external_run_cancellable_stops_when_the_user_cancels():
-    progress = Progress()
-    threading.Timer(0.3, progress.cancel).start()
-    started = time.monotonic()
-
-    with pytest.raises(OperationCancelled):
-        run_cancellable([sys.executable, "-c", "import time; time.sleep(30)"], progress, timeout=60)
-    assert time.monotonic() - started < 10
-
-
-def test_find_libreoffice_does_not_crash():
-    result = find_libreoffice()
-    assert result is None or isinstance(result, str)
-
-
-_HAS_LIBREOFFICE = find_libreoffice() is not None
-_SKIP_REASON = "LibreOffice não está instalado nesta máquina"
-
-
-@pytest.mark.skipif(not _HAS_LIBREOFFICE, reason=_SKIP_REASON)
-def test_docx_to_pdf_via_libreoffice(tmp_path):
-    docx_path = tmp_path / "doc.docx"
-    _make_docx(docx_path)
-
-    output_path = tmp_path / "doc.pdf"
-    ConvertOfficeToPDF().run(str(docx_path), str(output_path))
-
-    reader = PdfReader(str(output_path))
-    assert len(reader.pages) >= 1
-    assert "Título do documento" in _normalized_text(reader.pages[0])
-
-
-@pytest.mark.skipif(not _HAS_LIBREOFFICE, reason=_SKIP_REASON)
-def test_xlsx_to_pdf_via_libreoffice(tmp_path):
-    xlsx_path = tmp_path / "planilha.xlsx"
-    _make_xlsx(xlsx_path)
-
-    output_path = tmp_path / "planilha.pdf"
-    ConvertOfficeToPDF().run(str(xlsx_path), str(output_path))
-
-    reader = PdfReader(str(output_path))
-    assert "Item 1" in _normalized_text(reader.pages[0])
-
-
-@pytest.mark.skipif(not _HAS_LIBREOFFICE, reason=_SKIP_REASON)
-def test_pptx_to_pdf_via_libreoffice(tmp_path):
-    pptx_path = tmp_path / "apresentacao.pptx"
-    _make_pptx(pptx_path)
-
-    output_path = tmp_path / "apresentacao.pdf"
-    ConvertOfficeToPDF().run(str(pptx_path), str(output_path))
-
-    reader = PdfReader(str(output_path))
-    assert len(reader.pages) >= 1
-    assert "Título do slide" in _normalized_text(reader.pages[0])

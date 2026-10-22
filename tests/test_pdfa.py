@@ -2,18 +2,12 @@
 
 import pytest
 from pypdf import PdfReader, PdfWriter
-from pypdf.generic import NameObject
+from pypdf.generic import NameObject, StreamObject
 from reportlab.pdfgen import canvas as rl_canvas
 
-import core.pdfa as pdfa
-from core.base import EncryptedPDFError
+from core.base import EncryptedPDFError, add_object
 from core.fonts import SANS, register_fonts
 from core.pdfa import ConvertToPDFA, ValidatePDFA
-
-
-@pytest.fixture(autouse=True)
-def _no_external_validator(monkeypatch):
-    monkeypatch.setattr(pdfa, "find_verapdf", lambda: None)
 
 
 def _plain_pdf(path, title="Relatório anual", author="Ana") -> None:
@@ -218,48 +212,6 @@ def test_declaration_alone_does_not_pass_validation(tmp_path):
     assert any("não embutidas" in issue for issue in result.issues)
 
 
-def test_verapdf_verdict_is_reported(tmp_path, monkeypatch):
-    path_in = tmp_path / "out.pdf"
-    _plain_pdf(tmp_path / "doc.pdf")
-    ConvertToPDFA().run(str(tmp_path / "doc.pdf"), str(path_in))
-    report = b"""<?xml version="1.0"?><report><jobs><job><validationReport profileName="PDF/A-2B"
-      isCompliant="false"><details><rule clause="6.2.4.3" status="failed"><description>DeviceRGB
-      sem OutputIntent</description></rule></details></validationReport></job></jobs></report>"""
-    monkeypatch.setattr(pdfa, "find_verapdf", lambda: "verapdf")
-    monkeypatch.setattr(pdfa, "run_cancellable", lambda *args, **kwargs: (1, report))
-
-    result = ValidatePDFA().run(str(path_in))
-
-    assert result.verapdf_used and result.verapdf_compliant is False
-    assert not result.is_valid
-    assert any("6.2.4.3" in issue for issue in result.issues)
-
-
-def test_ghostscript_conversion_uses_the_color_profile(tmp_path, monkeypatch):
-    path_in = tmp_path / "helvetica.pdf"
-    c = rl_canvas.Canvas(str(path_in))
-    c.drawString(40, 700, "Helvetica")
-    c.save()
-    commands = []
-
-    def fake_gs(command, progress, timeout, program="", capture_stdout=False):
-        commands.append(command)
-        output = next(arg.split("=", 1)[1] for arg in command if arg.startswith("-sOutputFile="))
-        _plain_pdf(output)  # o Ghostscript entregaria um PDF com as fontes embutidas
-        return 0, b""
-
-    monkeypatch.setattr(pdfa, "find_ghostscript", lambda: "gswin64c")
-    monkeypatch.setattr(pdfa, "run_cancellable", fake_gs)
-    path_out = tmp_path / "out.pdf"
-
-    result = ConvertToPDFA().run(str(path_in), str(path_out), part=2, conformance="B", use_ghostscript=True)
-
-    assert result.written and result.used_ghostscript
-    assert "-dPDFA=2" in commands[0]
-    assert any(arg.startswith("--permit-file-read=") and arg.endswith(".icc") for arg in commands[0])
-    assert str(PdfReader(str(path_out)).xmp_metadata.pdfaid_part) == "2"
-
-
 def test_lzw_streams_are_recoded(tmp_path):
     from pypdf.generic import StreamObject
 
@@ -314,3 +266,50 @@ def _lzw_encode(data: bytes) -> bytes:
     if count:
         out.append((buffer << (8 - count)) & 0xFF)
     return bytes(out)
+
+
+# XMP como o Ghostscript grava: cada esquema numa rdf:Description própria.
+_SPLIT_XMP = b"""<?xpacket begin='' id='W5M0MpCehiHzreSzNTczkc9d'?>
+<x:xmpmeta xmlns:x='adobe:ns:meta/'>
+<rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#'>
+<rdf:Description rdf:about="" xmlns:pdf='http://ns.adobe.com/pdf/1.3/' pdf:Producer='GPL Ghostscript'/>
+<rdf:Description rdf:about="" xmlns:xmp='http://ns.adobe.com/xap/1.0/'><xmp:ModifyDate>2020-01-01T00:00:00-03:00</xmp:ModifyDate></rdf:Description>
+<rdf:Description rdf:about="" xmlns:xmpMM='http://ns.adobe.com/xap/1.0/mm/' xmpMM:DocumentID='uuid:1234'/>
+<rdf:Description rdf:about="" xmlns:dc='http://purl.org/dc/elements/1.1/'><dc:title><rdf:Alt><rdf:li xml:lang='x-default'>Antigo</rdf:li></rdf:Alt></dc:title></rdf:Description>
+<rdf:Description rdf:about="" xmlns:pdfaExtension='http://www.aiim.org/pdfa/ns/extension/' xmlns:pdfaSchema='http://www.aiim.org/pdfa/ns/schema#'>
+<pdfaExtension:schemas><rdf:Bag><rdf:li><rdf:Description><pdfaSchema:prefix>ex</pdfaSchema:prefix></rdf:Description></rdf:li></rdf:Bag></pdfaExtension:schemas>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>
+<?xpacket end='w'?>"""
+
+
+def test_xmp_split_in_several_descriptions_is_merged_before_editing(tmp_path):
+    # Achado com um PDF do Ghostscript: o pypdf editava só a primeira Description, que não
+    # declara os prefixos xmp:/dc:, e o XMP gravado não abria mais ("unbound prefix").
+    source = tmp_path / "plain.pdf"
+    _plain_pdf(source, title="Novo")
+    writer = PdfWriter(clone_from=str(source))
+    stream = StreamObject()
+    stream.set_data(_SPLIT_XMP)
+    stream[NameObject("/Type")] = NameObject("/Metadata")
+    stream[NameObject("/Subtype")] = NameObject("/XML")
+    writer.root_object[NameObject("/Metadata")] = add_object(writer, stream)
+    path_in = tmp_path / "split.pdf"
+    writer.write(path_in)
+    path_out = tmp_path / "out.pdf"
+
+    result = ConvertToPDFA().run(str(path_in), str(path_out), part=2, conformance="B")
+
+    assert result.written, result.issues
+    xmp = PdfReader(str(path_out)).xmp_metadata
+    rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    top_level = [node for node in xmp.rdf_root.childNodes if getattr(node, "localName", None) == "Description"]
+    assert len(top_level) == 1
+    # A Description aninhada é o valor do esquema de extensão: continua dentro dele.
+    nested = top_level[0].getElementsByTagNameNS(rdf, "Description")
+    assert len(nested) == 1 and nested[0].parentNode.localName == "li"
+    assert xmp.dc_title == {"x-default": "Novo"}
+    assert xmp.xmp_modify_date.year != 2020  # sem a data antiga repetida
+    assert xmp.xmpmm_document_id == "uuid:1234"  # o resto do XMP continua
+    assert str(xmp.pdfaid_part) == "2"

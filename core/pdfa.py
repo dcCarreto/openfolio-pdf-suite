@@ -13,11 +13,10 @@ validador só procurava a própria declaração — todo arquivo gerado aqui "pa
   texto sem mapeamento Unicode (níveis A e U), anotações sem aparência.
 - Se sobrar algum desses problemas, **nada é gravado** e o resultado lista o que impede a
   conversão. A declaração PDF/A só é gravada quando a verificação passa.
-- Com o Ghostscript instalado, `use_ghostscript=True` faz a conversão completa (ele embute
-  fontes e achata transparência); o resultado passa pela mesma verificação.
-- A verificação é parcial: cobre os requisitos acima, não a norma inteira. Com o veraPDF
-  instalado (o validador de referência), `ValidatePDFA` também roda ele e informa o
-  veredito oficial.
+- A verificação é parcial: cobre os requisitos acima, não a norma inteira. Para
+  arquivamento legal, vale confirmar com um validador completo (o veraPDF, por exemplo).
+  O app não roda nenhum programa externo (antes usava o Ghostscript e o veraPDF quando
+  estavam instalados).
 
 O perfil de cor é o "sRGB v2 micro" do projeto Compact-ICC-Profiles, de domínio público (CC0,
 ver `data/icc/LICENSE-Compact-ICC-Profiles.txt`): um perfil ICC v2 válido em todas as partes,
@@ -27,12 +26,11 @@ inclusive na PDF/A-1.
 import datetime
 import mimetypes
 import re
-import tempfile
 import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from xml.etree import ElementTree
+from xml.dom.minidom import Element
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import (
@@ -44,10 +42,9 @@ from pypdf.generic import (
     StreamObject,
     TextStringObject,
 )
-from pypdf.xmp import XmpInformation
+from pypdf.xmp import DC_NAMESPACE, PDF_NAMESPACE, PDFAID_NAMESPACE, RDF_NAMESPACE, XMP_NAMESPACE, XmpInformation
 
 from .base import PDFOperation, add_object, atomic_output, open_reader
-from .external import find_ghostscript, find_program, run_cancellable
 from .messages import Message
 from .progress import Progress, ensure_progress
 
@@ -66,7 +63,6 @@ _FORBIDDEN_ANNOTATIONS = {"/Sound", "/Movie", "/Screen", "/3D", "/RichMedia"}
 # Sinalizadores de anotação (ISO 32000-1, tabela 165).
 _FLAG_INVISIBLE, _FLAG_HIDDEN, _FLAG_PRINT, _FLAG_NOVIEW, _FLAG_TOGGLENOVIEW = 1, 2, 4, 32, 256
 _HIDING_FLAGS = _FLAG_INVISIBLE | _FLAG_HIDDEN | _FLAG_NOVIEW | _FLAG_TOGGLENOVIEW
-_GHOSTSCRIPT_TIMEOUT = 600
 
 
 @dataclass
@@ -74,15 +70,12 @@ class PDFAConversionResult:
     written: bool  # False: sobraram problemas (issues) e nada foi gravado
     issues: list[str] = field(default_factory=list)
     fixed: list[str] = field(default_factory=list)  # o que foi corrigido no caminho
-    used_ghostscript: bool = False
 
 
 @dataclass
 class PDFAValidationResult:
     is_valid: bool
     issues: list[str] = field(default_factory=list)
-    verapdf_used: bool = False
-    verapdf_compliant: bool | None = None  # veredito do veraPDF, quando ele roda
 
 
 def _check_part(part: int, conformance: str) -> str:
@@ -110,7 +103,6 @@ class ConvertToPDFA(PDFOperation):
         output_path: str,
         part: int = 2,
         conformance: str = "B",
-        use_ghostscript: bool = False,
         progress: Progress | None = None,
     ) -> PDFAConversionResult:
         progress = ensure_progress(progress)
@@ -121,42 +113,27 @@ class ConvertToPDFA(PDFOperation):
         writer = PdfWriter(clone_from=reader)
         fixed = _prepare(writer, part)
 
-        if use_ghostscript:
-            gs_path = find_ghostscript()
-            if not gs_path:
-                raise RuntimeError("Ghostscript não encontrado. Instale o Ghostscript ou desmarque a opção.")
-            progress.update(0, 0, "Convertendo com o Ghostscript")
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                prepared = Path(tmp_dir) / "preparado.pdf"
-                with open(prepared, "wb") as f:
-                    writer.write(f)
-                converted = Path(tmp_dir) / "pdfa.pdf"
-                _ghostscript_pdfa(gs_path, str(prepared), str(converted), part, progress)
-                writer = PdfWriter(clone_from=PdfReader(str(converted)))
-                fixed += _prepare(writer, part)
-
         issues = _blocking_issues(writer, part, conformance)
         if issues:
-            return PDFAConversionResult(written=False, issues=issues, fixed=fixed, used_ghostscript=use_ghostscript)
+            return PDFAConversionResult(written=False, issues=issues, fixed=fixed)
 
         _write_identification(writer, part, conformance)
         progress.check()
         with atomic_output(output_path) as temp_path:
             with open(temp_path, "wb") as f:
                 writer.write(f)
-        return PDFAConversionResult(written=True, fixed=fixed, used_ghostscript=use_ghostscript)
+        return PDFAConversionResult(written=True, fixed=fixed)
 
 
 class ValidatePDFA(PDFOperation):
     """Verifica os requisitos de PDF/A que esta ferramenta cobre (ver o docstring do
-    módulo) e, com o veraPDF instalado, roda também a validação completa dele."""
+    módulo)."""
 
     def run(
         self,
         input_path: str,
         part: int | None = None,
         conformance: str | None = None,
-        use_verapdf: bool = True,
         progress: Progress | None = None,
     ) -> PDFAValidationResult:
         progress = ensure_progress(progress)
@@ -189,17 +166,7 @@ class ValidatePDFA(PDFOperation):
         issues += _blocking_issues(reader, check_part, check_conformance)
         issues += _metadata_issues(reader)
 
-        result = PDFAValidationResult(is_valid=not issues, issues=issues)
-        verapdf = find_verapdf() if use_verapdf else None
-        if verapdf:
-            progress.update(0, 0, "Validando com o veraPDF")
-            compliant, failures = _run_verapdf(verapdf, input_path, check_part, check_conformance, progress)
-            result.verapdf_used = True
-            result.verapdf_compliant = compliant
-            if compliant is False:
-                result.is_valid = False
-                result.issues += [Message("veraPDF: {rule}", rule=failure) for failure in failures]
-        return result
+        return PDFAValidationResult(is_valid=not issues, issues=issues)
 
 
 # --- Correções -------------------------------------------------------------------------
@@ -505,13 +472,47 @@ def _info_date(moment: datetime.datetime) -> str:
     return moment.astimezone(datetime.timezone.utc).strftime("D:%Y%m%d%H%M%SZ")
 
 
+# Os esquemas em que o app grava (prefixo como o pypdf escreve).
+_XMP_PREFIXES = {"dc": DC_NAMESPACE, "xmp": XMP_NAMESPACE, "pdf": PDF_NAMESPACE, "pdfaid": PDFAID_NAMESPACE}
+
+
+def _editable_xmp(writer: PdfWriter) -> XmpInformation:
+    """O XMP do documento pronto para o pypdf editar. Ele grava só na primeira
+    rdf:Description e não declara o prefixo do campo que acrescenta; PDFs gerados pelo
+    Ghostscript gravam cada esquema numa Description própria. Sem juntar as Descriptions e declarar os
+    prefixos, o XMP gravado ficaria inválido ("unbound prefix") e com os valores antigos
+    repetidos nas outras."""
+    xmp = writer.xmp_metadata or XmpInformation.create()
+    # Só as do nível de cima: Descriptions aninhadas são valores (esquemas de extensão).
+    descriptions = [
+        node
+        for node in xmp.rdf_root.childNodes
+        if isinstance(node, Element) and node.namespaceURI == RDF_NAMESPACE and node.localName == "Description"
+    ]
+    if not descriptions:
+        return xmp
+    first, *others = descriptions
+    for prefix, namespace in _XMP_PREFIXES.items():
+        if not first.hasAttribute(f"xmlns:{prefix}"):
+            first.setAttribute(f"xmlns:{prefix}", namespace)
+    for description in others:
+        if description.getAttributeNS(RDF_NAMESPACE, "about") != first.getAttributeNS(RDF_NAMESPACE, "about"):
+            continue
+        for attribute in list(description.attributes.values()):
+            first.setAttributeNS(attribute.namespaceURI, attribute.name, attribute.value)
+        for child in list(description.childNodes):
+            first.appendChild(child)
+        xmp.rdf_root.removeChild(description)
+    return xmp
+
+
 def _sync_metadata(writer: PdfWriter) -> None:
     """Info e XMP com os mesmos valores (o PDF/A exige), mantendo o resto do XMP existente.
     As datas vão em UTC nos dois, para não haver diferença de fuso entre eles."""
     info = dict(writer.metadata or {})
     now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
     created = _pdf_date(info.get("/CreationDate")) or now
-    xmp = writer.xmp_metadata or XmpInformation.create()
+    xmp = _editable_xmp(writer)
 
     text = {key: str(info.get(key) or "") for key in ("/Title", "/Author", "/Subject", "/Keywords", "/Creator")}
     xmp.dc_title = {"x-default": text["/Title"]} if text["/Title"] else None
@@ -534,7 +535,7 @@ def _sync_metadata(writer: PdfWriter) -> None:
 
 
 def _write_identification(writer: PdfWriter, part: int, conformance: str) -> None:
-    xmp = writer.xmp_metadata or XmpInformation.create()
+    xmp = _editable_xmp(writer)
     xmp.pdfaid_part = str(part)
     xmp.pdfaid_conformance = conformance
     writer.xmp_metadata = xmp
@@ -743,83 +744,3 @@ def _metadata_issues(reader: PdfReader) -> list[str]:
     if author != xmp_author:
         issues.append(Message("O autor no dicionário Info e no XMP não são iguais."))
     return issues
-
-
-# --- Programas externos ----------------------------------------------------------------
-
-
-def find_verapdf() -> str | None:
-    return find_program(
-        [
-            "verapdf",
-            "verapdf.bat",
-            str(Path.home() / "verapdf" / "verapdf.bat"),
-            r"C:\Program Files\veraPDF\verapdf.bat",
-        ]
-    )
-
-
-def _ps_string(text: str) -> str:
-    return "(" + text.replace("\\", "/").replace("(", "\\(").replace(")", "\\)") + ")"
-
-
-def _ghostscript_pdfa(gs_path: str, input_path: str, output_path: str, part: int, progress: Progress) -> None:
-    icc_path = str(ICC_PROFILE).replace("\\", "/")
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        definition = Path(tmp_dir) / "PDFA_def.ps"
-        definition.write_text(
-            "%!\n"
-            f"/ICCProfile {_ps_string(icc_path)} def\n"
-            "[/_objdef {icc_PDFA} /type /stream /OBJ pdfmark\n"
-            "[{icc_PDFA} <</N 3>> /PUT pdfmark\n"
-            "[{icc_PDFA} ICCProfile (r) file /PUT pdfmark\n"
-            "[/_objdef {OutputIntent_PDFA} /type /dict /OBJ pdfmark\n"
-            "[{OutputIntent_PDFA} <<\n"
-            "  /Type /OutputIntent /S /GTS_PDFA1\n"
-            "  /DestOutputProfile {icc_PDFA}\n"
-            f"  /OutputConditionIdentifier {_ps_string(_OUTPUT_CONDITION)}\n"
-            ">> /PUT pdfmark\n"
-            "[{Catalog} <</OutputIntents [ {OutputIntent_PDFA} ]>> /PUT pdfmark\n",
-            encoding="ascii",
-        )
-        command = [
-            gs_path,
-            f"-dPDFA={part}",
-            "-dBATCH",
-            "-dNOPAUSE",
-            "-dQUIET",
-            "-dNOOUTERSAVE",
-            "-dPDFACompatibilityPolicy=1",
-            "-sColorConversionStrategy=RGB",
-            "-sDEVICE=pdfwrite",
-            f"--permit-file-read={icc_path}",
-            f"-sOutputFile={output_path}",
-            str(definition),
-            input_path,
-        ]
-        returncode, stderr = run_cancellable(command, progress, _GHOSTSCRIPT_TIMEOUT, program="O Ghostscript")
-    if returncode != 0 or not Path(output_path).is_file():
-        detail = stderr.decode(errors="replace").strip() or f"código de saída {returncode}"
-        raise RuntimeError(Message("O Ghostscript falhou ao converter para PDF/A: {detail}", detail=detail))
-
-
-def _run_verapdf(verapdf: str, path: str, part: int, conformance: str, progress: Progress) -> tuple[bool | None, list[str]]:
-    """Roda o veraPDF e devolve (conforme?, regras que falharam). (None, []) se a saída não
-    puder ser lida."""
-    command = [verapdf, "--flavour", f"{part}{conformance.lower()}", "--format", "mrr", path]
-    _returncode, output = run_cancellable(command, progress, _GHOSTSCRIPT_TIMEOUT, program="O veraPDF", capture_stdout=True)
-    try:
-        root = ElementTree.fromstring(output)
-    except ElementTree.ParseError:
-        return None, []
-    compliant = None
-    failures: list[str] = []
-    for element in root.iter():
-        tag = element.tag.rsplit("}", 1)[-1]
-        if tag == "validationReport" and "isCompliant" in element.attrib:
-            compliant = element.attrib["isCompliant"] == "true"
-        if tag == "rule" and element.attrib.get("status") == "failed":
-            description = next((child.text for child in element if child.tag.rsplit("}", 1)[-1] == "description"), "")
-            clause = element.attrib.get("clause", "")
-            failures.append(f"{clause} {description}".strip())
-    return compliant, failures[:20]

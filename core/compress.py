@@ -16,17 +16,12 @@ Cada imagem só é trocada se a versão nova ficar menor. Imagens de 1 bit (fax,
 máscaras, imagens com `/Decode` ou máscara de cor e CMYK ficam como estão: o JPEG as
 estragaria ou aumentaria. A transparência (`/SMask`) é mantida.
 
-Com o Ghostscript instalado, `use_ghostscript=True` passa o arquivo pelo `pdfwrite` dele,
-que comprime mais (fontes, por exemplo), mas pode descartar anexos, campos de formulário e
-a marcação de acessibilidade — por isso é opcional.
-
 O resultado só é gravado se o arquivo ficar menor que o original (`CompressionResult`).
 """
 
 import io
 import math
 import os
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -45,8 +40,6 @@ from pypdf.generic import (
 )
 
 from .base import PDFOperation, atomic_output, open_reader, replace_object
-from .external import find_ghostscript, run_cancellable
-from .messages import Message
 from .progress import Progress, ensure_progress
 
 LEVELS = ("light", "medium", "strong")
@@ -57,18 +50,15 @@ _LEVEL_SETTINGS = {
     "medium": (150, 75),
     "strong": (100, 55),
 }
-_GHOSTSCRIPT_SETTINGS = {"light": "/printer", "medium": "/ebook", "strong": "/screen"}
 
 _MIN_IMAGE_SIDE = 16  # ícones e fios: não vale a pena
 _GRAY_TOLERANCE = 6  # diferença máxima entre canais para tratar a imagem como cinza
-_GHOSTSCRIPT_TIMEOUT = 600  # segundos
 
 @dataclass
 class CompressionResult:
     original_size: int
     compressed_size: int
     images_recompressed: int = 0
-    used_ghostscript: bool = False
     written: bool = True  # False: o resultado não ficou menor e nada foi gravado
 
     @property
@@ -88,7 +78,6 @@ class CompressPDF(PDFOperation):
         output_path: str,
         level: str = "medium",
         grayscale: bool = False,
-        use_ghostscript: bool = False,
         progress: Progress | None = None,
     ) -> CompressionResult:
         progress = ensure_progress(progress)
@@ -117,21 +106,10 @@ class CompressPDF(PDFOperation):
         writer.write(buffer)
         data = buffer.getvalue()
 
-        used_ghostscript = False
-        if use_ghostscript:
-            gs_path = find_ghostscript()
-            if not gs_path:
-                raise RuntimeError("Ghostscript não encontrado. Instale o Ghostscript ou desmarque a opção.")
-            progress.update(0, 0, "Comprimindo com o Ghostscript")
-            gs_data = _ghostscript_compress(gs_path, data, level, grayscale, progress)
-            if len(gs_data) < len(data):
-                data, used_ghostscript = gs_data, True
-
         result = CompressionResult(
             original_size=original_size,
             compressed_size=len(data),
             images_recompressed=images_recompressed,
-            used_ghostscript=used_ghostscript,
             written=len(data) < original_size,
         )
         if result.written:
@@ -347,33 +325,3 @@ def _downsample_scale(width: int, height: int, width_pt: float, height_pt: float
     if dpi <= target_dpi * 1.5:
         return 1.0
     return target_dpi / dpi
-
-
-# --- Ghostscript -----------------------------------------------------------------------
-
-
-def _ghostscript_compress(gs_path: str, data: bytes, level: str, grayscale: bool, progress: Progress) -> bytes:
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        source = Path(tmp_dir) / "in.pdf"
-        target = Path(tmp_dir) / "out.pdf"
-        source.write_bytes(data)
-        command = [
-            gs_path,
-            "-sDEVICE=pdfwrite",
-            "-dCompatibilityLevel=1.7",
-            f"-dPDFSETTINGS={_GHOSTSCRIPT_SETTINGS[level]}",
-            "-dNOPAUSE",
-            "-dBATCH",
-            "-dQUIET",
-            "-dSAFER",
-            f"-sOutputFile={target}",
-        ]
-        if grayscale:
-            command += ["-sColorConversionStrategy=Gray", "-dProcessColorModel=/DeviceGray"]
-        command.append(str(source))
-
-        returncode, stderr = run_cancellable(command, progress, _GHOSTSCRIPT_TIMEOUT, program="O Ghostscript")
-        if returncode != 0 or not target.is_file():
-            detail = stderr.decode(errors="replace").strip() or f"código de saída {returncode}"
-            raise RuntimeError(Message("O Ghostscript falhou ao comprimir o arquivo: {detail}", detail=detail))
-        return target.read_bytes()

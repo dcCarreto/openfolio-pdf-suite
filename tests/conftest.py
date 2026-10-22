@@ -1,5 +1,6 @@
 """Fixtures compartilhadas pelos testes."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,17 @@ HARD_PAGE_LAYOUTS = {
         "rotate": 90,
     },
 }
+
+
+def require_program(path: str | None, name: str) -> None:
+    """Testes com o programa de verdade (hoje o Tesseract): sem ele, o teste é pulado. No CI,
+    onde ele é instalado (OPENFOLIO_REQUIRE_PROGRAMS=1), a falta dele reprova, para o teste
+    não passar despercebido como pulado."""
+    if path:
+        return
+    if os.environ.get("OPENFOLIO_REQUIRE_PROGRAMS"):
+        pytest.fail(f"{name} não foi encontrado, mas OPENFOLIO_REQUIRE_PROGRAMS está ligado")
+    pytest.skip(f"{name} não está instalado nesta máquina")
 
 
 @pytest.fixture

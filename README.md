@@ -116,13 +116,13 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | ✂️ Dividir | Separa um PDF em vários arquivos menores (uma ou N páginas por arquivo, ou um arquivo por marcador de nível superior do sumário) |
 | 🔃 Páginas | Rotaciona, reordena, remove, insere ou substitui páginas de um PDF (inserção/substituição usando páginas de outro PDF). As páginas são contadas a partir de 1, como no visualizador, e aceitam intervalos como `1-3, 5, 8-` |
 | 🔲 Organizar páginas | Grade de miniaturas do documento: arraste para reordenar, gire, duplique, exclua, insira páginas em branco ou extraia as selecionadas para outro arquivo. Antes de aplicar, Ctrl+Z desfaz cada mudança na grade; ao clicar em Aplicar, tudo entra no documento num passo só, que Ctrl+Z também desfaz |
-| 🗜️ Comprimir | Reduz o tamanho de um PDF em três níveis: leve (sem perda), médio e forte (imagens reamostradas para 150 ou 100 DPI, pelo tamanho com que aparecem na página, e regravadas em JPEG; imagens sem cor passam a escala de cinza). Usa o Ghostscript, se você quiser e ele estiver instalado, e não grava nada se o arquivo não ficar menor |
-| 🖼️ Converter | Converte entre PDF e imagens (com tamanho de página A4, Carta, Ofício ou o da imagem, margem, orientação da câmera e fundo branco em imagens transparentes), Word/Excel/PowerPoint e PDF (com o LibreOffice, também .doc, .xls, .ppt, .odt, .ods, .odp e .rtf), e XML e PDF (linhas longas quebradas com recuo). Também leva o texto de um PDF para Word (parágrafos reunidos), Excel (uma planilha por página, com as colunas no lugar e números como números) ou texto com layout, e gera PDF a partir de HTML, Markdown ou texto puro, com texto pesquisável |
+| 🗜️ Comprimir | Reduz o tamanho de um PDF em três níveis: leve (sem perda), médio e forte (imagens reamostradas para 150 ou 100 DPI, pelo tamanho com que aparecem na página, e regravadas em JPEG; imagens sem cor passam a escala de cinza). Não grava nada se o arquivo não ficar menor |
+| 🖼️ Converter | Converte entre PDF e imagens (com tamanho de página A4, Carta, Ofício ou o da imagem, margem, orientação da câmera e fundo branco em imagens transparentes), Word/Excel/PowerPoint (.docx, .xlsx, .pptx) e PDF, e XML e PDF (linhas longas quebradas com recuo). Também leva o texto de um PDF para Word (parágrafos reunidos), Excel (uma planilha por página, com as colunas no lugar e números como números) ou texto com layout, e gera PDF a partir de HTML, Markdown ou texto puro, com texto pesquisável |
 | 💧 Marca d'água | Adiciona um texto de marca d'água (opacidade, tamanho e rotação configuráveis) |
 | 🔒 Proteger | Protege um PDF com senha (AES-256), define permissões granulares (impressão, edição, cópia, formulários) com senha de proprietário separada, ou remove a senha de um PDF protegido |
 | 🏷️ Metadados | Lê e edita título, autor, assunto, palavras-chave e os aplicativos de origem de um PDF (também no XMP), e mostra as datas de criação e modificação |
 | 🔢 Numeração | Adiciona números de página no rodapé (com página inicial configurável), numeração Bates (prefixo + sequência global, para uso jurídico), ou um texto livre de cabeçalho/rodapé (com placeholders `{page}`/`{pages}`) |
-| 📜 PDF/A | Converte para PDF/A-1, 2 ou 3: remove o que a norma proíbe, embute o perfil de cor sRGB e sincroniza os metadados, e só declara a conformidade se fontes, transparência e estrutura passarem na verificação (senão, mostra o que falta e não grava nada). Com o Ghostscript, faz a conversão completa. A validação cobre esses requisitos e, com o veraPDF instalado, roda também a validação oficial |
+| 📜 PDF/A | Converte para PDF/A-1, 2 ou 3: remove o que a norma proíbe, embute o perfil de cor sRGB e sincroniza os metadados, e só declara a conformidade se fontes, transparência e estrutura passarem na verificação (senão, mostra o que falta e não grava nada). A validação cobre esses requisitos (não a norma inteira: para arquivamento legal, confirme com um validador completo, como o veraPDF) |
 | 📝 Extrair texto | Extrai todo o texto de um PDF para um arquivo `.txt` |
 | 📷 Extrair imagens | Extrai as imagens embutidas nas páginas de um PDF, em seus formatos originais |
 | 📐 Cortar/Redimensionar | Corta margens ou redimensiona as páginas de um PDF para um novo tamanho |
@@ -133,7 +133,7 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | 🧾 Campos de formulário | Adiciona campos de formulário **interativos** (texto, data, caixa de seleção, lista suspensa, lista de seleção ou grupo de opções) — o PDF resultante é preenchível em qualquer leitor. Também lista campos já existentes, exporta/importa dados preenchidos (CSV, Excel ou FDF) e achata o formulário (Fill & Sign simplificado) |
 | 🖍️ Anotações | Realce, sublinhe, risque, adicione notas, desenhe à mão livre ou carimbe direto sobre a página, no próprio visualizador — com uma biblioteca de carimbos customizados (nome, texto e cor) salva localmente. Cada anotação leva autor e data. Lista os comentários já existentes no PDF (escolher um mostra onde ele está), edita texto e autor e remove com popups e respostas; exporta para CSV, Excel ou XFDF e importa XFDF de outros leitores, sem duplicar ao reimportar |
 | 📏 Medição | Mede a distância entre dois pontos de um PDF, arrastando no visualizador central (mm, cm, polegadas ou pontos PDF) |
-| 🔍 OCR | Reconhece o texto de páginas escaneadas (via Tesseract) e gera um PDF pesquisável, com o texto invisível ajustado à largura de cada palavra reconhecida (inclusive em páginas giradas). Aceita vários idiomas ao mesmo tempo, DPI configurável, corrige páginas digitalizadas de lado e também reconhece escaneados que têm um carimbo de texto |
+| 🔍 OCR | Reconhece o texto de páginas escaneadas (via Tesseract, que já vem no instalador, com português, inglês e detecção de orientação) e gera um PDF pesquisável, com o texto invisível ajustado à largura de cada palavra reconhecida (inclusive em páginas giradas). Aceita vários idiomas ao mesmo tempo, DPI configurável, corrige páginas digitalizadas de lado e também reconhece escaneados que têm um carimbo de texto |
 | 🧹 Limpar escaneados | Remove páginas em branco, endireita páginas tortas (até 5°, girando o conteúdo sem perder qualidade) e corta as margens brancas do documento aberto, numa versão nova que Ctrl+Z desfaz; ao final, diz quais páginas mudaram |
 | ⬛ Redigir/Sanitizar | Apaga áreas de um PDF de forma irreversível: a página marcada vira imagem, com as áreas pintadas de preto nos próprios pixels, e o resultado é conferido antes de ser salvo (funciona também em páginas giradas ou com área de corte). Procura um ou mais textos (sem diferenciar maiúsculas nem acentos, também quando o trecho quebra de linha) e detecta padrões sensíveis (CPF, CNPJ, e-mail, telefone, cartão de crédito ou regex personalizada), marcando todas as ocorrências para revisão antes de aplicar. A sanitização remove metadados, JavaScript (inclusive em ações de páginas, campos e links), ações que abrem arquivos ou programas ou enviam dados, e arquivos embutidos — e mostra o que foi removido |
 | 🖋️ Preencher e assinar | Coloca texto, data, assinatura e iniciais na página, sem certificado: escolha o item e arraste no visualizador para marcar onde ele vai. A assinatura e as iniciais podem ser desenhadas com o mouse ou a caneta, ou vir de uma imagem PNG/JPEG, e ficam guardadas para as próximas vezes. Tudo entra no conteúdo da página num passo só, que Ctrl+Z desfaz |
@@ -209,7 +209,7 @@ separado:
 ### OCR (texto pesquisável)
 
 Um contrato gerado a partir de texto puro (sem camada pesquisável) é reconhecido pelo
-Tesseract, que já foi detectado automaticamente com o idioma instalado:
+Tesseract, que vem junto com o app:
 
 <p align="center">
   <img src="assets/screenshots/09-ocr.png" alt="Aba OCR com o Tesseract detectado e idioma disponível" width="900">
@@ -259,19 +259,15 @@ uso — isso é esperado numa release beta open source, veja como prosseguir em
 
 - Python 3.10 ou superior
 - Windows, Linux ou macOS (interface gráfica via PySide6/Qt)
-- [LibreOffice](https://www.libreoffice.org/) (opcional) — se instalado, a conversão de
-  Word/Excel/PowerPoint para PDF preserva a formatação original e aceita também os formatos
-  antigos e os do LibreOffice. Sem ele, .docx, .xlsx e .pptx ainda são convertidos, com uma
-  formatação básica (texto, títulos, listas e tabelas, via Python puro), e o app avisa o que
-  ficou de fora.
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (opcional, necessário só para a
-  ferramenta de OCR) — a aplicação detecta a instalação automaticamente e lista os idiomas de
-  reconhecimento disponíveis. Instale também o idioma `por` e, para páginas digitalizadas de
-  lado, o pacote `osd`.
-- [Ghostscript](https://ghostscript.com/) (opcional) — comprime mais e faz a conversão
-  completa para PDF/A (embutindo fontes e achatando transparência).
-- [veraPDF](https://verapdf.org/) (opcional) — se instalado, a validação de PDF/A usa o
-  validador de referência, além das verificações do app.
+O app não depende de nenhum outro programa instalado. Os instaladores trazem tudo, inclusive o
+[Tesseract OCR](https://github.com/tesseract-ocr/tesseract) com os idiomas português e inglês e a
+detecção de orientação. A conversão de Word/Excel/PowerPoint é feita pelo próprio app (texto,
+títulos, listas e tabelas de .docx, .xlsx e .pptx; o app avisa o que ficou de fora).
+
+Rodando a partir do código-fonte, a única coisa a instalar à parte é o Tesseract, e só para a
+ferramenta de OCR: no Windows, pelo [instalador](https://github.com/UB-Mannheim/tesseract/wiki)
+(marque o idioma Portuguese e "Orientation and script detection"); no Linux, `sudo apt install
+tesseract-ocr tesseract-ocr-por`; no macOS, `brew install tesseract tesseract-lang`.
 
 ## Como instalar a partir do código-fonte
 
@@ -335,10 +331,7 @@ deu certo, 1 em erro, 2 em uso errado e 130 quando interrompido.
 | [python-pptx](https://python-pptx.readthedocs.io/) | Leitura de apresentações PowerPoint (.pptx) no fallback de conversão para PDF |
 | [pytesseract](https://github.com/madmaze/pytesseract) | Integração Python com o Tesseract OCR |
 | [pyhanko](https://github.com/MatthiasValvekens/pyHanko) | Assinatura digital de PDF (CMS/PKCS#7) e verificação de integridade |
-| [LibreOffice](https://www.libreoffice.org/) (opcional, externo) | Conversão de Word/Excel/PowerPoint para PDF com formatação fiel ao original |
-| [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (opcional, externo) | Motor de reconhecimento de texto usado pela ferramenta de OCR |
-| [Ghostscript](https://ghostscript.com/) (opcional, externo) | Compressão mais forte e conversão completa para PDF/A |
-| [veraPDF](https://verapdf.org/) (opcional, externo) | Validação de referência de PDF/A |
+| [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (vai no instalador, Apache 2.0) | Motor de reconhecimento de texto usado pela ferramenta de OCR, com os idiomas do projeto [tessdata](https://github.com/tesseract-ocr/tessdata_fast) |
 | [Fontes DejaVu](https://dejavu-fonts.github.io/) (incluídas) | Fonte embutida em todo texto que o app desenha nos PDFs (marca d'água, numeração, carimbos, edição de texto, OCR, XML, Office), com acentos, grego, cirílico e símbolos |
 | [Compact ICC Profiles](https://github.com/saucecontrol/Compact-ICC-Profiles) (incluído, CC0) | Perfil de cor sRGB embutido nos arquivos PDF/A |
 
@@ -356,7 +349,6 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
   progress.py      Andamento e cancelamento das operações longas; trava de acesso ao pdfium
   messages.py      Mensagens para o usuário que a interface traduz (modelo + valores)
   fonts.py         Fontes TrueType embutidas no texto desenhado (data/fonts, DejaVu)
-  external.py      Localização e execução canceláveis de LibreOffice, Ghostscript, veraPDF
   tabular.py       Exportação para CSV ou Excel protegida contra fórmulas
   pdfa.py          Conversão e verificação de PDF/A (perfil de cor em data/icc)
   rasterize.py     Achatamento de página em imagem, com áreas pintadas nos próprios pixels

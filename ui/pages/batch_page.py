@@ -32,6 +32,7 @@ from core.watermark import AddWatermark
 from ui.errors import describe_error
 from ui.i18n import error_text, tr
 from ui.pages.compress_page import _LEVELS
+from ui.pages.ocr_page import _LANGUAGE_NAMES
 from ui.tasks import run_task
 from ui.widgets.file_picker import FilePicker
 
@@ -75,10 +76,11 @@ class BatchPage(QWidget):
         self.level_combo.setCurrentIndex(1)
         self.language_combo = QComboBox()
         languages = get_available_languages()
-        self.language_combo.addItems(languages)
+        for code in languages:
+            self.language_combo.addItem(tr(_LANGUAGE_NAMES.get(code, code)), code)
         for code in ("por", "eng"):
             if code in languages:
-                self.language_combo.setCurrentText(code)
+                self.language_combo.setCurrentIndex(self.language_combo.findData(code))
                 break
         self.watermark_edit = QLineEdit(tr("CONFIDENCIAL"))
         self.start_spin = QSpinBox()
@@ -156,7 +158,7 @@ class BatchPage(QWidget):
             level = self.level_combo.currentData()
             return lambda src, dst, progress: CompressPDF().run(src, dst, level=level, progress=progress)
         if index == _OCR:
-            language = self.language_combo.currentText() or "eng"
+            language = self.language_combo.currentData() or "eng"
             return lambda src, dst, progress: OCRDocument().run(src, dst, language=language, progress=progress)
         if index == _WATERMARK:
             text = self.watermark_edit.text()

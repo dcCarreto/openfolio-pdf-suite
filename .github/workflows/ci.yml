@@ -48,21 +48,30 @@ jobs:
       - name: Rodar testes
         run: pytest
 
-  coverage:
+  programs-and-coverage:
+    # Roda a suite com o Tesseract instalado de verdade (o app leva uma copia dele nos
+    # instaladores; rodando do codigo-fonte, usa o do sistema): nos outros jobs, e na maquina
+    # de quem nao o tem, esses testes sao pulados ou usam o programa simulado.
+    # OPENFOLIO_REQUIRE_PROGRAMS faz a falta dele reprovar o teste em vez de pula-lo.
+    # Tambem mede a cobertura.
     # Python 3.14: o coverage usa o sys.monitoring, que tambem acompanha o codigo rodado nas
     # threads do Qt (QThreadPool); no 3.11 o corpo das tarefas apareceria como sem teste.
     runs-on: ubuntu-latest
     env:
       QT_QPA_PLATFORM: offscreen
+      OPENFOLIO_REQUIRE_PROGRAMS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
-      - name: Instalar dependencias do sistema (necessarias so pra importar o PySide6)
+      - name: Instalar dependencias do sistema (PySide6) e o Tesseract
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libopengl0 libxkbcommon0 libxcb-cursor0 libgl1
+          sudo apt-get install -y --no-install-recommends tesseract-ocr
+          tesseract --version
+          tesseract --list-langs
       - name: Instalar dependencias Python
         run: pip install -e ".[test]"
       - name: Rodar testes com cobertura

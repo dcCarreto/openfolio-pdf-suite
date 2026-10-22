@@ -7,7 +7,8 @@ formato que os empacotadores de cada plataforma esperam como entrada:
 - Linux:   packaging/linux/build_appimage.sh e build_deb.sh
 - macOS:   packaging/macos/build_dmg.sh
 
-Rodar a partir da raiz do projeto:
+Rodar a partir da raiz do projeto, com o Tesseract instalado na máquina de build:
+    python packaging/fetch_tessdata.py
     pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
 """
 
@@ -22,6 +23,19 @@ ICONS_DIR = PROJECT_ROOT / "packaging" / "icons"
 
 APP_NAME = "OpenFolioPDFSuite"
 
+# O Tesseract vai dentro do app (o usuário não instala nada para o OCR). O binário entra em
+# `binaries`, então o PyInstaller leva junto as bibliotecas de que ele precisa (DLLs,
+# .so, .dylib), na mesma pasta; os idiomas vêm de packaging/fetch_tessdata.py. O app o
+# encontra em sys._MEIPASS (core/ocr.py, `find_tesseract`).
+from core.ocr import find_tesseract  # noqa: E402
+
+TESSERACT = find_tesseract()
+TESSDATA_DIR = PROJECT_ROOT / "build" / "tessdata"
+if not TESSERACT:
+    raise SystemExit("Tesseract não encontrado: instale-o na máquina de build (o app leva uma cópia dele).")
+if not all((TESSDATA_DIR / f"{code}.traineddata").is_file() for code in ("eng", "por", "osd")):
+    raise SystemExit("Idiomas do Tesseract ausentes: rode antes  python packaging/fetch_tessdata.py")
+
 if sys.platform == "win32":
     app_icon = str(ICONS_DIR / "icon.ico")
 elif sys.platform == "darwin":
@@ -32,8 +46,9 @@ else:
 a = Analysis(
     [str(PROJECT_ROOT / "main.py")],
     pathex=[str(PROJECT_ROOT)],
-    binaries=[],
+    binaries=[(TESSERACT, ".")],
     datas=[
+        (str(TESSDATA_DIR), "tessdata"),
         (str(PROJECT_ROOT / "assets" / "icon.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "logo.svg"), "assets"),
         # Fontes embutidas no texto que o app desenha nos PDFs (core/fonts.py) e o perfil

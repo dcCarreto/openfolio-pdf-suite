@@ -9,7 +9,6 @@ from pypdf import PdfReader
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 
-import core.compress as compress
 from core.compress import CompressPDF
 from core.progress import OperationCancelled, Progress
 
@@ -164,32 +163,3 @@ def test_cancel_before_writing_leaves_nothing(tmp_path):
     with pytest.raises(OperationCancelled):
         CompressPDF().run(str(source), str(output), level="medium", progress=progress)
     assert not output.exists()
-
-
-def test_ghostscript_result_is_used_only_when_smaller(tmp_path, monkeypatch):
-    source = _pdf_with_image(tmp_path / "scan.pdf", _scan_like_image())
-    calls = []
-
-    def fake_run(command, progress, timeout, program=""):
-        calls.append(command)
-        target = next(arg.split("=", 1)[1] for arg in command if arg.startswith("-sOutputFile="))
-        with open(target, "wb") as f:
-            f.write(b"%PDF-1.7 menor")
-        return 0, b""
-
-    monkeypatch.setattr(compress, "find_ghostscript", lambda: "gswin64c")
-    monkeypatch.setattr(compress, "run_cancellable", fake_run)
-    output = tmp_path / "out.pdf"
-
-    result = CompressPDF().run(str(source), str(output), level="strong", use_ghostscript=True)
-
-    assert result.used_ghostscript
-    assert output.read_bytes() == b"%PDF-1.7 menor"
-    assert "-dPDFSETTINGS=/screen" in calls[0]
-
-
-def test_ghostscript_missing_is_a_clear_error(make_pdf, tmp_path, monkeypatch):
-    monkeypatch.setattr(compress, "find_ghostscript", lambda: None)
-
-    with pytest.raises(RuntimeError, match="Ghostscript não encontrado"):
-        CompressPDF().run(str(make_pdf("doc.pdf", [(200, 200)])), str(tmp_path / "o.pdf"), use_ghostscript=True)

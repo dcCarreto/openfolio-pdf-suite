@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from core.convert import FIT_TO_IMAGE, ConvertFromImages, ConvertToImages
 from core.extract_text import ExtractText
-from core.office_convert import BASIC_SUFFIXES, SUPPORTED_SUFFIXES, ConvertOfficeToPDF, find_libreoffice
+from core.office_convert import SUPPORTED_SUFFIXES, ConvertOfficeToPDF
 from core.pdf_export import ConvertPDFToExcel, ConvertPDFToWord
 from core.xml_convert import ConvertXMLToPDF
 from ui.i18n import tr, tr_message
@@ -139,11 +139,9 @@ class ConvertPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        has_libreoffice = find_libreoffice() is not None
-        suffixes = SUPPORTED_SUFFIXES if has_libreoffice else BASIC_SUFFIXES
         self.office_input_picker = FilePicker(
             mode="open",
-            file_filter=tr("Documentos do Office") + " (" + " ".join(f"*{suffix}" for suffix in suffixes) + ")",
+            file_filter=tr("Documentos do Office") + " (" + " ".join(f"*{suffix}" for suffix in SUPPORTED_SUFFIXES) + ")",
         )
         self.office_output_picker = FilePicker(
             mode="save",
@@ -151,18 +149,13 @@ class ConvertPage(QWidget):
             suggested_suffix="convertido",
         )
 
-        if has_libreoffice:
-            engine_note = tr(
-                "LibreOffice encontrado: a conversão preserva a formatação original e aceita "
-                "também .doc, .xls, .ppt, .odt, .ods, .odp e .rtf."
+        engine_label = QLabel(
+            tr(
+                "A conversão leva o texto, os títulos, as listas e as tabelas de arquivos .docx, "
+                ".xlsx e .pptx, mas não a formatação visual exata, as imagens nem os cabeçalhos "
+                "e rodapés."
             )
-        else:
-            engine_note = tr(
-                "LibreOffice não encontrado: usando a conversão básica, que leva o texto, os "
-                "títulos, as listas e as tabelas de arquivos .docx, .xlsx e .pptx, mas não a "
-                "formatação visual exata, as imagens nem os cabeçalhos e rodapés."
-            )
-        engine_label = QLabel(engine_note)
+        )
         engine_label.setWordWrap(True)
 
         convert_button = QPushButton(tr("Converter"))

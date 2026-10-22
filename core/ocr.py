@@ -1,9 +1,8 @@
 """OCR: reconhecimento de texto em páginas de PDF que são só imagem (escaneadas).
 
-Não existe fallback em Python puro para isto (ao contrário da conversão de Office): sem um
-motor de OCR de verdade instalado no sistema não há como reconhecer texto. Usa o Tesseract
-(via pytesseract) do mesmo jeito que core/office_convert.py usa o LibreOffice quando
-disponível — detectado por caminho, sem instalá-lo.
+Usa o Tesseract (via pytesseract). Os instaladores do app trazem uma cópia própria dele,
+com inglês, português e a detecção de orientação (ver `find_tesseract`), então o usuário
+não instala nada; rodando do código-fonte, usa um Tesseract instalado no sistema.
 
 A técnica de gravação é a mesma de core/watermark.py (overlay via reportlab + merge_page),
 só que o "overlay" aqui é texto invisível (setTextRenderMode(3)) sobre cada palavra
@@ -26,13 +25,16 @@ certa; o texto invisível acompanha a direção das linhas na imagem.
 """
 
 import functools
+import os
+import shutil
+import sys
+from pathlib import Path
 
 import pypdfium2 as pdfium
 import pytesseract
 from pypdf import PdfWriter
 
 from .base import PDFOperation, open_pdfium, open_reader, write_pdf
-from .external import find_program
 from .fonts import SANS, register_fonts, text_width
 from .geometry import PageGeometry
 from .overlay import materialize_inherited_attributes, visual_overlay
@@ -55,9 +57,28 @@ _STAMP_TEXT_LIMIT = 200
 _SCAN_COVERAGE = 0.5
 
 
+def _bundled_tesseract() -> Path | None:
+    """A cópia do Tesseract que os instaladores trazem: na pasta do app empacotado pelo
+    PyInstaller, com os idiomas em `tessdata/` ao lado (ver packaging/pyinstaller)."""
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle is None:
+        return None
+    return Path(bundle) / ("tesseract.exe" if sys.platform == "win32" else "tesseract")
+
+
 def find_tesseract() -> str | None:
-    """Procura o executável do Tesseract no PATH e em locais comuns de instalação."""
-    return find_program(_TESSERACT_CANDIDATES)
+    """O Tesseract que vem com o app; rodando do código-fonte, um instalado no sistema (no
+    PATH ou num local comum de instalação)."""
+    bundled = _bundled_tesseract()
+    if bundled is not None and bundled.is_file():
+        # Os idiomas que vieram junto, e não os de um Tesseract instalado na máquina.
+        os.environ["TESSDATA_PREFIX"] = str(bundled.parent / "tessdata")
+        return str(bundled)
+    for candidate in _TESSERACT_CANDIDATES:
+        found = shutil.which(candidate) or (candidate if Path(candidate).is_file() else None)
+        if found:
+            return found
+    return None
 
 
 def get_available_languages() -> list[str]:

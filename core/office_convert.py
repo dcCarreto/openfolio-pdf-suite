@@ -1,19 +1,14 @@
 """Conversão de documentos do Office (Word, Excel, PowerPoint) para PDF.
 
-Usa o LibreOffice (se estiver instalado na máquina) para uma conversão fiel ao arquivo
-original; com ele, também aceita os formatos antigos e os do próprio LibreOffice (.doc,
-.xls, .ppt, .odt, .ods, .odp, .rtf).
-
-Sem o LibreOffice, cai para uma conversão básica em Python puro (python-docx, openpyxl e
-python-pptx + reportlab) dos formatos .docx, .xlsx e .pptx. Ela leva o texto, os títulos,
-as listas e as tabelas, mas não a formatação visual exata, e descarta imagens, gráficos,
-cabeçalhos e rodapés. O que foi descartado volta como aviso no resultado
+Conversão própria em Python puro (python-docx, openpyxl e python-pptx + reportlab) dos
+formatos .docx, .xlsx e .pptx, sem depender de nenhum programa instalado (antes usava o
+LibreOffice quando ele existia na máquina). Ela leva o texto, os títulos, as listas e as
+tabelas, mas não a formatação visual exata, e descarta imagens, gráficos, cabeçalhos e
+rodapés. O que foi descartado volta como aviso no resultado
 (`OfficeConversionResult.warnings`), para a interface mostrar — antes o conteúdo sumia sem
 aviso (tabelas do Word inteiras, e o texto que não cabia num slide).
 """
 
-import shutil
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -24,40 +19,22 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from .base import PDFOperation, atomic_output
-from .external import find_program, run_cancellable
 from .fonts import SANS, SANS_BOLD, register_fonts
 from .messages import Message
 from .progress import Progress, ensure_progress
 
-_LIBREOFFICE_TIMEOUT = 120  # segundos
-
-_LIBREOFFICE_CANDIDATES = [
-    "soffice",
-    "libreoffice",
-    r"C:\Program Files\LibreOffice\program\soffice.exe",
-    r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
-]
-
-BASIC_SUFFIXES = (".docx", ".xlsx", ".pptx")
-LIBREOFFICE_ONLY_SUFFIXES = (".doc", ".xls", ".ppt", ".odt", ".ods", ".odp", ".rtf")
-SUPPORTED_SUFFIXES = BASIC_SUFFIXES + LIBREOFFICE_ONLY_SUFFIXES
+SUPPORTED_SUFFIXES = (".docx", ".xlsx", ".pptx")
 
 _MAX_SHEET_COLUMNS = 40  # acima disso as colunas ficariam ilegíveis numa página
 
 
-def find_libreoffice() -> str | None:
-    """Procura o executável do LibreOffice no PATH e em locais comuns de instalação."""
-    return find_program(_LIBREOFFICE_CANDIDATES)
-
-
 @dataclass
 class OfficeConversionResult:
-    used_libreoffice: bool
     warnings: list[Message] = field(default_factory=list)
 
 
 class ConvertOfficeToPDF(PDFOperation):
-    """Converte um documento do Office (ou do LibreOffice) para PDF."""
+    """Converte um documento do Word, Excel ou PowerPoint (.docx, .xlsx, .pptx) para PDF."""
 
     def run(self, input_path: str, output_path: str, progress: Progress | None = None) -> OfficeConversionResult:
         progress = ensure_progress(progress)
@@ -65,60 +42,13 @@ class ConvertOfficeToPDF(PDFOperation):
         if suffix not in SUPPORTED_SUFFIXES:
             raise ValueError(Message("Formato não suportado: {suffix}", suffix=suffix))
 
-        libreoffice_path = find_libreoffice()
-        if not libreoffice_path and suffix in LIBREOFFICE_ONLY_SUFFIXES:
-            raise ValueError(
-                Message(
-                    "Arquivos {suffix} só podem ser convertidos com o LibreOffice instalado "
-                    "(libreoffice.org). Sem ele, salve o arquivo como .docx, .xlsx ou .pptx.",
-                    suffix=suffix,
-                )
-            )
-
         with atomic_output(output_path) as temp_path:
             progress.update(0, 0, "Convertendo o documento")
-            if libreoffice_path:
-                self._convert_with_libreoffice(libreoffice_path, input_path, temp_path, progress)
-                result = OfficeConversionResult(used_libreoffice=True)
-            else:
-                warnings = self._convert_with_fallback(input_path, temp_path, suffix)
-                result = OfficeConversionResult(used_libreoffice=False, warnings=warnings)
+            result = OfficeConversionResult(warnings=self._convert(input_path, temp_path, suffix))
             progress.check()
         return result
 
-    def _convert_with_libreoffice(
-        self, libreoffice_path: str, input_path: str, output_path: str, progress: Progress
-    ) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # Perfil de usuário isolado por conversão: sem isso, chamadas concorrentes/
-            # rápidas ao soffice competem pelo lock do perfil padrão e podem travar até
-            # o timeout em vez de converter.
-            profile_dir = Path(tmp_dir) / "profile"
-            returncode, stderr = run_cancellable(
-                [
-                    libreoffice_path,
-                    "--headless",
-                    f"-env:UserInstallation={profile_dir.as_uri()}",
-                    "--convert-to",
-                    "pdf",
-                    "--outdir",
-                    tmp_dir,
-                    input_path,
-                ],
-                progress,
-                timeout=_LIBREOFFICE_TIMEOUT,
-                program="O LibreOffice",
-            )
-            if returncode != 0:
-                detail = stderr.decode(errors="replace").strip() or f"código de saída {returncode}"
-                raise RuntimeError(Message("O LibreOffice falhou ao converter o arquivo: {detail}", detail=detail))
-
-            generated_path = Path(tmp_dir) / f"{Path(input_path).stem}.pdf"
-            if not generated_path.is_file():
-                raise RuntimeError("O LibreOffice não gerou o arquivo PDF esperado.")
-            shutil.copy(generated_path, output_path)
-
-    def _convert_with_fallback(self, input_path: str, output_path: str, suffix: str) -> list[Message]:
+    def _convert(self, input_path: str, output_path: str, suffix: str) -> list[Message]:
         register_fonts()
         if suffix == ".docx":
             return _docx_to_pdf(input_path, output_path)

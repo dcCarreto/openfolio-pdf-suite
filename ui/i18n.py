@@ -984,26 +984,11 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Média (imagens a 150 DPI)': 'Medium (images at 150 DPI)',
     'Forte (imagens a 100 DPI)': 'Strong (images at 100 DPI)',
     'Converter as imagens para escala de cinza': 'Convert images to grayscale',
-    'Usar o Ghostscript': 'Use Ghostscript',
-    'O Ghostscript comprime mais, mas pode descartar anexos, campos de formulário e a marcação de acessibilidade.': (
-        'Ghostscript compresses further, but may drop attachments, form fields and accessibility tags.'
-    ),
-    'Ghostscript não encontrado. Instalado, ele permite comprimir ainda mais (ghostscript.com).': (
-        'Ghostscript not found. Once installed, it allows even more compression (ghostscript.com).'
-    ),
-    'Comprimido com o Ghostscript.': 'Compressed with Ghostscript.',
     'O arquivo não ficou menor ({original} KB -> {compressed} KB), então nada foi gravado. Tente um nível mais forte.': (
         'The file did not get smaller ({original} KB -> {compressed} KB), so nothing was saved. Try a stronger level.'
     ),
     '{count} imagem(ns) recomprimida(s).': '{count} image(s) recompressed.',
     'Comprimindo imagens': 'Compressing images',
-    'Comprimindo com o Ghostscript': 'Compressing with Ghostscript',
-    'O Ghostscript falhou ao comprimir o arquivo: {detail}': (
-        'Ghostscript failed to compress the file: {detail}'
-    ),
-    'Ghostscript não encontrado. Instale o Ghostscript ou desmarque a opção.': (
-        'Ghostscript not found. Install Ghostscript or uncheck the option.'
-    ),
     'Tamanho da página:': 'Page size:',
     'Margem:': 'Margin:',
     'DPI da imagem:': 'Image DPI:',
@@ -1013,12 +998,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
         'Resolution used to compute the page size from the image.'
     ),
     'Documentos do Office': 'Office documents',
-    'LibreOffice encontrado: a conversão preserva a formatação original e aceita também .doc, .xls, .ppt, .odt, .ods, .odp e .rtf.': (
-        'LibreOffice found: the conversion keeps the original formatting and also accepts .doc, .xls, .ppt, .odt, .ods, .odp and .rtf.'
-    ),
-    'LibreOffice não encontrado: usando a conversão básica, que leva o texto, os títulos, as listas e as tabelas de arquivos .docx, .xlsx e .pptx, mas não a formatação visual exata, as imagens nem os cabeçalhos e rodapés.': (
-        'LibreOffice not found: using the basic conversion, which keeps the text, headings, lists and tables of .docx, .xlsx and .pptx files, but not the exact visual formatting, images, headers or footers.'
-    ),
     'A conversão básica deixou de fora:': 'The basic conversion left out:',
     'Páginas em paisagem (linhas mais longas)': 'Landscape pages (longer lines)',
     'Informe ao menos uma imagem para converter.': 'Provide at least one image to convert.',
@@ -1034,26 +1013,12 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "The slides' images and charts were not included."
     ),
     'Formato não suportado: {suffix}': 'Unsupported format: {suffix}',
-    'Arquivos {suffix} só podem ser convertidos com o LibreOffice instalado (libreoffice.org). Sem ele, salve o arquivo como .docx, .xlsx ou .pptx.': (
-        '{suffix} files can only be converted with LibreOffice installed (libreoffice.org). Without it, save the file as .docx, .xlsx or .pptx.'
-    ),
     'Gráficos e imagens da planilha "{sheet}" não foram incluídos.': (
         'Charts and images of the "{sheet}" sheet were not included.'
-    ),
-    'O LibreOffice falhou ao converter o arquivo: {detail}': (
-        'LibreOffice failed to convert the file: {detail}'
     ),
     'A planilha "{sheet}" tem {columns} colunas; só as {limit} primeiras foram incluídas.': (
         'The "{sheet}" sheet has {columns} columns; only the first {limit} were included.'
     ),
-    'O LibreOffice não gerou o arquivo PDF esperado.': 'LibreOffice did not produce the expected PDF file.',
-    '{program} demorou demais para terminar (timeout de {seconds}s).': (
-        '{program} took too long to finish ({seconds}s timeout).'
-    ),
-    'O programa externo': 'The external program',
-    'O LibreOffice': 'LibreOffice',
-    'O Ghostscript': 'Ghostscript',
-    'O veraPDF': 'veraPDF',
     'Ajustar sem distorcer (sobra transparente)': 'Fit without distortion (transparent margins)',
     'Esticar para ocupar a área toda': 'Stretch to fill the whole area',
     'Se a proporção for diferente:': 'If the proportions differ:',
@@ -1155,8 +1120,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Para reconhecer português, instale o idioma "por" do Tesseract.': (
         'To recognize Portuguese, install the Tesseract "por" language.'
     ),
-    'Para instalar no Windows: baixe o instalador do Tesseract em https://github.com/UB-Mannheim/tesseract/wiki e, durante a instalação, marque em "Additional language data" o idioma Portuguese (e "Orientation and script detection", para páginas digitalizadas de lado). No Linux: sudo apt install tesseract-ocr tesseract-ocr-por. Depois, reabra o app.': (
-        'To install on Windows: download the Tesseract installer from https://github.com/UB-Mannheim/tesseract/wiki and, during installation, check the languages you need under "Additional language data" (and "Orientation and script detection", for pages scanned sideways). On Linux: sudo apt install tesseract-ocr tesseract-ocr-por. Then reopen the app.'
+    'Os instaladores do app já trazem o Tesseract. Rodando o código-fonte, instale-o no sistema: no Windows, pelo instalador em https://github.com/UB-Mannheim/tesseract/wiki (marque o idioma Portuguese e "Orientation and script detection"); no Linux, sudo apt install tesseract-ocr tesseract-ocr-por; no macOS, brew install tesseract tesseract-lang. Depois, reabra o app.': (
+        'The app installers already include Tesseract. When running from source, install it on the system: on Windows, with the installer at https://github.com/UB-Mannheim/tesseract/wiki (check the Portuguese language and "Orientation and script detection"); on Linux, sudo apt install tesseract-ocr tesseract-ocr-por; on macOS, brew install tesseract tesseract-lang. Then reopen the app.'
     ),
     'O DPI do OCR precisa estar entre 72 e 1200.': 'OCR DPI must be between 72 and 1200.',
     'Escolha pelo menos um idioma de reconhecimento.': 'Choose at least one recognition language.',
@@ -1170,28 +1135,11 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Remove o que o PDF/A proíbe (JavaScript, ações automáticas, anexos não permitidos), embute o perfil de cor sRGB e sincroniza os metadados. Depois verifica fontes, transparência e estrutura: se algo impedir a conformidade, nada é gravado e a lista do que falta é mostrada. PDFs protegidos por senha precisam passar antes por "Remover senha".': (
         'Removes what PDF/A forbids (JavaScript, automatic actions, attachments that are not allowed), embeds the sRGB color profile and syncs the metadata. Then checks fonts, transparency and structure: if anything prevents conformance, nothing is saved and the list of what is missing is shown. Password-protected PDFs must go through "Remove password" first.'
     ),
-    'Embute as fontes e achata a transparência, o que a conversão própria do app não faz.': (
-        "Embeds fonts and flattens transparency, which the app's own conversion does not do."
-    ),
-    'Ghostscript não encontrado (ghostscript.com).': 'Ghostscript not found (ghostscript.com).',
-    'veraPDF encontrado: além das verificações do app, o arquivo passa pela validação completa dele.': (
-        "veraPDF found: besides the app's checks, the file goes through its full validation."
-    ),
-    'Verifica os requisitos de PDF/A que o app cobre (declaração, perfil de cor, fontes embutidas, transparência, ações e anexos proibidos, metadados) — não é a validação ISO 19005 completa. Para ela, instale o veraPDF (verapdf.org).': (
-        'Checks the PDF/A requirements the app covers (declaration, color profile, embedded fonts, transparency, forbidden actions and attachments, metadata) — not the full ISO 19005 validation. For that, install veraPDF (verapdf.org).'
-    ),
-    'O veraPDF confirmou a conformidade, e as verificações do app não encontraram problemas.': (
-        "veraPDF confirmed conformance, and the app's checks found no problems."
-    ),
     'Nenhum problema encontrado nas verificações do app. Elas não cobrem a norma inteira: para arquivamento legal, confirme com o veraPDF.': (
         "No problems found by the app's checks. They do not cover the whole standard: for legal archiving, confirm with veraPDF."
     ),
     'O documento não pôde ser convertido, e nada foi gravado:': (
         'The document could not be converted, and nothing was saved:'
-    ),
-    'Tente de novo com "Usar o Ghostscript" marcado.': 'Try again with "Use Ghostscript" checked.',
-    'Com o Ghostscript instalado (ghostscript.com), o app consegue corrigir fontes e transparência.': (
-        'With Ghostscript installed (ghostscript.com), the app can fix fonts and transparency.'
     ),
     'Ajustes feitos:': 'Changes made:',
     'Parte PDF/A inválida: {part} (use 1, 2 ou 3).': 'Invalid PDF/A part: {part} (use 1, 2 or 3).',
@@ -1238,9 +1186,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'O autor no dicionário Info e no XMP não são iguais.': (
         'The author in the Info dictionary and in the XMP differ.'
     ),
-    'O Ghostscript falhou ao converter para PDF/A: {detail}': (
-        'Ghostscript failed to convert to PDF/A: {detail}'
-    ),
     'Os metadados XMP não declaram conformidade PDF/A.': (
         'The XMP metadata does not declare PDF/A conformance.'
     ),
@@ -1251,7 +1196,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
         'The file declares level {declared}, not level {conformance}.'
     ),
     'Os metadados XMP estão malformados.': 'The XMP metadata is malformed.',
-    'veraPDF: {rule}': 'veraPDF: {rule}',
     'O PDF está protegido por senha — PDF/A não permite criptografia.': (
         'The PDF is password-protected — PDF/A does not allow encryption.'
     ),
@@ -1278,8 +1222,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     'Preparando o documento': 'Preparing the document',
     'Verificando o documento': 'Checking the document',
-    'Convertendo com o Ghostscript': 'Converting with Ghostscript',
-    'Validando com o veraPDF': 'Validating with veraPDF',
     'O leitor mostra o nome do arquivo em vez do título (falta /DisplayDocTitle).': (
         'Readers show the file name instead of the title (/DisplayDocTitle is missing).'
     ),
@@ -1685,4 +1627,15 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Restaurar padrões": "Restore defaults",
     "O atalho {keys} já é usado pelo visualizador.": "The shortcut {keys} is already used by the viewer.",
     "O atalho {keys} já é usado por \"{command}\".": "The shortcut {keys} is already used by \"{command}\".",
+    # Sem programas externos (LibreOffice, Ghostscript, veraPDF)
+    "A conversão leva o texto, os títulos, as listas e as tabelas de arquivos .docx, .xlsx e .pptx, mas não a "
+    "formatação visual exata, as imagens nem os cabeçalhos e rodapés.": (
+        "The conversion keeps the text, headings, lists and tables of .docx, .xlsx and .pptx files, but not the "
+        "exact visual formatting, images, headers or footers."
+    ),
+    "Verifica os requisitos de PDF/A que o app cobre (declaração, perfil de cor, fontes embutidas, transparência, "
+    "ações e anexos proibidos, metadados) — não é a validação ISO 19005 completa.": (
+        "Checks the PDF/A requirements the app covers (declaration, color profile, embedded fonts, transparency, "
+        "forbidden actions and attachments, metadata) — not the full ISO 19005 validation."
+    ),
 }

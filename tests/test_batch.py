@@ -107,3 +107,24 @@ def test_ocr_cannot_start_without_tesseract(monkeypatch):
     assert not page.process_button.isEnabled()
     page.operation_combo.setCurrentIndex(0)
     assert page.process_button.isEnabled()
+
+
+def test_ocr_languages_are_shown_by_name_and_run_by_code(monkeypatch):
+    QApplication.instance() or QApplication([])
+    monkeypatch.setattr("ui.pages.batch_page.find_tesseract", lambda: "tesseract")
+    monkeypatch.setattr("ui.pages.batch_page.get_available_languages", lambda: ["eng", "por", "xyz"])
+    used = []
+
+    class FakeOCR:
+        def run(self, src, dst, language, progress):
+            used.append(language)
+
+    monkeypatch.setattr("ui.pages.batch_page.OCRDocument", FakeOCR)
+    page = BatchPage(DocumentSession())
+
+    combo = page.language_combo
+    assert [combo.itemText(i) for i in range(combo.count())] == ["Inglês", "Português", "xyz"]
+    assert combo.currentText() == "Português"
+    page.operation_combo.setCurrentIndex(1)  # OCR
+    page._operation()("a.pdf", "b.pdf", None)
+    assert used == ["por"]

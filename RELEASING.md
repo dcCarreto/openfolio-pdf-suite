@@ -26,11 +26,19 @@ Como gerar uma nova release (beta ou estável) do OpenFolio PDF Suite.
 
 ## Build local (por plataforma)
 
-Precisa da dependência opcional `build`:
+Precisa da dependência opcional `build` e do Tesseract instalado na máquina de build: o app
+leva uma cópia dele (o usuário final não instala nada). Os idiomas que vão junto são baixados
+antes, com o SHA-256 conferido:
 
 ```bash
 pip install -e ".[build]"
+python packaging/fetch_tessdata.py
 ```
+
+O Tesseract vem do instalador do UB Mannheim no Windows (no CI, `choco install tesseract`, e
+o `llvm-strip --strip-debug` tira os ~90 MB de símbolos de depuração das DLLs), do
+`apt install tesseract-ocr` no Linux e do `brew install tesseract` no macOS. O spec recusa o
+build sem o Tesseract ou sem os idiomas.
 
 ### Windows
 
@@ -77,7 +85,8 @@ certificados — não indica nenhum problema com o instalador em si.
 
 ```text
 packaging/
-  pyinstaller/openfolio.spec   Spec compartilhado entre as 3 plataformas
+  pyinstaller/openfolio.spec   Spec compartilhado entre as 3 plataformas (leva o Tesseract junto)
+  fetch_tessdata.py            Baixa os idiomas do Tesseract (eng, por, osd) para build/tessdata
   icons/                       icon.ico, icon.icns e icon_256.png gerados a partir de assets/icon.png
   windows/installer.iss        Script do Inno Setup
   linux/

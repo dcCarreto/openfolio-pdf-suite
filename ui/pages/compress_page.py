@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
-from core.compress import CompressPDF, find_ghostscript
+from core.compress import CompressPDF
 from ui.i18n import tr
 from ui.tasks import call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -34,22 +34,6 @@ class CompressPage(QWidget):
 
         self.grayscale_check = QCheckBox(tr("Converter as imagens para escala de cinza"))
 
-        self.ghostscript_path = find_ghostscript()
-        self.ghostscript_check = QCheckBox(tr("Usar o Ghostscript"))
-        if self.ghostscript_path:
-            ghostscript_note = tr(
-                "O Ghostscript comprime mais, mas pode descartar anexos, campos de formulário e "
-                "a marcação de acessibilidade."
-            )
-        else:
-            self.ghostscript_check.setEnabled(False)
-            ghostscript_note = tr(
-                "Ghostscript não encontrado. Instalado, ele permite comprimir ainda mais "
-                "(ghostscript.com)."
-            )
-        ghostscript_label = QLabel(ghostscript_note)
-        ghostscript_label.setWordWrap(True)
-
         compress_button = QPushButton(tr("Comprimir"))
         compress_button.clicked.connect(self._compress)
 
@@ -61,8 +45,6 @@ class CompressPage(QWidget):
         layout.addWidget(QLabel(tr("Nível de compressão:")))
         layout.addWidget(self.level_combo)
         layout.addWidget(self.grayscale_check)
-        layout.addWidget(self.ghostscript_check)
-        layout.addWidget(ghostscript_label)
         layout.addWidget(compress_button)
 
     def _compress(self):
@@ -82,7 +64,6 @@ class CompressPage(QWidget):
             output_path,
             level=self.level_combo.currentData(),
             grayscale=self.grayscale_check.isChecked(),
-            use_ghostscript=self.ghostscript_check.isChecked(),
         )
 
         def done(result):
@@ -106,8 +87,6 @@ class CompressPage(QWidget):
             )
             if result.images_recompressed:
                 message += "\n" + tr("{count} imagem(ns) recomprimida(s).").format(count=result.images_recompressed)
-            if result.used_ghostscript:
-                message += "\n" + tr("Comprimido com o Ghostscript.")
             QMessageBox.information(self, tr("Comprimir"), message)
 
         run_task(

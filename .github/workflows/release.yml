@@ -6,6 +6,11 @@ name: Release
 # Cada plataforma builda na sua propria VM nativa (windows-latest/ubuntu-latest/
 # macos-latest) porque PyInstaller empacota para o mesmo SO em que roda - nao ha
 # cross-compilation aqui.
+#
+# O app nao depende de nenhum programa instalado: o Tesseract (OCR) vai dentro dele. Cada
+# build instala o Tesseract pelo gerenciador de pacotes da VM, baixa os idiomas
+# (packaging/fetch_tessdata.py) e o PyInstaller leva o binario com as bibliotecas dele. Um
+# teste de fumaca roda o Tesseract de dentro do build antes de empacotar.
 
 on:
   push:
@@ -35,8 +40,26 @@ jobs:
       - name: Instalar dependencias
         run: |
           pip install -e ".[build]"
+      - name: Tesseract (vai dentro do app)
+        shell: pwsh
+        run: |
+          choco install tesseract -y --no-progress
+          # O build do Tesseract para Windows vem com os simbolos de depuracao (a libtesseract
+          # tem ~97 MB, ~4 MB sem eles); o LLVM ja vem instalado nas VMs do GitHub.
+          $strip = "C:\Program Files\LLVM\bin\llvm-strip.exe"
+          Get-ChildItem "C:\Program Files\Tesseract-OCR\*" -Include *.dll, tesseract.exe |
+            ForEach-Object { & $strip --strip-debug $_.FullName; if ($LASTEXITCODE) { exit 1 } }
+          python packaging/fetch_tessdata.py
       - name: Build PyInstaller
         run: pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
+      - name: Testar o Tesseract embutido
+        shell: pwsh
+        run: |
+          $internal = "dist\OpenFolioPDFSuite\_internal"
+          $env:PATH = "C:\Windows\System32"  # sem o Tesseract instalado no caminho
+          $env:TESSDATA_PREFIX = "$internal\tessdata"
+          $langs = & "$internal\tesseract.exe" --list-langs
+          if ($LASTEXITCODE -or -not ($langs -match "^por$")) { $langs; exit 1 }
       - name: Instalar Inno Setup
         run: choco install innosetup -y
       - name: Compilar instalador
@@ -60,11 +83,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libopengl0 libxkbcommon0 libxcb-cursor0 libgl1
+          sudo apt-get install -y --no-install-recommends tesseract-ocr
       - name: Instalar dependencias Python
         run: |
           pip install -e ".[build]"
+          python packaging/fetch_tessdata.py
       - name: Build PyInstaller
         run: pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
+      - name: Testar o Tesseract embutido
+        run: |
+          internal=dist/OpenFolioPDFSuite/_internal
+          # Como o app empacotado roda: o bootloader do PyInstaller poe _internal no
+          # LD_LIBRARY_PATH, e o processo do Tesseract herda.
+          LD_LIBRARY_PATH="$internal" TESSDATA_PREFIX="$internal/tessdata" "$internal/tesseract" --list-langs | grep -x por
       - name: Build AppImage
         run: bash packaging/linux/build_appimage.sh "${{ needs.version.outputs.version }}"
       - name: Build .deb
@@ -86,9 +117,16 @@ jobs:
           python-version: "3.11"
       - name: Instalar dependencias
         run: |
+          brew install tesseract
           pip install -e ".[build]"
+          python packaging/fetch_tessdata.py
       - name: Build PyInstaller
         run: pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
+      - name: Testar o Tesseract embutido
+        run: |
+          frameworks=dist/OpenFolioPDFSuite.app/Contents/Frameworks
+          otool -L "$frameworks/tesseract"
+          TESSDATA_PREFIX="$frameworks/tessdata" "$frameworks/tesseract" --list-langs | grep -x por
       - name: Build dmg
         run: bash packaging/macos/build_dmg.sh "${{ needs.version.outputs.version }}"
       - uses: actions/upload-artifact@v4
