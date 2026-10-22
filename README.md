@@ -352,8 +352,8 @@ deu certo, 1 em erro, 2 em uso errado e 130 quando interrompido.
 
 ```text
 core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
-  base.py          Classe base PDFOperation, abertura de PDFs protegidos ou com restrições,
-                   gravação atômica e validações compartilhadas
+  base.py          Abertura de PDFs protegidos ou com restrições, gravação atômica,
+                   validações compartilhadas e o acesso à API privada do pypdf
   document.py      Montagem de documentos a partir de páginas sem perder metadados, anexos,
                    camadas e rótulos de página
   merge.py, split.py, pages.py, compress.py, convert.py, ...

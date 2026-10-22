@@ -24,7 +24,7 @@ from pypdf.generic import (
 )
 from reportlab.pdfgen import canvas
 
-from .base import READ, PDFOperation, add_object, atomic_output, open_reader, require_valid_page_index, write_pdf
+from .base import READ, add_object, atomic_output, open_reader, require_valid_page_index, write_pdf
 from .document import remove_widgets_from_form
 from .messages import Message
 from .tabular import escape_formula, write_table
@@ -33,7 +33,7 @@ _VALID_FIELD_TYPES = ("text", "checkbox", "date", "dropdown", "listbox")
 _CHOICE_FIELD_TYPES = ("dropdown", "listbox")
 
 
-class AddFormField(PDFOperation):
+class AddFormField:
     """Adiciona um campo de formulário interativo (texto, data, caixa de seleção, lista
     suspensa ou lista de seleção) a uma página do PDF. Campo de data é um campo de texto
     comum com uma dica de formato no tooltip — PDF não tem um tipo de campo "data" nativo,
@@ -183,7 +183,7 @@ class RadioOption:
     y: float
 
 
-class AddRadioGroup(PDFOperation):
+class AddRadioGroup:
     """Adiciona um grupo de botões de opção (radio) — várias opções mutuamente exclusivas
     compartilhando um único campo, cada uma podendo estar numa página diferente (comum em
     formulários longos com "assinale uma opção" repetido em várias páginas).
@@ -321,7 +321,7 @@ def _describe_field_type(field_type, flags) -> str:
     return "unknown"
 
 
-class ListFormFields(PDFOperation):
+class ListFormFields:
     """Lista os campos de formulário já existentes num PDF: nome, tipo e valor atual.
     Campos que só agrupam outros (nomes hierárquicos como "cliente" em "cliente.nome") não
     são campos preenchíveis e ficam de fora."""
@@ -397,7 +397,7 @@ def _choice_options(widget) -> list[tuple[str, str]]:
     return options
 
 
-class ListFormWidgets(PDFOperation):
+class ListFormWidgets:
     """Os widgets preenchíveis de cada página (texto, caixa de seleção, opção e listas),
     com posição e valor atual. Botões e assinaturas ficam de fora."""
 
@@ -431,7 +431,7 @@ class ListFormWidgets(PDFOperation):
         return widgets
 
 
-class FillFormFields(PDFOperation):
+class FillFormFields:
     """Grava valores nos campos, pelo nome completo. Caixas de seleção e opções recebem o
     estado ("/Yes", "/Off", "/M"); os outros campos, o texto ou o valor da opção, com a
     aparência refeita pelo pypdf."""
@@ -460,7 +460,7 @@ class FillFormFields(PDFOperation):
         write_pdf(writer, output_path)
 
 
-class ExportFormDataCSV(PDFOperation):
+class ExportFormDataCSV:
     """Exporta nome, tipo e valor atual de cada campo de um PDF para CSV (ou Excel, se o
     arquivo terminar em .xlsx). Ver `core/tabular.py`: UTF-8 com BOM e valores que o Excel
     leria como fórmula protegidos."""
@@ -558,7 +558,7 @@ def _fill_fields(reader: PdfReader, output_path: str, values: dict[str, str]) ->
     return FormImportResult(filled=len(matched), not_found=not_found)
 
 
-class ImportFormDataCSV(PDFOperation):
+class ImportFormDataCSV:
     """Preenche os campos de um PDF a partir de um CSV com colunas "campo" e "valor"
     (aceita também "name"/"value", para CSVs exportados de outras ferramentas). Caixas de
     seleção e listas recebem o valor bruto do PDF (ex.: "/Yes", "/Off", o nome de uma
@@ -606,7 +606,7 @@ def _fdf_field_lines(name: str, node: dict, lines: list[str]) -> None:
     lines.append(">>")
 
 
-class ExportFormDataFDF(PDFOperation):
+class ExportFormDataFDF:
     """Exporta os valores atuais dos campos de um PDF para um arquivo FDF (o formato nativo
     do Acrobat para dados de formulário) — útil para reaproveitar os mesmos dados em outra
     cópia do mesmo formulário. Nomes hierárquicos ("cliente.nome") viram campos aninhados
@@ -677,7 +677,7 @@ def _parse_fdf(data: bytes) -> dict[str, str]:
     return values
 
 
-class ImportFormDataFDF(PDFOperation):
+class ImportFormDataFDF:
     """Importa valores de campos a partir de um arquivo FDF e preenche o PDF.
 
     Entende os FDFs gravados pelo Acrobat e por `ExportFormDataFDF`: valores de texto
@@ -708,7 +708,7 @@ def _qualified_name(widget) -> str:
     return ".".join(parts)
 
 
-class FlattenFormFields(PDFOperation):
+class FlattenFormFields:
     """Achata os campos de formulário de um PDF: grava o valor atual de cada campo
     preenchido como conteúdo estático da página e remove o widget interativo — um "Fill &
     Sign" simplificado, para garantir que os valores não sejam alterados depois de

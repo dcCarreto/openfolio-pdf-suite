@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pypdf import PdfWriter
 from pypdf.generic import BooleanObject, DictionaryObject, NameObject, TextStringObject
 
-from .base import READ, PDFOperation, open_reader, write_pdf
+from .base import READ, open_reader, write_pdf
 from .messages import Message
 
 
@@ -84,7 +84,7 @@ def _fields(acroform):
             yield field_obj
 
 
-class CheckAccessibility(PDFOperation):
+class CheckAccessibility:
     """Verifica um subconjunto dos requisitos de acessibilidade (PDF/UA): idioma
     declarado, título do documento (e exibido na barra de título), árvore de estrutura
     presente, texto alternativo em toda figura tagueada (inclusive tags próprias mapeadas
@@ -159,7 +159,7 @@ class CheckAccessibility(PDFOperation):
         return AccessibilityReport(is_compliant=not issues, issues=issues)
 
 
-class FixBasicAccessibilityIssues(PDFOperation):
+class FixBasicAccessibilityIssues:
     """Ajusta os itens do checador de acessibilidade que são simples metadados ou
     preferências, sem qualquer risco de corromper conteúdo: idioma e título do documento,
     `/ViewerPreferences/DisplayDocTitle` (para o título aparecer na barra de título do

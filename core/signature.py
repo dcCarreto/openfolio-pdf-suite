@@ -35,7 +35,7 @@ from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.validation import validate_pdf_signature
 from pyhanko.sign.validation.status import SignatureCoverageLevel
 
-from .base import PDFOperation, atomic_output, open_reader, require_valid_page_index
+from .base import atomic_output, open_reader, require_valid_page_index
 from .geometry import PageGeometry, intersect_rects, normalize_rect
 
 _STAMP_WIDTH = 175
@@ -139,7 +139,7 @@ def _load_test_signer(common_name: str, email: str, tmp_dir: str):
     return signer
 
 
-class SignDocument(PDFOperation):
+class SignDocument:
     """Assina um PDF: selo visível + assinatura criptográfica (CMS/PKCS#7).
 
     O arquivo assinado é gravado como atualização incremental do original (o que preserva
@@ -265,7 +265,7 @@ def _common_name(name) -> str:
     return str(native.get("common_name") or "") or name.human_friendly
 
 
-class DescribeSignatures(PDFOperation):
+class DescribeSignatures:
     """Lista as assinaturas de um PDF com o resultado completo da verificação: integridade
     do trecho assinado, validade criptográfica, alterações feitas depois da assinatura e
     confiança no certificado.

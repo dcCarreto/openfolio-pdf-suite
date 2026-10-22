@@ -6,7 +6,7 @@ from typing import Any
 from pypdf import PdfReader, PdfWriter
 from pypdf.constants import UserAccessPermissions as _Perm
 
-from .base import PDFOperation, open_reader, write_pdf
+from .base import open_reader, write_pdf
 
 
 @dataclass
@@ -45,7 +45,7 @@ class PDFPermissions:
         return flag
 
 
-class ProtectPDF(PDFOperation):
+class ProtectPDF:
     """Protege um PDF com senha e, opcionalmente, restringe o que pode ser feito com ele.
 
     `owner_password` é a "senha de permissões" do PDF: quem só tem `password` (a senha de
@@ -75,7 +75,7 @@ class ProtectPDF(PDFOperation):
         write_pdf(writer, output_path)
 
 
-class UnlockPDF(PDFOperation):
+class UnlockPDF:
     """Remove a senha de um PDF protegido — tanto a de abertura quanto as restrições de
     uso: num PDF que abre sem senha mas restringe alterações, informe a senha de
     permissões (proprietário)."""

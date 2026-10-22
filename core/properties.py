@@ -11,7 +11,7 @@ from pypdf.constants import UserAccessPermissions
 from pypdf.generic import DictionaryObject, StreamObject
 
 from .annotations import _object_key
-from .base import READ, PDFOperation, open_reader
+from .base import READ, open_reader
 from .messages import Message
 from .metadata import ReadMetadata
 from .pdfa import _declared_identification
@@ -225,7 +225,7 @@ def _visible_size(page) -> tuple[float, float]:
     return (height, width) if (page.rotation or 0) % 180 else (width, height)
 
 
-class ReadDocumentProperties(PDFOperation):
+class ReadDocumentProperties:
     def run(self, input_path: str) -> DocumentProperties:
         reader = open_reader(input_path, purpose=READ)
         catalog = reader.root_object

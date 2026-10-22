@@ -10,7 +10,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .base import PDFOperation
 from .progress import OperationCancelled, Progress, ensure_progress
 
 # operação(entrada, saída, progresso): o progresso só serve para checar o cancelamento.
@@ -32,7 +31,7 @@ def pdfs_in_folder(folder: str) -> list[str]:
     )
 
 
-class BatchProcess(PDFOperation):
+class BatchProcess:
     def run(
         self,
         input_paths: list[str],

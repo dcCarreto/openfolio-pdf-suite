@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pypdf import PdfWriter
 from reportlab.lib.utils import ImageReader
 
-from .base import PDFOperation, open_reader, require_valid_page_index, write_pdf
+from .base import open_reader, require_valid_page_index, write_pdf
 from .fonts import SANS, register_fonts, text_width
 from .geometry import PageGeometry
 from .overlay import materialize_inherited_attributes, visual_overlay
@@ -60,7 +60,7 @@ def _draw_item(canvas, geometry: PageGeometry, item: FillItem) -> None:
     canvas.drawString(left, bottom + (height - size * 0.7) / 2, item.text)
 
 
-class FillAndSign(PDFOperation):
+class FillAndSign:
     def run(self, input_path: str, output_path: str, items: list[FillItem]) -> None:
         reader = open_reader(input_path)
         for item in items:

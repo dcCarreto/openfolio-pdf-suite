@@ -1,11 +1,11 @@
 """Mesclagem de múltiplos arquivos PDF em um único documento."""
 
-from .base import PDFOperation, open_reader, write_pdf
+from .base import open_reader, write_pdf
 from .document import pages_writer
 from .progress import Progress, ensure_progress
 
 
-class MergePDF(PDFOperation):
+class MergePDF:
     """Mescla uma lista de arquivos PDF em um único arquivo de saída.
 
     Marcadores, links e campos de formulário de cada arquivo vão junto; metadados, idioma

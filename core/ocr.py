@@ -34,7 +34,7 @@ import pypdfium2 as pdfium
 import pytesseract
 from pypdf import PdfWriter
 
-from .base import PDFOperation, open_pdfium, open_reader, write_pdf
+from .base import open_pdfium, open_reader, write_pdf
 from .fonts import SANS, register_fonts, text_width
 from .geometry import PageGeometry
 from .overlay import materialize_inherited_attributes, visual_overlay
@@ -124,7 +124,7 @@ def _detect_rotation(image) -> int:
     return rotate if rotate in (0, 90, 180, 270) else 0
 
 
-class OCRDocument(PDFOperation):
+class OCRDocument:
     """Adiciona uma camada de texto invisível e pesquisável sobre páginas escaneadas de um PDF."""
 
     def run(

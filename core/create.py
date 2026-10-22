@@ -2,10 +2,10 @@
 
 from pypdf import PdfWriter
 
-from .base import PDFOperation, write_pdf
+from .base import write_pdf
 
 
-class CreateBlankPDF(PDFOperation):
+class CreateBlankPDF:
     """Cria um novo PDF com uma ou mais páginas em branco."""
 
     def run(

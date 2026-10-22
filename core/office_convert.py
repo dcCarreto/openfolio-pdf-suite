@@ -18,7 +18,7 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from .base import PDFOperation, atomic_output
+from .base import atomic_output
 from .fonts import SANS, SANS_BOLD, register_fonts
 from .messages import Message
 from .progress import Progress, ensure_progress
@@ -33,7 +33,7 @@ class OfficeConversionResult:
     warnings: list[Message] = field(default_factory=list)
 
 
-class ConvertOfficeToPDF(PDFOperation):
+class ConvertOfficeToPDF:
     """Converte um documento do Word, Excel ou PowerPoint (.docx, .xlsx, .pptx) para PDF."""
 
     def run(self, input_path: str, output_path: str, progress: Progress | None = None) -> OfficeConversionResult:

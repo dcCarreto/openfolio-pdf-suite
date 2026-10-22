@@ -35,7 +35,7 @@ import pypdfium2 as pdfium
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject, StreamObject
 
-from .base import EXTRACT, PDFOperation, atomic_output, open_pdfium, open_reader, require_valid_page_index
+from .base import EXTRACT, atomic_output, open_pdfium, open_reader, require_valid_page_index
 from .geometry import PageGeometry, Rect
 from .messages import Message
 from .progress import PDFIUM_LOCK, Progress, ensure_progress
@@ -99,7 +99,7 @@ class RedactionVerificationError(RuntimeError):
     """A conferência pós-redação encontrou conteúdo que deveria ter sido apagado."""
 
 
-class FindSensitiveData(PDFOperation):
+class FindSensitiveData:
     """Busca padrões de dado sensível (CPF, CNPJ, e-mail, telefone, cartão de crédito, ou
     uma expressão regular à parte) no texto do PDF e devolve um `RedactionRect` por
     ocorrência — para revisão do usuário antes de virar redação de verdade.
@@ -222,7 +222,7 @@ def _union_of_char_boxes(boxes) -> Rect | None:
     )
 
 
-class RedactDocument(PDFOperation):
+class RedactDocument:
     """Remove definitivamente o conteúdo das áreas marcadas, achatando a página em imagem
     (ver o docstring do módulo). Devolve quantas páginas foram redigidas.
 
@@ -695,7 +695,7 @@ def find_residual_risks(path: str, *, check_metadata: bool = True) -> list[str]:
     return sorted(problems)
 
 
-class SanitizeDocument(PDFOperation):
+class SanitizeDocument:
     """Remove metadados, JavaScript, ações perigosas, anexos e (opcionalmente) anotações de
     um PDF, e devolve um `SanitizeReport` com o que foi removido (ver o docstring do módulo)."""
 

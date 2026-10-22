@@ -3,13 +3,13 @@
 from pypdf import PdfWriter
 from reportlab.lib.colors import Color
 
-from .base import PDFOperation, open_reader, write_pdf
+from .base import open_reader, write_pdf
 from .fonts import SANS_BOLD, register_fonts
 from .geometry import PageGeometry
 from .overlay import materialize_inherited_attributes, visual_overlay
 
 
-class AddWatermark(PDFOperation):
+class AddWatermark:
     """Adiciona uma marca d'água de texto sobre todas as páginas de um PDF, centralizada e
     girada em relação à página como ela aparece na tela (também em páginas com `/Rotate`)."""
 

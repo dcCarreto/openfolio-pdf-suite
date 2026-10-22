@@ -13,13 +13,6 @@ from pypdf.constants import UserAccessPermissions
 from .messages import Message
 
 
-class PDFOperation:
-    """Interface base para operações sobre arquivos PDF."""
-
-    def run(self, *args, **kwargs):
-        raise NotImplementedError
-
-
 class EncryptedPDFError(ValueError):
     """O PDF está protegido e não pode ser usado pela operação pedida."""
 

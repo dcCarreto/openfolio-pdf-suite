@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pypdf import PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject
 
-from .base import READ, PDFOperation, open_reader, write_pdf
+from .base import READ, open_reader, write_pdf
 from .messages import Message
 
 
@@ -17,7 +17,7 @@ class LayerInfo:
     visible: bool
 
 
-class ListLayers(PDFOperation):
+class ListLayers:
     """Lista as camadas (OCGs) de um PDF e se cada uma está visível por padrão. Um PDF sem
     camadas devolve uma lista vazia (não é um erro — a maioria dos PDFs não usa OCG)."""
 
@@ -52,7 +52,7 @@ class ListLayers(PDFOperation):
         return layers
 
 
-class SetLayerVisibility(PDFOperation):
+class SetLayerVisibility:
     """Define a visibilidade padrão de uma camada (OCG) de um PDF — move a referência da
     camada entre as listas `/ON` e `/OFF` da configuração padrão de conteúdo opcional
     (`/OCProperties/D`), a mesma preferência que a maioria dos leitores respeita ao abrir o

@@ -7,11 +7,11 @@ from PIL import Image, ImageOps
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 
-from .base import READ, PDFOperation, atomic_output, open_pdfium, open_reader
+from .base import READ, atomic_output, open_pdfium, open_reader
 from .progress import PDFIUM_LOCK, Progress, ensure_progress
 
 
-class ConvertToImages(PDFOperation):
+class ConvertToImages:
     """Converte páginas de um PDF em imagens."""
 
     def run(
@@ -54,7 +54,7 @@ _MM = 72 / 25.4
 _EXIF_ORIENTATION = 0x0112
 
 
-class ConvertFromImages(PDFOperation):
+class ConvertFromImages:
     """Converte um conjunto de imagens em um PDF, uma imagem por página.
 
     - `page_size`: "A4", "Letter", "Legal" ou "fit" (página do tamanho da imagem a `dpi`

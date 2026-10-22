@@ -5,7 +5,7 @@ from typing import Any
 
 from pypdf import PdfWriter
 
-from .base import READ, PDFOperation, open_reader, write_pdf
+from .base import READ, open_reader, write_pdf
 
 # Campos editáveis: chave usada aqui -> chave do dicionário Info.
 _FIELDS = {
@@ -45,7 +45,7 @@ def _pdf_date(moment: datetime.datetime) -> str:
     return moment.strftime("D:%Y%m%d%H%M%S") + f"{sign}{minutes // 60:02d}'{minutes % 60:02d}'"
 
 
-class ReadMetadata(PDFOperation):
+class ReadMetadata:
     """Lê os metadados de um PDF: os campos editáveis (texto) e as datas de criação e de
     modificação (`datetime`, ou None se o PDF não as tiver)."""
 
@@ -58,7 +58,7 @@ class ReadMetadata(PDFOperation):
         return result
 
 
-class SetMetadata(PDFOperation):
+class SetMetadata:
     """Atualiza os metadados de um PDF.
 
     Campos não informados (None) preservam o valor já existente no documento;

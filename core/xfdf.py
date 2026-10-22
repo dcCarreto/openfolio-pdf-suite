@@ -37,7 +37,7 @@ from .annotations import (
     comment_annotations,
     remove_page_annotations,
 )
-from .base import READ, PDFOperation, atomic_output, open_reader, replace_object, write_pdf
+from .base import READ, atomic_output, open_reader, replace_object, write_pdf
 from .fonts import SANS, SANS_BOLD, register_fonts, wrap_text
 from .messages import Message
 
@@ -145,7 +145,7 @@ def _element(page_index: int, annotation, names: dict) -> ElementTree.Element:
     return element
 
 
-class ExportAnnotationsXFDF(PDFOperation):
+class ExportAnnotationsXFDF:
     """Grava os comentários do PDF num arquivo XFDF. Devolve (exportados, ignorados): os
     ignorados são comentários de outros tipos (anexo, som, legenda...)."""
 
@@ -352,7 +352,7 @@ def _read_xfdf(xfdf_path: str):
     return list(annots) if annots is not None else []
 
 
-class ImportAnnotationsXFDF(PDFOperation):
+class ImportAnnotationsXFDF:
     """Acrescenta ao PDF os comentários de um arquivo XFDF. Um comentário com o mesmo nome
     (`name`/`/NM`) de outro que já está no documento o substitui, então importar de novo
     o XFDF atualizado de um revisor não duplica nada. Devolve (importados, ignorados): os

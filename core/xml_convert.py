@@ -11,14 +11,14 @@ import xml.dom.minidom
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen import canvas
 
-from .base import PDFOperation, atomic_output
+from .base import atomic_output
 from .fonts import MONO, register_fonts, text_width
 
 _MARGIN = 36
 _CONTINUATION_INDENT = "    "
 
 
-class ConvertXMLToPDF(PDFOperation):
+class ConvertXMLToPDF:
     """Converte um arquivo XML para PDF, imprimindo o conteúdo indentado como texto."""
 
     def run(self, input_path: str, output_path: str, font_size: int = 8, landscape_pages: bool = False) -> None:

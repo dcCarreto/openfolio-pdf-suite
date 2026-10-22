@@ -7,7 +7,7 @@ from pypdf import PdfWriter
 from pypdf.annotations import Link
 from pypdf.generic import ArrayObject, NameObject
 
-from .base import READ, PDFOperation, open_reader, require_valid_page_index, write_pdf
+from .base import READ, open_reader, require_valid_page_index, write_pdf
 from .messages import Message
 
 _SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
@@ -26,7 +26,7 @@ def normalize_url(url: str) -> str:
     return "https://" + url.lstrip("/")
 
 
-class AddLink(PDFOperation):
+class AddLink:
     """Adiciona uma anotação de link numa área de uma página, apontando para uma URL
     externa ou para outra página do mesmo documento."""
 
@@ -112,7 +112,7 @@ def _describe_link_target(reader, annotation) -> str:
     return Message("sem destino")
 
 
-class ListLinks(PDFOperation):
+class ListLinks:
     """Lista as anotações de link existentes num PDF, com o índice usado por `RemoveLink`
     para identificar qual delas remover."""
 
@@ -139,7 +139,7 @@ class ListLinks(PDFOperation):
         return result
 
 
-class RemoveLink(PDFOperation):
+class RemoveLink:
     """Remove uma anotação de link de uma página pelo índice devolvido por `ListLinks`
     (o índice é relativo aos links daquela página, não a todos os links do documento)."""
 

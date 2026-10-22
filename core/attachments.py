@@ -10,7 +10,7 @@ from typing import cast
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import DictionaryObject, NameObject
 
-from .base import READ, PDFOperation, atomic_output, open_reader, write_pdf
+from .base import READ, atomic_output, open_reader, write_pdf
 from .document import build_name_tree, iter_name_tree, unique_name
 from .messages import Message
 
@@ -21,7 +21,7 @@ class AttachmentInfo:
     size: int
 
 
-class ListAttachments(PDFOperation):
+class ListAttachments:
     """Lista os anexos embutidos num PDF, com nome e tamanho em bytes."""
 
     def run(self, input_path: str) -> list[AttachmentInfo]:
@@ -32,7 +32,7 @@ class ListAttachments(PDFOperation):
         ]
 
 
-class AddAttachment(PDFOperation):
+class AddAttachment:
     """Embute um arquivo local num PDF. Se já houver um anexo com o mesmo nome, o novo
     ganha um sufixo (" (2)"...) — nomes repetidos deixariam a árvore de anexos ambígua.
     Devolve o nome com que o arquivo foi anexado."""
@@ -91,7 +91,7 @@ def _unique_path(directory: Path, filename: str, used: set[str]) -> Path:
     return directory / candidate
 
 
-class ExtractAttachments(PDFOperation):
+class ExtractAttachments:
     """Extrai todos os anexos embutidos de um PDF para uma pasta local.
 
     Os nomes passam por `safe_attachment_filename`; anexos com o mesmo nome (ou com o nome
@@ -117,7 +117,7 @@ class ExtractAttachments(PDFOperation):
         return output_paths
 
 
-class SaveAttachment(PDFOperation):
+class SaveAttachment:
     """Grava um anexo (o primeiro com esse nome) em `output_path`, escolhido pelo usuário
     num diálogo — usado pelo painel de anexos do visualizador."""
 
@@ -144,7 +144,7 @@ def _filespec_names(filespec) -> set[str]:
     return {str(spec[key]) for key in ("/UF", "/F") if isinstance(spec, DictionaryObject) and key in spec}
 
 
-class RemoveAttachment(PDFOperation):
+class RemoveAttachment:
     """Remove um anexo embutido de um PDF pelo nome (ver `ListAttachments`).
 
     A árvore de anexos pode ter vários níveis (`/Kids`), comum em PDFs com muitos anexos;

@@ -12,7 +12,7 @@ from typing import NamedTuple
 import pypdfium2 as pdfium
 from PIL import Image, ImageChops, ImageStat
 
-from .base import EXTRACT, READ, PDFOperation, open_pdfium, open_reader
+from .base import EXTRACT, READ, open_pdfium, open_reader
 from .progress import PDFIUM_LOCK, Progress, ensure_progress
 
 _DIFF_SCALE = 1.5
@@ -27,7 +27,7 @@ class PageTextDiff:
     diff_lines: list[str] = field(default_factory=list)
 
 
-class CompareText(PDFOperation):
+class CompareText:
     """Compara o texto de duas versões de um PDF, página a página, usando `difflib` (a
     mesma lógica de diff de texto da biblioteca padrão do Python, sem reinventar nada)."""
 
@@ -217,7 +217,7 @@ def _without_page_furniture(
     ]
 
 
-class CompareDocuments(PDFOperation):
+class CompareDocuments:
     """Compara o texto do documento inteiro, palavra a palavra, e diz onde fica cada
     diferença nas duas versões.
 
@@ -320,7 +320,7 @@ def _highlight_diff(image_a: Image.Image, image_b: Image.Image) -> tuple[Image.I
     return highlighted, changed_fraction
 
 
-class CompareVisual(PDFOperation):
+class CompareVisual:
     """Gera uma imagem por página destacando em vermelho as diferenças visuais entre duas
     versões de um PDF (renderizadas via `pypdfium2`, já usado em `core/convert.py` e
     `core/redaction.py`). Páginas que só existem numa das versões, ou com tamanhos

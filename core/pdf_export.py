@@ -16,7 +16,7 @@ não tem texto nenhum (as operações devolvem essas páginas para a tela avisar
 import bisect
 import re
 
-from .base import EXTRACT, PDFOperation, atomic_output, open_reader
+from .base import EXTRACT, atomic_output, open_reader
 from .extract_text import page_text
 from .progress import Progress, ensure_progress
 
@@ -90,7 +90,7 @@ def cell_value(text: str):
     return text
 
 
-class ConvertPDFToWord(PDFOperation):
+class ConvertPDFToWord:
     def run(self, input_path: str, output_path: str, progress: Progress | None = None) -> list[int]:
         """Grava o .docx e devolve as páginas (a partir de 0) sem texto."""
         from docx import Document
@@ -112,7 +112,7 @@ class ConvertPDFToWord(PDFOperation):
         return empty
 
 
-class ConvertPDFToExcel(PDFOperation):
+class ConvertPDFToExcel:
     def run(self, input_path: str, output_path: str, progress: Progress | None = None) -> list[int]:
         """Grava o .xlsx (uma planilha por página) e devolve as páginas sem texto."""
         from openpyxl import Workbook

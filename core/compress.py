@@ -39,7 +39,7 @@ from pypdf.generic import (
     StreamObject,
 )
 
-from .base import PDFOperation, atomic_output, open_reader, replace_object
+from .base import atomic_output, open_reader, replace_object
 from .progress import Progress, ensure_progress
 
 LEVELS = ("light", "medium", "strong")
@@ -68,7 +68,7 @@ class CompressionResult:
         return 100 * (1 - self.compressed_size / self.original_size)
 
 
-class CompressPDF(PDFOperation):
+class CompressPDF:
     """Reduz o tamanho de um PDF (ver os níveis no docstring do módulo). Trabalha sobre uma
     cópia completa do documento: marcadores, formulário, anexos e metadados continuam lá."""
 

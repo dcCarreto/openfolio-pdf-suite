@@ -44,7 +44,7 @@ from pypdf.generic import (
 )
 from pypdf.xmp import DC_NAMESPACE, PDF_NAMESPACE, PDFAID_NAMESPACE, RDF_NAMESPACE, XMP_NAMESPACE, XmpInformation
 
-from .base import PDFOperation, add_object, atomic_output, open_reader
+from .base import add_object, atomic_output, open_reader
 from .messages import Message
 from .progress import Progress, ensure_progress
 
@@ -94,7 +94,7 @@ def _check_part(part: int, conformance: str) -> str:
     return conformance
 
 
-class ConvertToPDFA(PDFOperation):
+class ConvertToPDFA:
     """Converte para PDF/A-`part` nível `conformance` (ver o docstring do módulo)."""
 
     def run(
@@ -125,7 +125,7 @@ class ConvertToPDFA(PDFOperation):
         return PDFAConversionResult(written=True, fixed=fixed)
 
 
-class ValidatePDFA(PDFOperation):
+class ValidatePDFA:
     """Verifica os requisitos de PDF/A que esta ferramenta cobre (ver o docstring do
     módulo)."""
 

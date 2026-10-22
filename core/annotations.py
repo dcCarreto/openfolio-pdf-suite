@@ -27,7 +27,7 @@ from pypdf.generic import (
 
 from reportlab.pdfgen import canvas as rl_canvas
 
-from .base import READ, PDFOperation, add_object, open_reader, require_valid_page_index, write_pdf
+from .base import READ, add_object, open_reader, require_valid_page_index, write_pdf
 from .fonts import SANS_BOLD, register_fonts, text_width
 from .geometry import normalize_rect
 from .messages import Message
@@ -309,7 +309,7 @@ def _build_annotation(writer: PdfWriter, spec: AnnotationSpec):
     raise ValueError(f"Tipo de anotação desconhecido: {spec.kind}")
 
 
-class AddAnnotations(PDFOperation):
+class AddAnnotations:
     """Grava uma lista de anotações pendentes em um PDF. Cada uma recebe autor (`/T`; por
     padrão o usuário do sistema) e data (`/M`), que os leitores mostram na lista de
     comentários."""
@@ -400,7 +400,7 @@ def _comment_at(writer: PdfWriter, page_index: int, index: int):
     raise ValueError(Message("A anotação escolhida não existe mais no documento."))
 
 
-class ListAnnotations(PDFOperation):
+class ListAnnotations:
     """Os comentários já existentes no PDF, página a página, na ordem de /Annots."""
 
     def run(self, input_path: str) -> list[AnnotationInfo]:
@@ -424,7 +424,7 @@ class ListAnnotations(PDFOperation):
         return result
 
 
-class UpdateAnnotation(PDFOperation):
+class UpdateAnnotation:
     """Troca o texto e o autor de um comentário existente e atualiza a data de alteração.
     O texto formatado (/RC) sai junto: o Acrobat o mostra no lugar de /Contents, e ele
     continuaria com o texto antigo."""
@@ -442,7 +442,7 @@ class UpdateAnnotation(PDFOperation):
         write_pdf(writer, output_path)
 
 
-class RemoveAnnotations(PDFOperation):
+class RemoveAnnotations:
     """Remove comentários existentes, dados como (página, posição em /Annots), com os
     popups e as respostas deles. Devolve quantas anotações saíram."""
 
@@ -471,7 +471,7 @@ def _describe_annotation_color(color_array) -> str:
     return ""
 
 
-class ExportAnnotationsCSV(PDFOperation):
+class ExportAnnotationsCSV:
     """Exporta os comentários/anotações já existentes num PDF para CSV (ou Excel, se o
     arquivo terminar em .xlsx — ver `core/tabular.py`): página (a partir de 1), tipo, autor,
     texto e cor. Ignora links, widgets de formulário e popups de anotação (não são

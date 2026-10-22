@@ -3,7 +3,7 @@
 from pypdf import PdfWriter
 from pypdf.generic import ArrayObject, ContentStream, FloatObject, NameObject, RectangleObject
 
-from .base import PDFOperation, open_reader, write_pdf
+from .base import open_reader, write_pdf
 from .geometry import PageGeometry, intersect_rects, normalize_rect
 from .messages import Message
 from .overlay import materialize_inherited_attributes
@@ -11,7 +11,7 @@ from .overlay import materialize_inherited_attributes
 _OTHER_BOXES = ("/BleedBox", "/TrimBox", "/ArtBox")
 
 
-class CropPages(PDFOperation):
+class CropPages:
     """Corta uma margem de cada lado das páginas de um PDF.
 
     As margens valem para a página como ela aparece na tela: "topo" é o topo que o usuário
@@ -45,7 +45,7 @@ class CropPages(PDFOperation):
         write_pdf(writer, output_path)
 
 
-class ScalePages(PDFOperation):
+class ScalePages:
     """Redimensiona as páginas de um PDF para um novo tamanho, sem distorcer o conteúdo.
 
     O tamanho pedido é o da página como aparece na tela (um A4 em pé continua em pé mesmo

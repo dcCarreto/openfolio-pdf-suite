@@ -9,11 +9,11 @@ from PIL import Image, ImageOps
 from pypdf import PdfWriter
 from pypdf.generic import DictionaryObject, NameObject, NumberObject, StreamObject
 
-from .base import EXTRACT, READ, PDFOperation, add_object, open_reader, replace_object, require_valid_page_index, write_pdf
+from .base import EXTRACT, READ, add_object, open_reader, replace_object, require_valid_page_index, write_pdf
 from .messages import Message
 
 
-class ExtractImages(PDFOperation):
+class ExtractImages:
     """Extrai as imagens embutidas nas páginas de um PDF."""
 
     def run(self, input_path: str, output_dir: str) -> list[str]:
@@ -47,7 +47,7 @@ class EmbeddedImageInfo:
     height: int
 
 
-class ListEmbeddedImages(PDFOperation):
+class ListEmbeddedImages:
     """Lista as imagens embutidas em cada página de um PDF, com o índice usado por
     `ReplaceEmbeddedImage` para identificar qual delas substituir."""
 
@@ -77,7 +77,7 @@ class ReplaceImageResult:
     other_pages: list[int]
 
 
-class ReplaceEmbeddedImage(PDFOperation):
+class ReplaceEmbeddedImage:
     """Substitui uma imagem já embutida num PDF por outra, na mesma posição e no mesmo
     tamanho na página.
 

@@ -4,10 +4,10 @@ from dataclasses import dataclass
 
 from pypdf import PdfWriter
 
-from .base import READ, PDFOperation, open_reader, require_valid_page_index, write_pdf
+from .base import READ, open_reader, require_valid_page_index, write_pdf
 
 
-class AddBookmarks(PDFOperation):
+class AddBookmarks:
     """Adiciona marcadores de navegação (outline) a um PDF, depois dos que ele já tem."""
 
     def run(self, input_path: str, output_path: str, bookmarks: list[tuple[str, int]]) -> None:
@@ -28,7 +28,7 @@ class OutlineItem:
     page_index: int | None  # None se o destino não aponta para uma página deste documento
 
 
-class ListOutline(PDFOperation):
+class ListOutline:
     """O sumário (marcadores) do PDF em ordem, com o nível de cada item e a página de
     destino — para o painel de marcadores do visualizador."""
 

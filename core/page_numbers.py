@@ -8,7 +8,7 @@ import re
 
 from pypdf import PdfWriter
 
-from .base import PDFOperation, open_reader, write_pdf
+from .base import open_reader, write_pdf
 from .fonts import SANS, register_fonts
 from .geometry import PageGeometry
 from .messages import Message
@@ -43,7 +43,7 @@ def _stamp_text(input_path: str, output_path: str, label_for_page, position_for_
     write_pdf(writer, output_path)
 
 
-class AddPageNumbers(PDFOperation):
+class AddPageNumbers:
     """Adiciona números de página no rodapé de um PDF."""
 
     def run(
@@ -71,7 +71,7 @@ _BATES_POSITIONS = {
 }
 
 
-class AddBatesNumbers(PDFOperation):
+class AddBatesNumbers:
     """Adiciona numeração Bates a um PDF: prefixo + sequência global com zeros à esquerda
     (ex.: "CASO-000001"), usada em processos jurídicos para referenciar páginas de forma
     única entre vários documentos — diferente da numeração de página comum, que reinicia
@@ -146,7 +146,7 @@ def _fill_placeholders(text: str, page: int, pages: int) -> str:
     return _PLACEHOLDER_RE.sub(replace, text)
 
 
-class AddHeaderFooter(PDFOperation):
+class AddHeaderFooter:
     """Adiciona um texto livre de cabeçalho ou rodapé a todas as páginas de um PDF.
 
     Suporta os marcadores `{page}` (número da página) e `{pages}` (total de páginas) no

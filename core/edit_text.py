@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 import pypdfium2 as pdfium
 from pypdf import PdfWriter
 
-from .base import PDFOperation, open_reader, require_valid_page_index, write_pdf
+from .base import open_reader, require_valid_page_index, write_pdf
 from .fonts import MONO, SANS, SANS_BOLD, register_fonts, wrap_text
 from .geometry import Rect
 from .progress import PDFIUM_LOCK, Progress, ensure_progress
@@ -81,7 +81,7 @@ class EditTextResult:
     clipped: list[int] = field(default_factory=list)
 
 
-class EditTextArea(PDFOperation):
+class EditTextArea:
     """Cobre as áreas marcadas e desenha o texto novo de cada uma por cima, achatando as
     páginas afetadas em imagem (mesma técnica de `core/redaction.RedactDocument`)."""
 

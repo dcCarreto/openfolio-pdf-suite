@@ -11,7 +11,7 @@ from collections.abc import Iterable
 
 from pypdf import PdfReader, PdfWriter
 
-from .base import PDFOperation, open_reader, require_valid_page_index, write_pdf
+from .base import open_reader, require_valid_page_index, write_pdf
 from .document import pages_writer
 from .messages import Message
 
@@ -20,7 +20,7 @@ def _page_list(pages: Iterable[int]) -> str:
     return ", ".join(str(page + 1) for page in sorted(pages))
 
 
-class RotatePages(PDFOperation):
+class RotatePages:
     """Rotaciona páginas de um PDF (no sentido horário, em múltiplos de 90 graus)."""
 
     def run(
@@ -45,7 +45,7 @@ class RotatePages(PDFOperation):
         write_pdf(writer, output_path)
 
 
-class ReorderPages(PDFOperation):
+class ReorderPages:
     """Reordena as páginas de um PDF. `order` precisa citar cada página exatamente uma vez:
     uma lista incompleta descartaria páginas sem aviso."""
 
@@ -71,7 +71,7 @@ class ReorderPages(PDFOperation):
         write_pdf(pages_writer([(reader, order)]), output_path)
 
 
-class RemovePages(PDFOperation):
+class RemovePages:
     """Remove páginas de um PDF. Marcadores, links e campos de formulário que apontavam
     para as páginas removidas saem junto, e o conteúdo delas não fica no arquivo."""
 
@@ -88,7 +88,7 @@ class RemovePages(PDFOperation):
         write_pdf(pages_writer([(reader, kept)]), output_path)
 
 
-class InsertPages(PDFOperation):
+class InsertPages:
     """Insere todas as páginas de outro PDF numa posição do documento."""
 
     def run(self, input_path: str, output_path: str, insert_path: str, at_index: int) -> None:
@@ -112,7 +112,7 @@ class InsertPages(PDFOperation):
         write_pdf(pages_writer(parts, properties_from=reader), output_path)
 
 
-class ReplacePages(PDFOperation):
+class ReplacePages:
     """Substitui um intervalo de páginas do documento pelas páginas de outro PDF.
     `start_index` é inclusivo e `end_index`, exclusivo."""
 
@@ -149,7 +149,7 @@ class ReplacePages(PDFOperation):
 _A4 = (595.0, 842.0)
 
 
-class ArrangePages(PDFOperation):
+class ArrangePages:
     """Monta o documento a partir da lista de páginas do editor de páginas, num passo só.
 
     Cada item de `layout` é (página de origem, giro): a página de origem conta a partir de

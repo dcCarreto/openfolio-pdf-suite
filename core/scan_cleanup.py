@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFilter
 from pypdf import PdfReader, PdfWriter, Transformation
 from pypdf.generic import RectangleObject
 
-from .base import PDFOperation, open_pdfium, open_reader, write_pdf
+from .base import open_pdfium, open_reader, write_pdf
 from .crop import _clip_other_boxes
 from .document import pages_writer
 from .geometry import PageGeometry
@@ -46,7 +46,7 @@ class ScanCleanupResult:
     cropped: list[int] = field(default_factory=list)
 
 
-class CleanScannedPages(PDFOperation):
+class CleanScannedPages:
     def run(
         self,
         input_path: str,

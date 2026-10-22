@@ -1,6 +1,6 @@
 """Extração de texto de arquivos PDF."""
 
-from .base import EXTRACT, PDFOperation, atomic_output, open_reader
+from .base import EXTRACT, atomic_output, open_reader
 
 
 def page_text(page, layout: bool = False) -> str:
@@ -12,7 +12,7 @@ def page_text(page, layout: bool = False) -> str:
     return page.extract_text(extraction_mode="layout")
 
 
-class ExtractText(PDFOperation):
+class ExtractText:
     """Extrai todo o texto de um PDF para um arquivo .txt; com `layout`, cada linha mantém
     a posição do texto na página (colunas e tabelas continuam alinhadas)."""
 

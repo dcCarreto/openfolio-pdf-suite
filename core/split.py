@@ -8,11 +8,11 @@ original não são copiados para cada parte.
 import re
 from pathlib import Path
 
-from .base import PDFOperation, open_reader, write_pdf
+from .base import open_reader, write_pdf
 from .document import pages_writer
 
 
-class SplitPDF(PDFOperation):
+class SplitPDF:
     """Divide um PDF em partes de N páginas."""
 
     def run(
@@ -43,7 +43,7 @@ def _sanitize_filename(text: str) -> str:
     return safe[:60]
 
 
-class SplitByBookmarks(PDFOperation):
+class SplitByBookmarks:
     """Divide um PDF em um arquivo por marcador de nível superior do sumário (outline):
     cada arquivo vai da página do marcador até a página anterior ao próximo marcador de
     nível superior (ou até o fim do documento, no último). Marcadores aninhados (subtópicos)
