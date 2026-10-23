@@ -50,7 +50,7 @@ def _name():
 
 def _second_process(name, *args):
     return subprocess.Popen([sys.executable, "-c", _SECOND_PROCESS, name, *args],
-                            cwd=ROOT, stdout=subprocess.PIPE, text=True)
+                            cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 
 def _until(condition, app):
@@ -78,8 +78,11 @@ def test_the_running_instance_receives_only_the_existing_pdfs(app, make_pdf, tmp
 
     sender = _second_process(name, pdf, str(tmp_path / "notas.txt"), "--debug")
 
-    assert _until(lambda: received, app)
-    assert sender.communicate(timeout=30)[0].strip() == "True"
+    # Processa os eventos (o servidor aceita a conexão) até o segundo processo terminar, e
+    # só então lê a resposta dele: numa falha, ela diz se a conexão nem chegou a ser feita.
+    assert _until(lambda: sender.poll() is not None and received, app)
+    out, err = sender.communicate(timeout=30)
+    assert out.strip() == "True", err
     assert received == [[os.path.abspath(pdf)]]
 
 
