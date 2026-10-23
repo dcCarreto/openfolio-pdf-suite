@@ -23,7 +23,9 @@ def send_to_running_instance(paths: list[str], name: str = SERVER_NAME) -> bool:
     """Entrega `paths` à instância aberta. Devolve False se não houver nenhuma."""
     socket = QLocalSocket()
     socket.connectToServer(name)
-    if not socket.waitForConnected(1000):
+    # Sem instância aberta a conexão falha na hora; os 5 s só contam quando há uma ocupada,
+    # e esperar por ela é melhor que abrir um segundo app (com 1 s, um CI carregado desistia).
+    if not socket.waitForConnected(5000):
         return False
     if sys.platform == "win32":
         # Deixa a instância aberta trazer a janela nova para a frente: o Windows só permite
