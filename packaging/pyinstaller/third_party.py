@@ -97,12 +97,13 @@ def _msys2_owner(path: Path) -> Package | None:
 
 @functools.cache
 def _dpkg_index() -> dict[Path, str]:
-    """Cada biblioteca instalada pelo dpkg -> o nome do pacote (os caminhos resolvidos: com o
-    /usr unificado, a lista diz /lib e o arquivo está em /usr/lib)."""
+    """Cada biblioteca ou programa instalado pelo dpkg -> o nome do pacote (os caminhos
+    resolvidos: com o /usr unificado, a lista diz /lib e o arquivo está em /usr/lib). O
+    programa conta: o executável do Tesseract (/usr/bin/tesseract) vai junto no app."""
     index = {}
     for listing in (DPKG_DIR / "info").glob("*.list"):
         for line in listing.read_text(encoding="utf-8", errors="replace").splitlines():
-            if ".so" in line:
+            if ".so" in line or Path(line).parent.name == "bin":
                 index[Path(line).resolve()] = listing.stem.split(":")[0]
     return index
 
