@@ -69,9 +69,12 @@ def test_msys2_packages_give_the_license_texts_and_the_gpl_sources(tmp_path, mon
 def test_dpkg_packages_use_the_copyright_file_and_the_source_package(tmp_path, monkeypatch):
     library = _write(tmp_path / "usr/lib/libjbig.so.0")
     dpkg = tmp_path / "dpkg"
+    program = _write(tmp_path / "usr/bin/tesseract")  # o executável também vai no app
     _write(dpkg / "info" / "libjbig0.list", f"/.\n{library}\n")  # no Debian, libjbig0:amd64.list
+    _write(dpkg / "info" / "tesseract-ocr.list", f"/.\n{program}\n")
     _write(dpkg / "status", "Package: libjbig0\nStatus: install ok installed\nSource: jbigkit (2.1-6.1)\n"
                             "Version: 2.1-6.1build1\nDescription: JBIGkit\n continua aqui\n\n"
+                            "Package: tesseract-ocr\nVersion: 5.3.4-1build5\n\n"
                             "Package: zlib1g\nVersion: 1:1.3\n")
     doc = tmp_path / "doc"
     _write(doc / "libjbig0" / "copyright", "Files: *\nLicense: GPL-2+\n\nFiles: debian/*\nLicense: GPL-2+\n")
@@ -80,7 +83,7 @@ def test_dpkg_packages_use_the_copyright_file_and_the_source_package(tmp_path, m
     monkeypatch.setattr(sys, "platform", "linux")
 
     out = tmp_path / "third-party"
-    assert third_party.collect([str(library)], out) == []
+    assert third_party.collect([str(library), str(program)], out) == []
 
     assert ["libjbig0", "2.1-6.1build1", "GPL-2+"] in json.loads((out / "components.json").read_text(encoding="utf-8"))
     assert (out / "sources.txt").read_text(encoding="utf-8") == "jbigkit=2.1-6.1\n"
