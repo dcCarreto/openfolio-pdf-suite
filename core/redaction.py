@@ -4,115 +4,701 @@ Redação: pypdf não tem nenhuma função de redação pronta, e remover só o 
 um retângulo exigiria interpretar manualmente o content stream do PDF (matrizes de posição
 de texto) — um projeto grande por si só, com risco real de deixar dado "por baixo"
 recuperável, que é exatamente o tipo de falha que uma ferramenta de redação existe para
-evitar. A abordagem aqui é a comprovadamente segura (confirmada nesta sessão): renderiza a
-página inteira via pypdfium2, desenha os retângulos pretos por cima e substitui a página
-inteira por essa imagem achatada — não sobra texto nem vetor original para recuperar.
-Efeito colateral aceito: a página inteira perde a camada de texto pesquisável, não só a
-área marcada.
+evitar. A abordagem aqui é rasterizar (ver `core/rasterize.py`): a página marcada é
+renderizada como aparece na tela, as áreas são pintadas de preto **nos próprios pixels** e a
+página inteira vira só essa imagem — não sobra texto, vetor, nem pixel original da área
+marcada para recuperar. Depois de gravar, `_verify_redaction` confere o resultado (sem texto,
+áreas pretas tanto na imagem embutida quanto no render) antes de o arquivo ocupar o lugar da
+saída. Efeito colateral aceito: a página inteira perde a camada de texto pesquisável, não só
+a área marcada.
 
-Sanitizar: um PdfWriter novo (sem clone_from) já não carrega metadados, JavaScript nem
-anexos do documento original (eles vivem em `/Info` e `/Names`, no catálogo, que só existem
-no resultado se algo os adicionar de volta) — confirmado empiricamente nesta sessão com um
-PDF de teste contendo os três. Isso cobre JavaScript em nível de documento, mas não
-JavaScript embutido em ações de anotação (`/A` de um Link, ou `/AA` de um campo de
-formulário), que sobrevive à cópia normal da página quando `remove_annotations=False` — por
-isso essas ações são varridas anotação por anotação, à parte, para que a garantia "JavaScript
-é sempre removido" valha de verdade. Metadados e anotações/comentários (sem JS) são opcionais
-porque o usuário pode querer preservá-los.
+As áreas chegam no espaço do usuário do PDF (o mesmo de `/Rect` e do pdfium) e são
+convertidas com `core/geometry.py`, o que faz a redação funcionar também em páginas com
+`/Rotate` e CropBox deslocada.
+
+Sanitizar: um PdfWriter novo (sem clone_from) não leva nada do catálogo do documento
+original — metadados, XMP, JavaScript de documento, anexos, ações de abertura, formulário
+(inclusive XFA). O que vem junto com as páginas é varrido objeto por objeto (`_Sanitizer`):
+ações de JavaScript e ações que abrem arquivos/programas, enviam dados ou carregam conteúdo
+externo (em `/A`, `/AA` e encadeadas em `/Next`, de anotações, campos, páginas), anotações
+com arquivo anexado e multimídia/3D, arquivos embutidos em qualquer lugar e dados privados de
+aplicativos. O resultado também passa por uma verificação (`find_residual_risks`) antes de
+ser gravado no destino. Não remove conteúdo visível das páginas (texto branco, texto sob
+imagens, camadas ocultas continuam no content stream) — isso é papel da redação.
 """
 
-import io
+import re
+import unicodedata
 from dataclasses import dataclass
 
 import pypdfium2 as pdfium
 from pypdf import PdfReader, PdfWriter
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfgen import canvas as rl_canvas
+from pypdf.generic import ArrayObject, DictionaryObject, NameObject, StreamObject
 
-from .base import PDFOperation, open_reader
+from .base import EXTRACT, atomic_output, open_pdfium, open_reader, render_scale, require_valid_page_index
+from .geometry import PageGeometry, Rect
+from .messages import Message
+from .progress import PDFIUM_LOCK, Progress, ensure_progress
+from .rasterize import RASTER_SCALE, fill_visual_rects, image_page, render_visual_page, visible_visual_rects
 
-_REDACT_SCALE = 300 / 72  # mesma resolução usada em core/ocr.py
+_REDACT_SCALE = RASTER_SCALE
+_REDACTION_COLOR = (0, 0, 0)
+_DETECTION_PADDING = 1.0  # folga (pt) em volta de cada ocorrência: a suavização da fonte vaza
+_VERIFY_RENDER_SCALE = 2.0
+_VERIFY_MAX_LEVEL = 24  # tolerância de "preto" no render da verificação (0 = preto puro)
+
+# Padrões comuns de dado sensível para sugestão automática de redação. Todos priorizam
+# não deixar passar ocorrência real (a redação em si é sempre revisável/removível da lista
+# de pendentes antes de aplicar, então um falso positivo custa pouco; um falso negativo
+# custaria o dado vazando).
+_PATTERNS: dict[str, re.Pattern] = {
+    "cpf": re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b"),
+    "cnpj": re.compile(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b|\b\d{14}\b"),
+    "email": re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b"),
+    # DDI +55 opcional, DDD com ou sem parênteses e o 9 do celular seguido ou não de
+    # separador — "(19) 9.9999-9999", com ponto depois do 9, é comum em currículos.
+    "phone": re.compile(r"(?:\+?55[\s.-]?)?\(?\d{2}\)?[\s.-]?(?:9[\s.-]?)?\d{4}[\s.-]?\d{4}\b"),
+    "credit_card": re.compile(r"\b(?:\d[ -]?){13,19}\b"),
+}
+
+PATTERN_KINDS = tuple(_PATTERNS.keys())
+CUSTOM_PATTERN_KIND = "custom"
+TEXT_KIND = "text"  # texto comum buscado pelo usuário (A07)
+
+
+def _fold(text: str) -> str:
+    """Sem acento e sem diferença de maiúsculas, caractere por caractere: o resultado tem o
+    mesmo tamanho do original, então as posições encontradas nele valem no texto do pdfium."""
+    return "".join(unicodedata.normalize("NFD", char)[0].casefold()[0] for char in text)
+
+
+def _text_pattern(term: str) -> re.Pattern:
+    """Busca literal de `term` no texto dobrado por `_fold`; qualquer espaço do termo casa
+    com espaços ou quebra de linha (um nome pode começar numa linha e terminar na outra)."""
+    return re.compile(r"\s+".join(re.escape(_fold(word)) for word in term.split()))
 
 
 @dataclass
 class RedactionRect:
-    """Uma área marcada para redação, em pontos PDF (origem inferior-esquerda)."""
+    """Uma área marcada para redação, no espaço do usuário do PDF (o mesmo de `/Rect` e do
+    pdfium — sem `/Rotate` nem CropBox aplicados)."""
 
     page_index: int
     left: float
     bottom: float
     right: float
     top: float
+    kind: str = ""  # padrão que encontrou a área (ver PATTERN_KINDS); vazio = marcada à mão
+    text: str = ""  # trecho encontrado, para o usuário revisar antes de aplicar
+
+    def as_rect(self) -> Rect:
+        return (self.left, self.bottom, self.right, self.top)
 
 
-class RedactDocument(PDFOperation):
-    """Remove definitivamente o conteúdo das áreas marcadas, achatando a página em imagem."""
-
-    def run(self, input_path: str, output_path: str, rects: list[RedactionRect]) -> int:
-        rects_by_page: dict[int, list[RedactionRect]] = {}
-        for rect in rects:
-            rects_by_page.setdefault(rect.page_index, []).append(rect)
-
-        reader = open_reader(input_path)
-        pdfium_doc = pdfium.PdfDocument(input_path)
-        writer = PdfWriter()
-        pages_redacted = 0
-
-        for index, page in enumerate(reader.pages):
-            page_rects = rects_by_page.get(index)
-            if not page_rects:
-                writer.add_page(page)
-                continue
-
-            width = float(page.mediabox.width)
-            height = float(page.mediabox.height)
-            image = pdfium_doc[index].render(scale=_REDACT_SCALE).to_pil()
-
-            buffer = io.BytesIO()
-            c = rl_canvas.Canvas(buffer, pagesize=(width, height))
-            c.drawImage(ImageReader(image), 0, 0, width=width, height=height)
-            c.setFillColorRGB(0, 0, 0)
-            for rect in page_rects:
-                c.rect(rect.left, rect.bottom, rect.right - rect.left, rect.top - rect.bottom, fill=1, stroke=0)
-            c.showPage()
-            c.save()
-            buffer.seek(0)
-
-            writer.add_page(PdfReader(buffer).pages[0])
-            pages_redacted += 1
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
-        return pages_redacted
+class RedactionVerificationError(RuntimeError):
+    """A conferência pós-redação encontrou conteúdo que deveria ter sido apagado."""
 
 
-def _is_javascript_action(action) -> bool:
-    return action is not None and action.get_object().get("/S") == "/JavaScript"
+class FindSensitiveData:
+    """Busca padrões de dado sensível (CPF, CNPJ, e-mail, telefone, cartão de crédito, ou
+    uma expressão regular à parte) no texto do PDF e devolve um `RedactionRect` por
+    ocorrência — para revisão do usuário antes de virar redação de verdade.
 
-
-def _strip_annotation_javascript(annotation_ref) -> None:
-    """Remove ações de JavaScript de uma anotação, preservando o restante (link, aparência etc.).
-
-    `/A` dispara ao ativar a anotação (ex.: clicar num Link); `/AA` é o dicionário de "ações
-    adicionais" por evento (ex.: campos de formulário disparando JS em keystroke/format/
-    validate/calculate). Qualquer uma das duas pode carregar uma ação de Subtype /JavaScript.
+    Usa `pypdfium2` (já uma dependência do projeto, mesma biblioteca usada para renderizar
+    a página que a redação depois rasteriza) para mapear cada caractere encontrado de volta
+    a uma caixa em coordenadas PDF, do mesmo jeito que `ui/viewer/search.py` já faz para a
+    busca de texto simples do visualizador — só que aqui a ocorrência vem de regex, não de
+    string literal, então não dá pra usar a busca nativa do pdfium (que não suporta regex).
+    Uma ocorrência que atravessa quebra de linha vira uma caixa por linha (antes era uma
+    caixa só cobrindo as linhas inteiras, o que apagava também o texto vizinho).
     """
-    annotation = annotation_ref.get_object()
 
-    action = annotation.get("/A")
-    if _is_javascript_action(action):
-        del annotation["/A"]
+    def run(
+        self,
+        input_path: str,
+        kinds: list[str] | None = None,
+        custom_pattern: str | None = None,
+        progress: Progress | None = None,
+        search_text: str | None = None,
+    ) -> list[RedactionRect]:
+        """`search_text`: um ou mais textos comuns separados por ";" (maiúsculas e acentos
+        não importam)."""
+        progress = ensure_progress(progress)
+        open_reader(input_path, purpose=EXTRACT)  # lê o texto: respeita a permissão de cópia
 
-    additional_actions = annotation.get("/AA")
-    if additional_actions is not None:
-        aa = additional_actions.get_object()
-        for trigger in list(aa.keys()):
-            if _is_javascript_action(aa[trigger]):
-                del aa[trigger]
+        patterns = [(kind, _PATTERNS[kind]) for kind in (kinds or []) if kind in _PATTERNS]
+        if custom_pattern:
+            try:
+                patterns.append((CUSTOM_PATTERN_KIND, re.compile(custom_pattern)))
+            except re.error as exc:
+                raise ValueError(Message("Expressão regular inválida: {error}", error=exc)) from exc
+        for term in (search_text or "").split(";"):
+            if term.strip():
+                patterns.append((TEXT_KIND, _text_pattern(term)))
+        if not patterns:
+            return []
+
+        rects: list[RedactionRect] = []
+        seen: set[tuple] = set()
+        with PDFIUM_LOCK:
+            pdfium_doc = open_pdfium(input_path)
+            total_pages = len(pdfium_doc)
+        try:
+            for page_index in progress.steps(range(total_pages), total_pages, "Procurando dados sensíveis"):
+                with PDFIUM_LOCK:
+                    rects.extend(_find_on_page(pdfium_doc, page_index, patterns, seen))
+        finally:
+            with PDFIUM_LOCK:
+                pdfium_doc.close()
+
+        return rects
 
 
-class SanitizeDocument(PDFOperation):
-    """Remove metadados, JavaScript, anexos e (opcionalmente) anotações de um PDF."""
+def _find_on_page(pdfium_doc, page_index: int, patterns, seen: set[tuple]) -> list[RedactionRect]:
+    """Ocorrências dos padrões numa página (chamar com `PDFIUM_LOCK`)."""
+    rects: list[RedactionRect] = []
+    page = pdfium_doc[page_index]
+    textpage = page.get_textpage()
+    try:
+        text = textpage.get_text_range()
+        folded = _fold(text) if any(kind == TEXT_KIND for kind, _pattern in patterns) else ""
+        char_count = textpage.count_chars()
+        for kind, pattern in patterns:
+            for match in pattern.finditer(folded if kind == TEXT_KIND else text):
+                start, end = match.start(), min(match.end(), char_count)
+                if start >= end:
+                    continue
+                for line_start, line_end in _line_spans(text, start, end):
+                    bounds = _union_of_char_boxes(textpage.get_charbox(i) for i in range(line_start, line_end))
+                    if bounds is None:
+                        continue
+                    left, bottom, right, top = bounds
+                    key = (page_index, round(left, 2), round(bottom, 2), round(right, 2), round(top, 2))
+                    if key in seen:  # dois padrões casando no mesmo trecho
+                        continue
+                    seen.add(key)
+                    rects.append(
+                        RedactionRect(
+                            page_index,
+                            left - _DETECTION_PADDING,
+                            bottom - _DETECTION_PADDING,
+                            right + _DETECTION_PADDING,
+                            top + _DETECTION_PADDING,
+                            kind=kind,
+                            text=" ".join(text[start:end].split()),
+                        )
+                    )
+    finally:
+        textpage.close()
+        page.close()
+    return rects
+
+
+def _line_spans(text: str, start: int, end: int) -> list[tuple[int, int]]:
+    """O trecho [start, end) dividido nas quebras de linha que o pdfium põe no texto."""
+    spans, line_start = [], start
+    for index in range(start, end):
+        if text[index] in "\r\n":
+            if index > line_start:
+                spans.append((line_start, index))
+            line_start = index + 1
+    if end > line_start:
+        spans.append((line_start, end))
+    return spans
+
+
+def _union_of_char_boxes(boxes) -> Rect | None:
+    """União das caixas dos caracteres, ignorando as de área zero (o pdfium devolve caixas
+    vazias para os espaços e quebras de linha que ele mesmo gera entre linhas)."""
+    boxes = list(boxes)
+    useful = [box for box in boxes if box[2] > box[0] and box[3] > box[1]] or boxes
+    if not useful:
+        return None
+    return (
+        min(box[0] for box in useful),
+        min(box[1] for box in useful),
+        max(box[2] for box in useful),
+        max(box[3] for box in useful),
+    )
+
+
+class RedactDocument:
+    """Remove definitivamente o conteúdo das áreas marcadas, achatando a página em imagem
+    (ver o docstring do módulo). Devolve quantas páginas foram redigidas.
+
+    Ao contrário das outras operações, a redação monta um documento novo só com as páginas
+    e deixa de propósito para trás o que vive fora delas — marcadores, metadados, anexos,
+    formulário: são lugares onde o dado apagado costuma se repetir (um marcador com o nome
+    do cliente, o título do arquivo, o valor de um campo), e uma ferramenta de redação não
+    pode carregá-los em silêncio. A sanitização, oferecida junto na interface, cobre o que
+    sobra nas páginas não redigidas.
+    """
+
+    def run(
+        self,
+        input_path: str,
+        output_path: str,
+        rects: list[RedactionRect],
+        progress: Progress | None = None,
+    ) -> int:
+        progress = ensure_progress(progress)
+        reader = open_reader(input_path)
+        total_pages = len(reader.pages)
+        rects_by_page: dict[int, list[Rect]] = {}
+        for rect in rects:
+            require_valid_page_index(total_pages, rect.page_index)
+            rects_by_page.setdefault(rect.page_index, []).append(rect.as_rect())
+
+        writer = PdfWriter()
+        burned: dict[int, list[Rect]] = {}  # página -> áreas pintadas, no espaço visual
+
+        with PDFIUM_LOCK:
+            pdfium_doc = pdfium.PdfDocument(input_path)
+            # Campos de formulário aparecem na imagem como aparecem no visualizador.
+            pdfium_doc.init_forms()
+        try:
+            for index, page in enumerate(progress.steps(reader.pages, total_pages, "Redigindo páginas")):
+                page_rects = rects_by_page.get(index)
+                if not page_rects:
+                    writer.add_page(page)
+                    continue
+
+                with PDFIUM_LOCK:
+                    image, geometry = render_visual_page(pdfium_doc[index], _REDACT_SCALE)
+                visual_rects = visible_visual_rects(geometry, page_rects)
+                fill_visual_rects(image, geometry, visual_rects, _REDACTION_COLOR)
+                writer.add_page(image_page(image, geometry.width, geometry.height))
+                burned[index] = visual_rects
+        finally:
+            with PDFIUM_LOCK:
+                pdfium_doc.close()
+
+        with atomic_output(output_path) as temp_path:
+            with open(temp_path, "wb") as f:
+                writer.write(f)
+            progress.update(0, 0, "Verificando o resultado")
+            _verify_redaction(temp_path, burned)
+            progress.check()
+        return len(burned)
+
+
+def _verify_redaction(path: str, burned: dict[int, list[Rect]]) -> None:
+    """Confere o arquivo redigido antes de ele ser entregue: nenhuma página redigida pode
+    ter texto, e cada área marcada precisa estar preta tanto na imagem embutida (o que um
+    extrator de imagens recuperaria) quanto no render da página (o que um leitor mostra)."""
+    if not burned:
+        return
+
+    reader = PdfReader(path)
+    with PDFIUM_LOCK:
+        document = pdfium.PdfDocument(path)
+    try:
+        for index, visual_rects in burned.items():
+            page = reader.pages[index]
+            if page.extract_text().strip():
+                raise RedactionVerificationError(
+                    Message("A página {page} ainda tem texto depois da redação. O arquivo não foi salvo.", page=index + 1)
+                )
+            geometry = PageGeometry.from_pypdf_page(page)
+            images = [image_file.image for image_file in page.images]
+            if len(images) != 1 or images[0] is None:
+                raise RedactionVerificationError(
+                    Message(
+                        "A página {page} tem conteúdo inesperado depois da redação. O arquivo não foi salvo.",
+                        page=index + 1,
+                    )
+                )
+            with PDFIUM_LOCK:
+                verify_scale = render_scale(document[index], _VERIFY_RENDER_SCALE)
+                rendered = document[index].render(scale=verify_scale).to_pil().convert("RGB")
+            for candidate, max_level in ((images[0].convert("RGB"), 0), (rendered, _VERIFY_MAX_LEVEL)):
+                for rect in visual_rects:
+                    if not _area_is_filled(candidate, geometry, rect, max_level):
+                        raise RedactionVerificationError(
+                            Message(
+                                "Na página {page}, uma área marcada ainda mostra conteúdo depois da "
+                                "redação. O arquivo não foi salvo.",
+                                page=index + 1,
+                            )
+                        )
+    finally:
+        with PDFIUM_LOCK:
+            document.close()
+
+
+def _area_is_filled(image, geometry: PageGeometry, rect: Rect, max_level: int) -> bool:
+    x0, y0, x1, y1 = geometry.visual_rect_to_pixels(rect, image.width, image.height)
+    # Ignora 1 px de borda: no render, a suavização mistura a tarja com o pixel vizinho.
+    x0, y0, x1, y1 = x0 + 1, y0 + 1, x1 - 1, y1 - 1
+    if x1 <= x0 or y1 <= y0:
+        return True  # área pequena demais para sobrar um pixel interno a conferir
+    extrema = image.crop((x0, y0, x1, y1)).getextrema()
+    return all(high <= max_level for _low, high in extrema)
+
+
+# -- sanitização ------------------------------------------------------------------------------
+
+# Ações inofensivas (navegação e exibição). Tudo que não estiver aqui é removido — inclusive
+# tipos de ação que surjam em versões futuras do formato.
+_SAFE_ACTION_TYPES = {"/GoTo", "/URI", "/Named", "/Hide", "/ResetForm", "/SetOCGState", "/Thread", "/Trans"}
+_CODE_ACTION_TYPES = {"/JavaScript", "/RichMediaExecute"}
+# Ações perigosas reconhecíveis em qualquer dicionário (só aparecem como valor de /S de ação).
+_DANGEROUS_ACTION_TYPES = _CODE_ACTION_TYPES | {
+    "/Launch",
+    "/SubmitForm",
+    "/ImportData",
+    "/GoToR",
+    "/GoToE",
+    "/Rendition",
+}
+_JAVASCRIPT_URI_SCHEMES = {"javascript", "vbscript"}
+_EXTERNAL_URI_SCHEMES = {"file", "data"}
+_RISKY_ANNOTATION_SUBTYPES = {"/RichMedia", "/3D", "/Screen", "/Movie", "/Sound"}
+_EMBEDDED_FILE_KEYS = ("/F", "/UF", "/DOS", "/Mac", "/Unix")
+
+
+@dataclass
+class SanitizeReport:
+    """O que a sanitização removeu, para mostrar ao usuário."""
+
+    javascript: int = 0  # ações e scripts de JavaScript (documento, páginas, anotações, campos)
+    external_actions: int = 0  # ações que abrem arquivos/programas, enviam dados ou carregam conteúdo externo
+    embedded_files: int = 0  # arquivos embutidos (anexos do documento, de anotações ou associados)
+    annotations_removed: int = 0  # anotações removidas (todas, se pedido; senão só multimídia/3D)
+    private_data: int = 0  # dados privados de aplicativos (/PieceInfo), miniaturas e XMP de páginas/imagens
+    metadata_removed: bool = False
+    xfa_removed: bool = False  # formulário XFA, que pode conter scripts
+
+    @property
+    def total(self) -> int:
+        return (
+            self.javascript
+            + self.external_actions
+            + self.embedded_files
+            + self.annotations_removed
+            + self.private_data
+            + int(self.metadata_removed)
+            + int(self.xfa_removed)
+        )
+
+
+class SanitizationVerificationError(RuntimeError):
+    """A conferência pós-sanitização encontrou algo que deveria ter sido removido."""
+
+
+def _resolve(obj):
+    return obj.get_object() if hasattr(obj, "get_object") else obj
+
+
+def _uri_risk(action: DictionaryObject) -> str | None:
+    uri = str(action.get("/URI", "") or "")
+    scheme = uri.split(":", 1)[0].strip().lower() if ":" in uri else ""
+    if scheme in _JAVASCRIPT_URI_SCHEMES:
+        return "javascript"
+    if scheme in _EXTERNAL_URI_SCHEMES:
+        return "external"
+    return None
+
+
+def _classify_action(action: DictionaryObject) -> str | None:
+    """"javascript" ou "external" para uma ação que deve sair; None se for segura."""
+    action_type = action.get("/S")
+    if action_type == "/URI":
+        return _uri_risk(action)
+    if action_type in _SAFE_ACTION_TYPES:
+        return None
+    if action_type in _CODE_ACTION_TYPES or "/JS" in action:
+        return "javascript"
+    return "external"
+
+
+def _is_action(value) -> bool:
+    value = _resolve(value)
+    return isinstance(value, DictionaryObject) and "/S" in value
+
+
+def _is_additional_actions(value) -> bool:
+    value = _resolve(value)
+    return isinstance(value, DictionaryObject) and all(_is_action(item) for item in value.values())
+
+
+def _is_embedded_file_spec(obj: DictionaryObject) -> bool:
+    embedded = _resolve(obj.get("/EF")) if "/EF" in obj else None
+    if not isinstance(embedded, DictionaryObject) or embedded.get("/Type") == "/Font":
+        return False
+    return any(isinstance(_resolve(embedded.get(key)), StreamObject) for key in _EMBEDDED_FILE_KEYS)
+
+
+def _is_xmp_stream(value) -> bool:
+    value = _resolve(value)
+    return isinstance(value, StreamObject) and (
+        value.get("/Type") == "/Metadata" or value.get("/Subtype") == "/XML"
+    )
+
+
+def _is_page_or_form(obj: DictionaryObject) -> bool:
+    return obj.get("/Type") == "/Page" or obj.get("/Subtype") == "/Form"
+
+
+def _count_name_tree_entries(node, visited: set[int] | None = None) -> int:
+    visited = visited if visited is not None else set()
+    node = _resolve(node)
+    if not isinstance(node, DictionaryObject) or id(node) in visited:
+        return 0
+    visited.add(id(node))
+    count = len(_resolve(node.get("/Names")) or []) // 2
+    for kid in _resolve(node.get("/Kids")) or []:
+        count += _count_name_tree_entries(kid, visited)
+    return count
+
+
+class _Sanitizer:
+    """Remove o que é perigoso dos objetos do PdfReader antes de as páginas serem copiadas."""
+
+    def __init__(self, report: SanitizeReport, remove_metadata: bool):
+        self.report = report
+        self.remove_metadata = remove_metadata
+
+    def _count(self, kind: str) -> None:
+        if kind == "javascript":
+            self.report.javascript += 1
+        else:
+            self.report.external_actions += 1
+
+    def sanitize_action(self, action_ref, visiting: set[int] | None = None):
+        """Devolve a ação (ou sequência de ações) sem os itens perigosos, mantendo a
+        referência original para o que sobrar; None se nada sobrar."""
+        visiting = visiting if visiting is not None else set()
+        action = _resolve(action_ref)
+        if isinstance(action, ArrayObject):
+            kept = ArrayObject()
+            for item in action:
+                sanitized = self.sanitize_action(item, visiting)
+                if sanitized is not None:
+                    kept.append(sanitized)
+            return kept or None
+        if not isinstance(action, DictionaryObject) or id(action) in visiting:
+            return None  # ação malformada, ou um ciclo em /Next
+        visiting.add(id(action))
+
+        next_ref = action.raw_get("/Next") if "/Next" in action else None
+        sanitized_next = self.sanitize_action(next_ref, visiting) if next_ref is not None else None
+
+        kind = _classify_action(action)
+        if kind is not None:
+            self._count(kind)
+            if isinstance(sanitized_next, ArrayObject):
+                # Uma sequência não pode ocupar o lugar de uma ação única (/A, gatilho de /AA).
+                return sanitized_next[0] if len(sanitized_next) == 1 else None
+            return sanitized_next
+
+        if sanitized_next is None:
+            if "/Next" in action:
+                del action["/Next"]
+        else:
+            action[NameObject("/Next")] = sanitized_next
+        return action_ref
+
+    def _sanitize_additional_actions(self, holder: DictionaryObject) -> None:
+        additional = _resolve(holder["/AA"])
+        for trigger in list(additional.keys()):
+            sanitized = self.sanitize_action(additional.raw_get(trigger))
+            if sanitized is None:
+                del additional[trigger]
+            else:
+                additional[NameObject(trigger)] = sanitized
+        if not additional:
+            del holder["/AA"]
+
+    def report_document_level(self, reader: PdfReader) -> None:
+        """Contabiliza o que vive no catálogo — que não é copiado para o arquivo novo."""
+        catalog = reader.root_object
+        names = _resolve(catalog.get("/Names"))
+        if isinstance(names, DictionaryObject):
+            if "/JavaScript" in names:
+                self.report.javascript += _count_name_tree_entries(names.raw_get("/JavaScript"))
+            if "/EmbeddedFiles" in names:
+                self.report.embedded_files += _count_name_tree_entries(names.raw_get("/EmbeddedFiles"))
+        if "/OpenAction" in catalog and _is_action(catalog.raw_get("/OpenAction")):
+            self.sanitize_action(catalog.raw_get("/OpenAction"))
+        if "/AA" in catalog and _is_additional_actions(catalog.raw_get("/AA")):
+            self._sanitize_additional_actions(catalog)
+        acroform = _resolve(catalog.get("/AcroForm"))
+        if isinstance(acroform, DictionaryObject) and "/XFA" in acroform:
+            self.report.xfa_removed = True
+        if self.remove_metadata and (reader.metadata or "/Metadata" in catalog):
+            self.report.metadata_removed = True
+
+    def filter_annotations(self, page, remove_all: bool) -> None:
+        if "/Annots" not in page:
+            return
+        annotations = list(_resolve(page["/Annots"]) or [])
+        if remove_all:
+            for ref in annotations:
+                if _resolve(ref).get("/Subtype") == "/FileAttachment":
+                    self.report.embedded_files += 1
+                else:
+                    self.report.annotations_removed += 1
+            del page["/Annots"]
+            return
+
+        removed: set[int] = set()
+        kept = []
+        for ref in annotations:
+            annotation = _resolve(ref)
+            subtype = annotation.get("/Subtype")
+            if subtype == "/FileAttachment":
+                self.report.embedded_files += 1
+                removed.add(id(annotation))
+            elif subtype in _RISKY_ANNOTATION_SUBTYPES:
+                self.report.annotations_removed += 1
+                removed.add(id(annotation))
+            else:
+                kept.append(ref)
+        if not removed:
+            return
+
+        final = ArrayObject()
+        for ref in kept:
+            annotation = _resolve(ref)
+            parent_id = id(_resolve(annotation.get("/Parent"))) if "/Parent" in annotation else None
+            if annotation.get("/Subtype") == "/Popup" and parent_id in removed:
+                continue  # o balão de comentário da anotação removida
+            # Uma referência a uma anotação removida a copiaria de volta para o arquivo novo.
+            for key in ("/Popup", "/IRT", "/Parent"):
+                if key in annotation and id(_resolve(annotation.raw_get(key))) in removed:
+                    del annotation[key]
+            final.append(ref)
+        if final:
+            page[NameObject("/Annots")] = final
+        else:
+            del page["/Annots"]
+
+    def walk(self, pages) -> None:
+        """Varre tudo o que é alcançável a partir das páginas (anotações, campos e seus pais,
+        recursos, XObjects) e limpa cada dicionário.
+
+        O pypdf entrega cada página como uma cópia do dicionário original (`reader.pages`),
+        e é essa cópia que vai para o arquivo novo. O dicionário original continua
+        alcançável pela árvore de páginas (`/Parent` → `/Kids`) ou pelo `/P` das anotações,
+        ainda com o estado anterior à filtragem — por isso qualquer outro dicionário de
+        página encontrado no caminho é pulado.
+        """
+        page_ids = {id(page) for page in pages}
+        stack = list(pages)
+        visited: set[int] = set()
+        while stack:
+            obj = _resolve(stack.pop())
+            if id(obj) in visited:
+                continue
+            visited.add(id(obj))
+            if isinstance(obj, DictionaryObject):
+                if obj.get("/Type") == "/Page" and id(obj) not in page_ids:
+                    continue
+                self._sanitize_dictionary(obj)
+                stack.extend(value for key, value in obj.items() if not (id(obj) in page_ids and key == "/Parent"))
+            elif isinstance(obj, ArrayObject):
+                stack.extend(obj)
+
+    def _sanitize_dictionary(self, obj: DictionaryObject) -> None:
+        if obj.get("/S") in _DANGEROUS_ACTION_TYPES or (obj.get("/S") == "/URI" and _uri_risk(obj)):
+            # Ação perigosa alcançada por um caminho que não é /A, /AA nem /Next: neutraliza.
+            self._count(_classify_action(obj) or "external")
+            obj.clear()
+            return
+        if "/A" in obj and _is_action(obj.raw_get("/A")):
+            sanitized = self.sanitize_action(obj.raw_get("/A"))
+            if sanitized is None:
+                del obj["/A"]
+            else:
+                obj[NameObject("/A")] = sanitized
+        if "/AA" in obj and _is_additional_actions(obj.raw_get("/AA")):
+            self._sanitize_additional_actions(obj)
+        if "/S" in obj and "/JS" in obj:
+            del obj["/JS"]
+            self.report.javascript += 1
+        if _is_embedded_file_spec(obj):
+            del obj["/EF"]
+            self.report.embedded_files += 1
+        if "/AF" in obj and isinstance(_resolve(obj.get("/AF")), ArrayObject):
+            for spec in _resolve(obj["/AF"]):
+                spec = _resolve(spec)
+                if isinstance(spec, DictionaryObject) and _is_embedded_file_spec(spec):
+                    self.report.embedded_files += 1
+            del obj["/AF"]
+        if _is_page_or_form(obj):
+            for key in ("/PieceInfo", "/Thumb"):
+                if key in obj:
+                    del obj[key]
+                    self.report.private_data += 1
+        if self.remove_metadata and "/Metadata" in obj and _is_xmp_stream(obj.raw_get("/Metadata")):
+            del obj["/Metadata"]
+            self.report.private_data += 1
+
+
+def find_residual_risks(path: str, *, check_metadata: bool = True) -> list[str]:
+    """Procura, num PDF já sanitizado, qualquer coisa que a sanitização deveria ter removido.
+    Devolve a lista (vazia se estiver tudo limpo)."""
+    reader = PdfReader(path)
+    catalog = reader.root_object
+    problems: set[str] = set()
+
+    names = _resolve(catalog.get("/Names"))
+    if isinstance(names, DictionaryObject):
+        if "/JavaScript" in names:
+            problems.add("JavaScript do documento")
+        if "/EmbeddedFiles" in names:
+            problems.add("anexos do documento")
+    if "/AA" in catalog:
+        problems.add("ações automáticas do documento")
+    open_action = _resolve(catalog.get("/OpenAction"))
+    if isinstance(open_action, DictionaryObject) and "/S" in open_action and _classify_action(open_action):
+        problems.add("ação ao abrir o documento")
+    acroform = _resolve(catalog.get("/AcroForm"))
+    if isinstance(acroform, DictionaryObject) and "/XFA" in acroform:
+        problems.add("formulário XFA")
+    if check_metadata:
+        info: dict = reader.metadata or {}
+        if any(info.get(key) for key in ("/Title", "/Author", "/Subject", "/Keywords", "/Creator")):
+            problems.add("metadados do documento")
+        if "/Metadata" in catalog:
+            problems.add("metadados XMP do documento")
+
+    stack = [reader.trailer.raw_get("/Root")]
+    visited: set[int] = set()
+    while stack:
+        obj = _resolve(stack.pop())
+        if id(obj) in visited:
+            continue
+        visited.add(id(obj))
+        if isinstance(obj, DictionaryObject):
+            action_type = obj.get("/S")
+            subtype = obj.get("/Subtype")
+            if subtype == "/FileAttachment":
+                problems.add("anotação com arquivo anexado")
+            if subtype in _RISKY_ANNOTATION_SUBTYPES:
+                problems.add("anotação multimídia ou 3D")
+            if action_type in _CODE_ACTION_TYPES or ("/S" in obj and "/JS" in obj):
+                problems.add("JavaScript")
+            elif action_type in _DANGEROUS_ACTION_TYPES:
+                problems.add("ação que abre arquivos ou programas, ou envia dados")
+            if action_type == "/URI" and _uri_risk(obj):
+                problems.add("link com endereço perigoso (javascript:, file:, data:)")
+            if _is_embedded_file_spec(obj) or obj.get("/Type") == "/EmbeddedFile":
+                problems.add("arquivo embutido")
+            if _is_page_or_form(obj) and "/PieceInfo" in obj:
+                problems.add("dados privados de aplicativos")
+            if check_metadata and obj is not catalog and "/Metadata" in obj and _is_xmp_stream(obj.raw_get("/Metadata")):
+                problems.add("metadados XMP de páginas ou imagens")
+            stack.extend(obj.values())
+        elif isinstance(obj, ArrayObject):
+            stack.extend(obj)
+    return sorted(problems)
+
+
+class SanitizeDocument:
+    """Remove metadados, JavaScript, ações perigosas, anexos e (opcionalmente) anotações de
+    um PDF, e devolve um `SanitizeReport` com o que foi removido (ver o docstring do módulo)."""
 
     def run(
         self,
@@ -120,20 +706,37 @@ class SanitizeDocument(PDFOperation):
         output_path: str,
         remove_metadata: bool = True,
         remove_annotations: bool = False,
-    ) -> None:
+    ) -> SanitizeReport:
         reader = open_reader(input_path)
-        writer = PdfWriter()  # sem clone_from: já não carrega metadados, JS nem anexos
+        report = SanitizeReport()
+        sanitizer = _Sanitizer(report, remove_metadata)
 
-        for page in reader.pages:
-            if remove_annotations and "/Annots" in page:
-                del page["/Annots"]
-            elif "/Annots" in page:
-                for annotation_ref in page["/Annots"]:
-                    _strip_annotation_javascript(annotation_ref)
+        sanitizer.report_document_level(reader)  # o catálogo inteiro fica para trás
+        pages = list(reader.pages)
+        for page in pages:
+            sanitizer.filter_annotations(page, remove_all=remove_annotations)
+        sanitizer.walk(pages)
+
+        writer = PdfWriter()  # sem clone_from: nada do catálogo original vem junto
+        for page in pages:
             writer.add_page(page)
 
-        if not remove_metadata and reader.metadata:
-            writer.add_metadata(reader.metadata)
+        if not remove_metadata:
+            if reader.metadata:
+                writer.add_metadata(reader.metadata)
+            catalog = reader.root_object
+            if "/Metadata" in catalog and _is_xmp_stream(catalog.raw_get("/Metadata")):
+                writer.root_object[NameObject("/Metadata")] = catalog.raw_get("/Metadata").clone(writer)
 
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        with atomic_output(output_path) as temp_path:
+            with open(temp_path, "wb") as f:
+                writer.write(f)
+            problems = find_residual_risks(temp_path, check_metadata=remove_metadata)
+            if problems:
+                raise SanitizationVerificationError(
+                    Message(
+                        "A sanitização não conseguiu remover: {problems}. O arquivo não foi salvo.",
+                        problems="; ".join(problems),
+                    )
+                )
+        return report

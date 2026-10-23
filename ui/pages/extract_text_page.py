@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWi
 
 from core.extract_text import ExtractText
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -39,12 +40,15 @@ class ExtractTextPage(QWidget):
             QMessageBox.warning(self, tr("Extrair texto"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            ExtractText().run(input_path, output_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Extrair texto"), tr("Falha ao extrair texto: {error}").format(error=exc)
-            )
-            return
+        task = call(ExtractText().run, input_path, output_path)
 
-        QMessageBox.information(self, tr("Extrair texto"), tr("Texto extraído com sucesso."))
+        def done(_result):
+            QMessageBox.information(self, tr("Extrair texto"), tr("Texto extraído com sucesso."))
+
+        run_task(
+            self,
+            tr("Extrair texto"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao extrair texto: {error}"),
+        )

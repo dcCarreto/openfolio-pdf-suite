@@ -21,6 +21,17 @@ def test_suggested_start_path_derives_name_from_source(tmp_path):
     assert picker._suggested_start_path() == str(tmp_path / "contrato_mesclado.pdf")
 
 
+def test_suggested_extension_is_the_output_format_not_the_input(tmp_path):
+    _app()
+    office = FilePicker(mode="save", suggested_source=lambda: str(tmp_path / "relatorio.docx"), suggested_suffix="convertido")
+    word = FilePicker(
+        mode="save", file_filter="Word (*.docx)", suggested_source=lambda: str(tmp_path / "contrato.pdf"), suggested_suffix="convertido"
+    )
+
+    assert office._suggested_start_path() == str(tmp_path / "relatorio_convertido.pdf")
+    assert word._suggested_start_path() == str(tmp_path / "contrato_convertido.docx")
+
+
 def test_suggested_start_path_is_empty_without_source():
     _app()
     picker = FilePicker(mode="save")

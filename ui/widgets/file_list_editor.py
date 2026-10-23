@@ -1,24 +1,38 @@
-"""Widget reutilizável: lista de arquivos que o usuário pode adicionar, remover e reordenar."""
+"""Widget reutilizável: lista de arquivos que o usuário pode adicionar, remover e reordenar.
 
+Arquivos arrastados do explorador para a lista entram nela (só os do tipo aceito pelo filtro).
+Com `with_pages`, cada arquivo tem também as páginas escolhidas ("1-3, 5"; vazio = todas).
+"""
+
+import re
+from pathlib import Path
+
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
+    QLabel,
+    QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from ui.i18n import tr
+from ui.preferences import remember_folder_of, start_folder
 
 
 class FileListEditor(QWidget):
     """Lista de arquivos com botões de adicionar, remover e mover (subir/descer)."""
 
-    def __init__(self, dialog_caption: str, file_filter: str, parent=None):
+    def __init__(self, dialog_caption: str, file_filter: str, parent=None, with_pages: bool = False):
         super().__init__(parent)
         self._dialog_caption = dialog_caption
         self._file_filter = file_filter
+        self._extensions = {ext.lower() for ext in re.findall(r"\*(\.\w+)", file_filter)}
+        self.setAcceptDrops(True)
 
         self.list_widget = QListWidget()
 
@@ -49,10 +63,45 @@ class FileListEditor(QWidget):
         layout.addLayout(buttons_row_1)
         layout.addLayout(buttons_row_2)
 
+        self.pages_edit: QLineEdit | None = None
+        if with_pages:
+            self.pages_edit = QLineEdit()
+            self.pages_edit.setPlaceholderText(tr("todas (ex.: 1-3, 5)"))
+            self.pages_edit.setEnabled(False)
+            self.pages_edit.textEdited.connect(self._set_selected_pages)
+            self.list_widget.currentItemChanged.connect(self._show_selected_pages)
+            pages_row = QHBoxLayout()
+            pages_row.addWidget(QLabel(tr("Páginas do arquivo selecionado:")))
+            pages_row.addWidget(self.pages_edit)
+            layout.addLayout(pages_row)
+
+    # O item guarda [caminho, páginas] (o widget_state preserva o UserRole na troca de idioma);
+    # o texto mostra as páginas entre colchetes, sem palavras que dependam do idioma.
+    def add_path(self, path: str) -> None:
+        item = QListWidgetItem()
+        item.setData(Qt.ItemDataRole.UserRole, [path, ""])
+        item.setText(path)
+        self.list_widget.addItem(item)
+
+    def _show_selected_pages(self, item, _previous=None) -> None:
+        assert self.pages_edit is not None
+        self.pages_edit.setEnabled(item is not None)
+        self.pages_edit.setText(item.data(Qt.ItemDataRole.UserRole)[1] if item is not None else "")
+
+    def _set_selected_pages(self, text: str) -> None:
+        item = self.list_widget.currentItem()
+        if item is None:
+            return
+        path = item.data(Qt.ItemDataRole.UserRole)[0]
+        item.setData(Qt.ItemDataRole.UserRole, [path, text.strip()])
+        item.setText(f"{path}  [{text.strip()}]" if text.strip() else path)
+
     def _add(self):
-        paths, _ = QFileDialog.getOpenFileNames(self, self._dialog_caption, "", self._file_filter)
+        paths, _ = QFileDialog.getOpenFileNames(self, self._dialog_caption, start_folder(), self._file_filter)
+        if paths:
+            remember_folder_of(paths[0])
         for path in paths:
-            self.list_widget.addItem(path)
+            self.add_path(path)
 
     def _remove_selected(self):
         for item in self.list_widget.selectedItems():
@@ -67,5 +116,31 @@ class FileListEditor(QWidget):
         self.list_widget.insertItem(new_row, item)
         self.list_widget.setCurrentRow(new_row)
 
+    def _dropped_paths(self, mime_data) -> list[str]:
+        if mime_data is None or not mime_data.hasUrls():
+            return []
+        paths = [str(Path(url.toLocalFile())) for url in mime_data.urls() if url.isLocalFile()]
+        return [path for path in paths if Path(path).is_file() and Path(path).suffix.lower() in self._extensions]
+
+    def dragEnterEvent(self, event):
+        if self._dropped_paths(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        self.dragEnterEvent(event)
+
+    def dropEvent(self, event):
+        paths = self._dropped_paths(event.mimeData())
+        for path in paths:
+            self.add_path(path)
+        if paths:
+            event.acceptProposedAction()
+
+    def entries(self) -> list[tuple[str, str]]:
+        """(caminho, páginas digitadas) de cada arquivo, na ordem da lista."""
+        return [tuple(self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)) for i in range(self.list_widget.count())]
+
     def paths(self) -> list[str]:
-        return [self.list_widget.item(i).text() for i in range(self.list_widget.count())]
+        return [path for path, _pages in self.entries()]

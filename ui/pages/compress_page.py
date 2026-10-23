@@ -1,13 +1,18 @@
 """Aba de compressão de PDFs."""
 
-from pathlib import Path
-
-from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from core.compress import CompressPDF
 from ui.i18n import tr
+from ui.tasks import call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+
+_LEVELS = [
+    ("light", "Leve (sem perda de qualidade)"),
+    ("medium", "Média (imagens a 150 DPI)"),
+    ("strong", "Forte (imagens a 100 DPI)"),
+]
 
 
 class CompressPage(QWidget):
@@ -22,6 +27,13 @@ class CompressPage(QWidget):
             mode="save", suggested_source=session.path, suggested_suffix="comprimido"
         )
 
+        self.level_combo = QComboBox()
+        for level, label in _LEVELS:
+            self.level_combo.addItem(tr(label), level)
+        self.level_combo.setCurrentIndex(1)
+
+        self.grayscale_check = QCheckBox(tr("Converter as imagens para escala de cinza"))
+
         compress_button = QPushButton(tr("Comprimir"))
         compress_button.clicked.connect(self._compress)
 
@@ -30,6 +42,9 @@ class CompressPage(QWidget):
         layout.addWidget(self.source_bar)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
+        layout.addWidget(QLabel(tr("Nível de compressão:")))
+        layout.addWidget(self.level_combo)
+        layout.addWidget(self.grayscale_check)
         layout.addWidget(compress_button)
 
     def _compress(self):
@@ -43,24 +58,41 @@ class CompressPage(QWidget):
             QMessageBox.warning(self, tr("Comprimir"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            CompressPDF().run(input_path, output_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Comprimir"), tr("Falha ao comprimir: {error}").format(error=exc)
-            )
-            return
+        task = call_with_progress(
+            CompressPDF().run,
+            input_path,
+            output_path,
+            level=self.level_combo.currentData(),
+            grayscale=self.grayscale_check.isChecked(),
+        )
 
-        original_size = Path(input_path).stat().st_size
-        compressed_size = Path(output_path).stat().st_size
-        reduction = 100 * (1 - compressed_size / original_size) if original_size else 0
-        self.session.open(output_path)
-        QMessageBox.information(
+        def done(result):
+            sizes = {
+                "original": f"{result.original_size / 1024:.1f}",
+                "compressed": f"{result.compressed_size / 1024:.1f}",
+            }
+            if not result.written:
+                QMessageBox.information(
+                    self,
+                    tr("Comprimir"),
+                    tr(
+                        "O arquivo não ficou menor ({original} KB -> {compressed} KB), então nada "
+                        "foi gravado. Tente um nível mais forte."
+                    ).format(**sizes),
+                )
+                return
+            self.session.open(output_path)
+            message = tr("PDF comprimido: {original} KB -> {compressed} KB ({reduction}% menor).").format(
+                reduction=f"{result.reduction_percent:.0f}", **sizes
+            )
+            if result.images_recompressed:
+                message += "\n" + tr("{count} imagem(ns) recomprimida(s).").format(count=result.images_recompressed)
+            QMessageBox.information(self, tr("Comprimir"), message)
+
+        run_task(
             self,
             tr("Comprimir"),
-            tr("PDF comprimido: {original} KB -> {compressed} KB ({reduction}% menor).").format(
-                original=f"{original_size / 1024:.1f}",
-                compressed=f"{compressed_size / 1024:.1f}",
-                reduction=f"{reduction:.0f}",
-            ),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao comprimir: {error}"),
         )

@@ -1,59 +1,98 @@
 # Releases
 
-Como gerar uma nova release (beta ou estável) do OpenFolio PDF Suite.
+Como publicar uma atualização do OpenFolio PDF Suite.
+
+O app não tem número de versão para o usuário: há uma versão só, que recebe atualizações.
+Cada atualização é identificada, por dentro, pela data em que é publicada (`AAAA.MM.DD`; uma
+segunda no mesmo dia vira `AAAA.MM.DD.1`). O app compara esse identificador com o das releases
+para saber se há atualização, mostra ao usuário o que ela traz e só a instala se ele aceitar.
 
 ## Passo a passo
 
-1. Atualize a versão em `pyproject.toml` (`version = "..."`) e em `ui/main_window.py`
-   (`APP_VERSION = "..."`), se ainda não estiver correta.
-2. Faça o commit dessa mudança em `main`.
-3. Crie e publique uma tag começando com `v`:
+1. No `CHANGELOG.md`, troque o título `## Próxima atualização` pela data da publicação
+   (`## 2026-11-03`), tire a linha "Ainda não publicada." e revise o texto: é exatamente o
+   que o usuário lê antes de aceitar.
+2. Ponha o mesmo identificador em `pyproject.toml` (`version = "2026.11.3"`), o único lugar
+   dele: o app o lê dos metadados do pacote (`core/version.py`).
+3. Faça o commit dessas mudanças em `desenvolvimento` e leve `desenvolvimento` para `main`
+   (merge): a tag sai de `main`.
+4. Crie e publique a tag `v` + identificador:
 
    ```bash
-   git tag v0.2.0-beta.1
-   git push origin v0.2.0-beta.1
+   git tag v2026.11.3
+   git push origin v2026.11.3
    ```
 
-4. O workflow `.github/workflows/release.yml` builda automaticamente, um job por
-   plataforma (cada um na VM nativa daquele SO):
-   - **Windows**: instalador `OpenFolioPDFSuite-Setup-<versão>.exe` (Inno Setup)
-   - **Linux**: `OpenFolioPDFSuite-<versão>-x86_64.AppImage` e
-     `openfolio-pdf-suite_<versão>_amd64.deb`
-   - **macOS**: `OpenFolioPDFSuite-<versão>.dmg` (sem assinatura/notarização)
+   O workflow recusa a release se a tag não bater com o `pyproject.toml`, se o
+   `CHANGELOG.md` não tiver o trecho dela (`packaging/release_notes.py`) ou se o CI
+   (`ci.yml`, chamado pelo próprio workflow de release) reprovar no commit da tag.
 
-   e publica os quatro arquivos numa GitHub Release com o mesmo nome da tag. Se a
-   versão contiver `beta`, a release é marcada automaticamente como pré-release.
+5. O workflow `.github/workflows/release.yml` builda automaticamente, um job por
+   plataforma (cada um na VM nativa daquele SO):
+   - **Windows**: instalador `OpenFolioPDFSuite-Setup.exe` (Inno Setup)
+   - **Linux**: `OpenFolioPDFSuite-x86_64.AppImage` e `openfolio-pdf-suite_amd64.deb`
+   - **macOS**: `OpenFolioPDFSuite.dmg` (sem assinatura/notarização)
+
+   e publica os quatro arquivos numa GitHub Release, com o trecho do `CHANGELOG.md` como
+   descrição. Os nomes dos arquivos não mudam de uma atualização para outra; o app do
+   Windows baixa o `OpenFolioPDFSuite-Setup.exe` da release nova, confere o SHA-256 que o
+   GitHub publica para ele e o roda com `/SILENT` (atualiza por cima e abre o app de novo).
+6. Depois de publicar, abra uma seção `## Próxima atualização` no topo do `CHANGELOG.md`.
+
+Para ensaiar antes da primeira tag (ou depois de mudar o workflow ou o empacotamento), rode
+Actions > Release > Run workflow: ele passa pelo CI, pelos três builds, pela coleta das
+licenças e pelo código-fonte, e deixa os arquivos como artefatos do run, sem publicar nada.
+Uma release marcada como pré-release no GitHub é ignorada pela verificação do app: serve
+para testar um build publicado sem oferecê-lo a ninguém.
 
 ## Build local (por plataforma)
 
-Precisa da dependência opcional `build`:
+Precisa da dependência opcional `build` e do Tesseract instalado na máquina de build: o app
+leva uma cópia dele (o usuário final não instala nada). Os idiomas que vão junto são baixados
+antes, com o SHA-256 conferido:
 
 ```bash
-pip install -e ".[build]"
+pip install -c requirements-lock.txt -e ".[build]"
+python packaging/fetch_tessdata.py
 ```
+
+O Tesseract vem do gerenciador de pacotes: do MSYS2 no Windows (`pacman -S
+mingw-w64-ucrt-x86_64-tesseract-ocr`, em `C:\msys64`), do `apt install tesseract-ocr` no Linux
+e do `brew install tesseract` no macOS. O spec recusa o build sem o Tesseract ou sem os idiomas.
+
+O gerenciador de pacotes também diz de que pacote veio cada biblioteca que vai no app
+(`packaging/pyinstaller/third_party.py`): o spec grava os textos das licenças em
+`build/third-party/`, que o app leva (Ajuda > Sobre > Licenças das bibliotecas), e a lista do
+código-fonte dos pacotes GPL e LGPL, que `bash packaging/fetch_sources.sh <plataforma>` baixa
+para `dist/installer/OpenFolioPDFSuite-codigo-fonte-<plataforma>.tar`; o workflow anexa esse
+arquivo à release, como a GPL pede. O Python e o Qt entram também: a licença PSF do Python
+instalado e, para o Qt, os textos da LGPL 3 e da GPL 3 (`packaging/licenses/`, que os wheels do
+PySide6 não trazem) com os endereços do código-fonte daquela versão. Uma biblioteca sem pacote
+de origem (o Tesseract do instalador do UB Mannheim, por exemplo) só gera um aviso no build
+local; no CI, reprova.
 
 ### Windows
 
 ```powershell
 pyinstaller packaging\pyinstaller\openfolio.spec --noconfirm
-& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=0.2.0-beta.1 packaging\windows\installer.iss
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=2026.10.21 packaging\windows\installer.iss
 ```
 
-Gera `dist\installer\OpenFolioPDFSuite-Setup-0.2.0-beta.1.exe`.
+Gera `dist\installer\OpenFolioPDFSuite-Setup.exe`.
 
 ### Linux
 
 ```bash
 pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
-bash packaging/linux/build_appimage.sh 0.2.0-beta.1
-bash packaging/linux/build_deb.sh 0.2.0-beta.1
+bash packaging/linux/build_appimage.sh
+bash packaging/linux/build_deb.sh 2026.10.21
 ```
 
 ### macOS
 
 ```bash
 pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
-bash packaging/macos/build_dmg.sh 0.2.0-beta.1
+bash packaging/macos/build_dmg.sh
 ```
 
 ## Sobre a assinatura de código
@@ -70,14 +109,17 @@ prática:
 - **Linux**: o AppImage pode precisar de `chmod +x` antes de rodar; o `.deb` não tem
   esse problema.
 
-Isso é esperado numa release beta de um projeto open source sem orçamento pra
-certificados — não indica nenhum problema com o instalador em si.
+Isso é esperado num projeto open source sem orçamento para certificados — não indica
+nenhum problema com o instalador em si.
 
 ## Estrutura do empacotamento
 
 ```text
 packaging/
-  pyinstaller/openfolio.spec   Spec compartilhado entre as 3 plataformas
+  pyinstaller/openfolio.spec   Spec compartilhado entre as 3 plataformas (leva o Tesseract junto)
+  pyinstaller/openfolio_cli.py O executável de console da linha de comando (openfolio)
+  smoke_cli.sh                 Teste de fumaça do openfolio empacotado (roda no workflow)
+  fetch_tessdata.py            Baixa os idiomas do Tesseract (eng, por, osd) para build/tessdata
   icons/                       icon.ico, icon.icns e icon_256.png gerados a partir de assets/icon.png
   windows/installer.iss        Script do Inno Setup
   linux/

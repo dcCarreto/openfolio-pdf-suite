@@ -23,30 +23,41 @@ def test_main_window_builds_with_all_sections():
 
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
-    assert sidebar.count() == 19
+    assert sidebar.count() == 30
     assert [sidebar.item(i).text() for i in range(sidebar.count())] == [
         "Criar PDF",
         "Mesclar",
         "Dividir",
         "Páginas",
+        "Organizar páginas",
         "Comprimir",
         "Converter",
         "Marca d'água",
         "Proteger",
         "Metadados",
         "Numeração",
+        "PDF/A",
         "Extrair texto",
         "Extrair imagens",
         "Cortar/Redimensionar",
+        "Editar",
         "Marcadores",
+        "Camadas",
+        "Anexos",
         "Campos de formulário",
         "Anotações",
+        "Medição",
         "OCR",
+        "Limpar escaneados",
         "Redigir/Sanitizar",
+        "Preencher e assinar",
         "Assinatura digital",
+        "Acessibilidade",
+        "Comparar",
+        "Processar em lote",
     ]
     assert all(not sidebar.item(i).icon().isNull() for i in range(sidebar.count()))
-    assert window.stack.count() == 19
+    assert window.stack.count() == 30
 
     assert isinstance(window.viewer, PdfViewer)
     assert window.viewer.content_stack.currentIndex() == 0  # nenhum PDF aberto ainda
@@ -93,7 +104,7 @@ def test_main_window_has_menu_bar_and_status_bar():
     window = MainWindow()
 
     menu_titles = [action.text() for action in window.menuBar().actions()]
-    assert menu_titles == ["Arquivo", "Ajuda"]
+    assert menu_titles == ["Arquivo", "Editar", "Exibir", "Ajuda"]
     assert window.statusBar().currentMessage() != ""
 
     window.close()

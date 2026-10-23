@@ -4,7 +4,10 @@
 # Espera que dist/OpenFolioPDFSuite ja exista (gerado por:
 #   pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
 # ), rodando a partir da raiz do repositorio:
-#   bash packaging/linux/build_deb.sh [versao]
+#   bash packaging/linux/build_deb.sh [identificador]
+#
+# O identificador e a data da atualizacao (2026.10.21, a versao do pyproject.toml): o dpkg
+# precisa dele para saber que o pacote novo substitui o antigo; o nome do arquivo nao o leva.
 set -euo pipefail
 
 VERSION="${1:-0.0.0-dev}"
@@ -12,10 +15,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist/OpenFolioPDFSuite"
 PKG_DIR="$ROOT_DIR/dist/deb/openfolio-pdf-suite"
 OUT_DIR="$ROOT_DIR/dist/installer"
-
-# Versoes debian nao usam "-beta.N" da mesma forma que semver; troca por "~betaN"
-# pra continuar comparavel pelo dpkg (~ ordena antes da versao final correspondente).
-DEB_VERSION="$(echo "$VERSION" | sed -E 's/-beta\.?([0-9]+)?/~beta\1/')"
 
 rm -rf "$PKG_DIR"
 mkdir -p "$PKG_DIR/DEBIAN" \
@@ -29,6 +28,8 @@ cp -r "$DIST_DIR"/* "$PKG_DIR/opt/openfolio-pdf-suite/"
 chmod +x "$PKG_DIR/opt/openfolio-pdf-suite/OpenFolioPDFSuite"
 
 ln -sf ../../opt/openfolio-pdf-suite/OpenFolioPDFSuite "$PKG_DIR/usr/bin/openfolio-pdf-suite"
+# A linha de comando (core/cli.py), o mesmo "openfolio" do pip install.
+ln -sf ../../opt/openfolio-pdf-suite/openfolio "$PKG_DIR/usr/bin/openfolio"
 
 cp "$ROOT_DIR/packaging/linux/openfolio-pdf-suite.desktop" \
    "$PKG_DIR/usr/share/applications/openfolio-pdf-suite.desktop"
@@ -39,7 +40,7 @@ INSTALLED_SIZE_KB="$(du -sk "$PKG_DIR/opt/openfolio-pdf-suite" | cut -f1)"
 
 cat > "$PKG_DIR/DEBIAN/control" <<EOF
 Package: openfolio-pdf-suite
-Version: $DEB_VERSION
+Version: $VERSION
 Section: office
 Priority: optional
 Architecture: amd64
@@ -51,6 +52,6 @@ Description: Suite completa e open source de manipulacao de PDF
  anotar, reconhecer texto (OCR), redigir/sanitizar e assinar PDFs, 100% local.
 EOF
 
-dpkg-deb --build --root-owner-group "$PKG_DIR" "$OUT_DIR/openfolio-pdf-suite_${DEB_VERSION}_amd64.deb"
+dpkg-deb --build --root-owner-group "$PKG_DIR" "$OUT_DIR/openfolio-pdf-suite_amd64.deb"
 
-echo "Pacote .deb gerado em $OUT_DIR/openfolio-pdf-suite_${DEB_VERSION}_amd64.deb"
+echo "Pacote .deb gerado em $OUT_DIR/openfolio-pdf-suite_amd64.deb"

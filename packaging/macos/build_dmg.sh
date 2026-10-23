@@ -4,15 +4,14 @@
 # Espera que dist/OpenFolioPDFSuite.app ja exista (gerado por:
 #   pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
 # ), rodando a partir da raiz do repositorio:
-#   bash packaging/macos/build_dmg.sh [versao]
+#   bash packaging/macos/build_dmg.sh
 #
 # O app nao e assinado nem notarizado (exigiria uma conta paga de
 # desenvolvedor Apple) - o macOS vai bloquear a primeira execucao via
-# Gatekeeper. Isso e esperado numa build beta; instrucoes de como abrir
+# Gatekeeper. Isso e esperado sem a assinatura; instrucoes de como abrir
 # mesmo assim ficam no README/release notes.
 set -euo pipefail
 
-VERSION="${1:-0.0.0-dev}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APP_PATH="$ROOT_DIR/dist/OpenFolioPDFSuite.app"
 OUT_DIR="$ROOT_DIR/dist/installer"
@@ -28,6 +27,6 @@ ln -s /Applications "$STAGING/Applications"
 hdiutil create -volname "OpenFolio PDF Suite" \
   -srcfolder "$STAGING" \
   -ov -format UDZO \
-  "$OUT_DIR/OpenFolioPDFSuite-$VERSION.dmg"
+  "$OUT_DIR/OpenFolioPDFSuite.dmg"
 
-echo "dmg gerado em $OUT_DIR/OpenFolioPDFSuite-$VERSION.dmg"
+echo "dmg gerado em $OUT_DIR/OpenFolioPDFSuite.dmg"

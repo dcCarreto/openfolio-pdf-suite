@@ -4,10 +4,9 @@
 # Espera que dist/OpenFolioPDFSuite ja exista (gerado por:
 #   pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
 # ), rodando a partir da raiz do repositorio:
-#   bash packaging/linux/build_appimage.sh [versao]
+#   bash packaging/linux/build_appimage.sh
 set -euo pipefail
 
-VERSION="${1:-0.0.0-dev}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist/OpenFolioPDFSuite"
 APPDIR="$ROOT_DIR/dist/AppDir"
@@ -25,6 +24,11 @@ cp "$ROOT_DIR/packaging/icons/icon_256.png" "$APPDIR/openfolio-pdf-suite.png"
 cat > "$APPDIR/AppRun" <<'EOF'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
+# "OpenFolioPDFSuite-x86_64.AppImage --cli merge a.pdf b.pdf -o c.pdf": a linha de comando.
+if [ "${1:-}" = "--cli" ]; then
+  shift
+  exec "$HERE/usr/bin/openfolio" "$@"
+fi
 exec "$HERE/usr/bin/OpenFolioPDFSuite" "$@"
 EOF
 chmod +x "$APPDIR/AppRun"
@@ -39,6 +43,6 @@ fi
 # --appimage-extract-and-run evita depender de FUSE, que normalmente nao esta
 # disponivel em runners de CI.
 ARCH=x86_64 "$APPIMAGETOOL" --appimage-extract-and-run \
-  "$APPDIR" "$OUT_DIR/OpenFolioPDFSuite-$VERSION-x86_64.AppImage"
+  "$APPDIR" "$OUT_DIR/OpenFolioPDFSuite-x86_64.AppImage"
 
-echo "AppImage gerado em $OUT_DIR/OpenFolioPDFSuite-$VERSION-x86_64.AppImage"
+echo "AppImage gerado em $OUT_DIR/OpenFolioPDFSuite-x86_64.AppImage"

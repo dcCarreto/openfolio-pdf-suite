@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QPushButton, QWi
 
 from ui.document_session import DocumentSession
 from ui.i18n import tr
+from ui.preferences import start_folder
 
 
 class DocumentSourceBar(QWidget):
@@ -40,12 +41,16 @@ class DocumentSourceBar(QWidget):
         layout.addWidget(open_button)
 
         session.path_changed.connect(self._refresh)
+        session.history_changed.connect(self._refresh)
         self._refresh()
 
     def _refresh(self):
-        path = self.session.path()
-        self._display_name = Path(path).name if path else tr("Nenhum PDF aberto")
-        self.path_label.setToolTip(self._display_name)
+        # O nome do arquivo do usuário, não o da versão de trabalho; "*" se há alterações
+        # não salvas.
+        path = self.session.source_path()
+        name = Path(path).name if path else tr("Nenhum PDF aberto")
+        self._display_name = f"{name} *" if self.session.is_modified() else name
+        self.path_label.setToolTip(path or self._display_name)
         self._update_elided_text()
 
     def _update_elided_text(self):
@@ -59,7 +64,7 @@ class DocumentSourceBar(QWidget):
         self._update_elided_text()
 
     def _browse(self):
-        path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), "", "PDF (*.pdf)")
+        path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), start_folder(), "PDF (*.pdf)")
         if path:
             self.session.open(path)
 
