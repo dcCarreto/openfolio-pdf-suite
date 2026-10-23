@@ -18,6 +18,13 @@ Quais páginas recebem OCR (`mode`):
   maior parte da página. Páginas que já têm texto de verdade, inclusive uma camada de OCR
   anterior, ficam como estão.
 - "force": todas as páginas. Numa página que já tem OCR, o texto fica duplicado.
+- "redo": tira o texto invisível (o de um OCR anterior, deste ou de outro programa) e decide
+  como no "auto": as páginas escaneadas são reconhecidas de novo, as de texto de verdade
+  ficam como estão. Serve para refazer um OCR ruim, com outro idioma ou mais DPI.
+
+`straighten=True` endireita a página no documento, como a aba Limpar escaneados: gira o
+conteúdo de uma página torta (até 5°) antes de reconhecer e, com `detect_orientation`, põe de
+pé a página digitalizada de lado ou de cabeça para baixo (pelo `/Rotate`).
 
 Com o pacote de orientação do Tesseract ("osd") instalado, `detect_orientation=True` detecta
 páginas digitalizadas de lado ou de cabeça para baixo e reconhece o texto na orientação
@@ -32,13 +39,16 @@ from pathlib import Path
 
 import pypdfium2 as pdfium
 import pytesseract
+from PIL import Image
 from pypdf import PdfWriter
+from pypdf.generic import ContentStream
 
 from .base import open_pdfium, open_reader, write_pdf
 from .fonts import SANS, register_fonts, text_width
 from .geometry import PageGeometry
 from .overlay import materialize_inherited_attributes, visual_overlay
 from .progress import PDFIUM_LOCK, Progress, ensure_progress
+from .scan_cleanup import ink_mask, rotate_content, skew_angle
 
 _TESSERACT_CANDIDATES = [
     "tesseract",
@@ -50,7 +60,7 @@ _TESSERACT_CANDIDATES = [
 DEFAULT_DPI = 300  # resolução padrão de qualidade para OCR
 _OCR_SCALE = DEFAULT_DPI / 72
 _DEFAULT_MIN_CONFIDENCE = 30
-MODES = ("auto", "force")
+MODES = ("auto", "force", "redo")
 
 # Modo "auto": uma página com texto ainda recebe OCR se tiver menos que isto de texto e uma
 # imagem cobrindo pelo menos esta fração dela (escaneado com carimbo de texto).
@@ -139,6 +149,7 @@ class OCRDocument:
         dpi: int = DEFAULT_DPI,
         detect_orientation: bool = False,
         progress: Progress | None = None,
+        straighten: bool = False,
     ) -> int:
         progress = ensure_progress(progress)
         mode = mode or ("auto" if skip_pages_with_text else "force")
@@ -168,6 +179,9 @@ class OCRDocument:
         try:
             for index, page in enumerate(reader.pages):
                 progress.update(index, total_pages, "Reconhecendo o texto")
+                target = writer.pages[index]
+                if mode == "redo" and remove_invisible_text(target, writer):
+                    page = target  # decide pelo texto que sobrou
                 with PDFIUM_LOCK:
                     pdfium_page = pdfium_doc[index]
                     needs_ocr = mode == "force" or _needs_ocr(page, pdfium_page)
@@ -180,12 +194,19 @@ class OCRDocument:
 
                 rotation = _detect_rotation(image) if detect_orientation else 0
                 upright = image.rotate(-rotation, expand=True) if rotation else image
+                if straighten and (angle := _skew(upright, scale)):
+                    # O conteúdo e a imagem giram juntos: as caixas do Tesseract já saem no
+                    # lugar das palavras endireitadas.
+                    rotate_content(target, geometry, angle)
+                    upright = upright.rotate(angle, resample=Image.Resampling.BICUBIC, fillcolor="white")
                 data = _run_tesseract(upright, language)
 
                 overlay_page = self._build_overlay(data, geometry, image.size, min_confidence, rotation)
                 if overlay_page is not None:
-                    writer.pages[index].merge_page(overlay_page)
+                    target.merge_page(overlay_page)
                     pages_ocred += 1
+                if straighten and rotation:
+                    target.rotate(rotation)  # só muda como a página aparece; o texto fica onde está
         finally:
             with PDFIUM_LOCK:
                 pdfium_doc.close()
@@ -260,6 +281,65 @@ class OCRDocument:
             return wrote_any
 
         return visual_overlay(geometry, draw)
+
+
+def _skew(image, scale: float) -> float:
+    """A inclinação da página (graus, anti-horário), medida como na aba Limpar escaneados, a
+    100 DPI."""
+    factor = (100 / 72) / scale
+    small = image.convert("L").resize((max(1, round(image.width * factor)), max(1, round(image.height * factor))))
+    return skew_angle(ink_mask(small))
+
+
+_SHOW_TEXT = {b"Tj", b"TJ", b"'", b'"'}
+# O que só vale dentro de BT/ET; o resto (fonte, espaçamentos, cor) pode ficar fora e fica,
+# para o texto seguinte, que às vezes conta com o estado deixado pelo bloco removido.
+_TEXT_OBJECT_ONLY = {b"BT", b"ET", b"Td", b"TD", b"Tm", b"T*", *_SHOW_TEXT}
+_INVISIBLE = 3  # modo de renderização de texto "nem preenche nem contorna"
+
+
+def remove_invisible_text(page, writer: PdfWriter) -> bool:
+    """Tira da página os blocos de texto (BT/ET) em que todo o texto é invisível (`3 Tr`),
+    como a camada de um OCR. Devolve se tirou algum.
+
+    shortcut: só o content stream da página, não os Form XObjects; um OCR gravado dentro de
+    um formulário fica. Nenhum dos geradores comuns (Tesseract, OCRmyPDF, este app) faz isso.
+    """
+    contents = page.get_contents()
+    if contents is None:
+        return False
+    stream = ContentStream(contents, writer)
+    kept: list = []
+    block: list | None = None
+    mode, saved = 0, []
+    shown = visible = removed = False
+    for operands, operator in stream.operations:
+        if operator == b"Tr" and operands:
+            mode = int(operands[0])
+        elif operator == b"q":
+            saved.append(mode)
+        elif operator == b"Q" and saved:
+            mode = saved.pop()
+        if operator == b"BT":
+            block, shown, visible = [], False, False
+        if block is None:
+            kept.append((operands, operator))
+            continue
+        block.append((operands, operator))
+        if operator in _SHOW_TEXT:
+            shown, visible = True, visible or mode != _INVISIBLE
+        if operator == b"ET":
+            if shown and not visible:
+                kept += [(o, op) for o, op in block if op not in _TEXT_OBJECT_ONLY]
+                removed = True
+            else:
+                kept += block
+            block = None
+    kept += block or []  # BT sem ET: fica como estava
+    if removed:
+        stream.operations = kept
+        page.replace_contents(stream)
+    return removed
 
 
 def _needs_ocr(pypdf_page, pdfium_page) -> bool:

@@ -32,6 +32,7 @@ _LANGUAGE_NAMES = {
 _MODES = [
     ("auto", "Só as escaneadas"),
     ("force", "Todas (forçar OCR)"),
+    ("redo", "Refazer o OCR (tira o texto reconhecido antes)"),
 ]
 # Os instaladores do app trazem o Tesseract; isto só aparece rodando do código-fonte.
 _INSTALL_HELP = (
@@ -81,6 +82,14 @@ class OCRPage(QWidget):
             self.orientation_checkbox.setEnabled(False)
             self.orientation_checkbox.setToolTip(tr('Requer o pacote "osd" do Tesseract.'))
 
+        self.straighten_checkbox = QCheckBox(tr("Endireitar as páginas no documento"))
+        self.straighten_checkbox.setToolTip(
+            tr(
+                "Gira as páginas tortas (até 5°) e põe de pé as digitalizadas de lado, como a aba "
+                "Limpar escaneados. Sem isso, o OCR lê na orientação certa, mas a página fica como está."
+            )
+        )
+
         self.tesseract_note = QLabel()
         self.tesseract_note.setWordWrap(True)
         self.tesseract_note.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -106,6 +115,7 @@ class OCRPage(QWidget):
         layout.addWidget(self.language_list)
         layout.addLayout(options)
         layout.addWidget(self.orientation_checkbox)
+        layout.addWidget(self.straighten_checkbox)
         layout.addWidget(self.tesseract_note)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
@@ -165,6 +175,7 @@ class OCRPage(QWidget):
             mode=self.mode_combo.currentData(),
             dpi=self.dpi_spin.value(),
             detect_orientation=self.orientation_checkbox.isChecked(),
+            straighten=self.straighten_checkbox.isChecked(),
         )
 
         def done(pages_ocred):

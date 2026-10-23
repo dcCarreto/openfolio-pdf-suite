@@ -84,13 +84,7 @@ class CleanScannedPages:
                 page = writer.pages[index]
                 angle = skew_angle(mask) if deskew else 0.0
                 if angle:
-                    left, bottom, right, top = geometry.box
-                    center_x, center_y = (left + right) / 2, (bottom + top) / 2
-                    # A rotação é própria (não espelha), então o sentido é o mesmo no espaço
-                    # do usuário e na tela, qualquer que seja o /Rotate.
-                    page.add_transformation(
-                        Transformation().translate(-center_x, -center_y).rotate(angle).translate(center_x, center_y)
-                    )
+                    rotate_content(page, geometry, angle)
                     mask = mask.rotate(angle, resample=Image.Resampling.NEAREST)
                     result.straightened.append(index)
 
@@ -117,6 +111,16 @@ class CleanScannedPages:
             writer = pages_writer([(cleaned, kept)])
         write_pdf(writer, output_path)
         return result
+
+
+def rotate_content(page, geometry: PageGeometry, angle: float) -> None:
+    """Gira o conteúdo da página `angle` graus (anti-horário, como `Image.rotate`) em torno
+    do centro da área visível."""
+    left, bottom, right, top = geometry.box
+    center_x, center_y = (left + right) / 2, (bottom + top) / 2
+    # A rotação é própria (não espelha), então o sentido é o mesmo no espaço do usuário e
+    # na tela, qualquer que seja o /Rotate.
+    page.add_transformation(Transformation().translate(-center_x, -center_y).rotate(angle).translate(center_x, center_y))
 
 
 def is_blank(mask: Image.Image) -> bool:

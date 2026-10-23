@@ -185,3 +185,15 @@ def test_number_in_roman_numerals_after_the_cover(make_pdf, tmp_path):
     assert main(["number", str(source), "-o", str(output), "--algarismos", "ROMANOS", "--pular", "1", "-q"]) == 0
 
     assert [page.extract_text().strip() for page in PdfReader(str(output)).pages] == ["", "I", "II"]
+
+
+def test_ocr_options_reach_the_operation(make_pdf, tmp_path, monkeypatch):
+    import core.ocr
+
+    received = {}
+    monkeypatch.setattr(core.ocr.OCRDocument, "run", lambda self, *args, **kwargs: received.update(kwargs) or 1)
+    source = make_pdf("doc.pdf", [(100, 100)])
+
+    assert main(["ocr", str(source), "-o", str(tmp_path / "o.pdf"), "--paginas", "refazer", "--endireitar", "-q"]) == 0
+
+    assert (received["mode"], received["straighten"], received["detect_orientation"]) == ("redo", True, True)

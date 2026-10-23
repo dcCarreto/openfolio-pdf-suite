@@ -207,7 +207,15 @@ def _number(args):
 def _ocr(args):
     from .ocr import OCRDocument
 
-    count = OCRDocument().run(args.input, _output(args), language=args.idioma, progress=_progress(args))
+    count = OCRDocument().run(
+        args.input,
+        _output(args),
+        language=args.idioma,
+        mode={"escaneadas": "auto", "todas": "force", "refazer": "redo"}[args.paginas],
+        detect_orientation=args.orientacao or args.endireitar,
+        straighten=args.endireitar,
+        progress=_progress(args),
+    )
     return f"Texto reconhecido em {count} página(s): {args.output}."
 
 
@@ -387,6 +395,14 @@ def _parser() -> argparse.ArgumentParser:
 
     sub = command("ocr", _ocr, "reconhece o texto de páginas escaneadas (Tesseract)")
     sub.add_argument("--idioma", default="por", help="idioma do Tesseract (padrão por; vários: por+eng)")
+    sub.add_argument(
+        "--paginas",
+        choices=("escaneadas", "todas", "refazer"),
+        default="escaneadas",
+        help="refazer tira o texto de um OCR anterior e reconhece de novo",
+    )
+    sub.add_argument("--orientacao", action="store_true", help="lê páginas digitalizadas de lado")
+    sub.add_argument("--endireitar", action="store_true", help="endireita as páginas tortas ou de lado no documento")
 
     sub = command("pdfa", _pdfa, "converte para PDF/A")
     sub.add_argument("--parte", type=int, choices=(1, 2, 3), default=2)

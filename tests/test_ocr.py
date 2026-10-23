@@ -391,6 +391,115 @@ def test_sideways_scan_text_follows_the_lines_in_the_image(monkeypatch, tmp_path
         assert top - bottom > right - left  # a linha corre na vertical da página
 
 
+def _scan_image_pdf(path, size=(400, 300), lines=(), skew=0.0):
+    """Página "escaneada": uma imagem cobrindo a página, com `lines` escritas e girada `skew`
+    graus (anti-horário), como uma folha torta no scanner."""
+    from PIL import Image, ImageDraw
+
+    scale = ocr._OCR_SCALE
+    image = Image.new("L", (round(size[0] * scale), round(size[1] * scale)), 255)
+    draw = ImageDraw.Draw(image)
+    for index, _line in enumerate(lines):
+        top = 150 + 120 * index
+        draw.rectangle((120, top, image.width - 120, top + 50), fill=0)  # uma "linha de texto"
+    if skew:
+        image = image.rotate(skew, resample=Image.Resampling.BICUBIC, fillcolor=255)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    canvas = rl_canvas.Canvas(str(path), pagesize=size)
+    canvas.drawImage(ImageReader(buffer), 0, 0, *size)
+    canvas.showPage()
+    canvas.save()
+    return path
+
+
+def test_redo_replaces_a_previous_ocr_layer(monkeypatch, tmp_path):
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+    word = [("Velho", 100, 100, 300, 50, 90)]
+    monkeypatch.setattr(ocr, "_run_tesseract", lambda image, language: _fake_ocr_data(word))
+    first, second = tmp_path / "primeiro.pdf", tmp_path / "refeito.pdf"
+    ocr.OCRDocument().run(str(_scan_image_pdf(tmp_path / "scan.pdf")), str(first))
+
+    word[:] = [("Novo", 100, 100, 300, 50, 90)]
+    assert ocr.OCRDocument().run(str(first), str(second), mode="redo") == 1
+
+    text = PdfReader(str(second)).pages[0].extract_text()
+    assert "Novo" in text and "Velho" not in text
+    assert len(PdfReader(str(second)).pages[0].images) == 1  # a imagem escaneada continua
+
+
+def test_redo_keeps_pages_with_real_text(monkeypatch, tmp_path):
+    path_in = tmp_path / "texto.pdf"
+    _make_pdf_with_text(path_in, "Contrato assinado em duas vias pelas partes")
+    calls = []
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+    monkeypatch.setattr(ocr, "_run_tesseract", lambda image, language: calls.append(1) or _fake_ocr_data([]))
+
+    assert ocr.OCRDocument().run(str(path_in), str(tmp_path / "out.pdf"), mode="redo") == 0
+
+    assert calls == []
+    assert "Contrato" in PdfReader(str(tmp_path / "out.pdf")).pages[0].extract_text()
+
+
+def test_removing_invisible_text_keeps_visible_text_and_its_font(tmp_path):
+    from pypdf import PdfWriter
+    from pypdf.generic import ContentStream
+
+    path = tmp_path / "base.pdf"
+    _make_pdf_with_text(path, "x")  # só para ter a fonte /F1 nos recursos
+    writer = PdfWriter(clone_from=str(path))
+    page = writer.pages[0]
+    # O segundo bloco usa a fonte escolhida no primeiro, o invisível.
+    raw = b"BT /F1 16 Tf 3 Tr 40 200 Td (oculto) Tj ET BT 0 Tr 40 100 Td (visivel) Tj ET"
+    stream = ContentStream(None, writer)
+    stream.set_data(raw)
+    page.replace_contents(stream)
+
+    assert ocr.remove_invisible_text(page, writer) is True
+
+    output = tmp_path / "out.pdf"
+    writer.write(output)
+    assert PdfReader(str(output)).pages[0].extract_text().strip() == "visivel"
+    _text, boxes = _char_boxes(output)
+    assert len(boxes) == len("visivel")  # o pdfium desenha o visível, com a fonte certa
+    assert ocr.remove_invisible_text(PdfWriter(clone_from=str(output)).pages[0], writer) is False
+
+
+def test_straighten_puts_a_sideways_page_upright(monkeypatch, tmp_path):
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+    monkeypatch.setattr(ocr, "_detect_rotation", lambda image: 90)
+    monkeypatch.setattr(ocr, "_run_tesseract", lambda image, language: _fake_ocr_data([("Palavra", 300, 200, 600, 80, 90)]))
+    path_in = _scan_image_pdf(tmp_path / "scan.pdf", size=(400, 400))
+    plain, straight = tmp_path / "sem.pdf", tmp_path / "com.pdf"
+
+    ocr.OCRDocument().run(str(path_in), str(plain), detect_orientation=True)
+    ocr.OCRDocument().run(str(path_in), str(straight), detect_orientation=True, straighten=True)
+
+    assert PdfReader(str(plain)).pages[0].rotation == 0
+    assert PdfReader(str(straight)).pages[0].rotation == 90
+    assert _char_boxes(straight) == _char_boxes(plain)  # o texto continua sobre a palavra
+
+
+def test_straighten_deskews_the_page_before_reading_it(monkeypatch, tmp_path):
+    monkeypatch.setattr(ocr, "find_tesseract", lambda: "tesseract")
+    received = []
+    monkeypatch.setattr(ocr, "_run_tesseract", lambda image, language: received.append(image) or _fake_ocr_data([]))
+    path_in = _scan_image_pdf(tmp_path / "torto.pdf", lines=range(6), skew=3)
+    path_out = tmp_path / "out.pdf"
+    scale = ocr._OCR_SCALE
+
+    ocr.OCRDocument().run(str(path_in), str(path_out))
+    assert ocr._skew(received[-1], scale) == pytest.approx(-3, abs=0.3)  # sem endireitar: torta
+
+    ocr.OCRDocument().run(str(path_in), str(path_out), straighten=True)
+    assert ocr._skew(received[-1], scale) == 0.0  # o Tesseract recebe a página reta
+    document = pdfium.PdfDocument(str(path_out))
+    rendered = document[0].render(scale=scale).to_pil()
+    document.close()
+    assert ocr._skew(rendered, scale) == 0.0  # e o documento fica reto
+
+
 # --- Com o Tesseract de verdade -------------------------------------------------------
 
 
@@ -452,3 +561,14 @@ def test_real_tesseract_reads_a_sideways_scan(tmp_path, rotation):
     text = PdfReader(str(path_out)).pages[0].extract_text()
     for word in ("OpenFolio", "sideways", "pages"):
         assert word in text
+
+
+def test_real_tesseract_redo_does_not_duplicate_the_text(tmp_path):
+    require_program(ocr.find_tesseract(), "Tesseract")
+    path_in = _scanned_pdf(tmp_path / "scan.pdf", ["OpenFolio reads scanned pages"])
+    first, redone = tmp_path / "primeiro.pdf", tmp_path / "refeito.pdf"
+
+    ocr.OCRDocument().run(str(path_in), str(first))
+    assert ocr.OCRDocument().run(str(first), str(redone), mode="redo") == 1
+
+    assert PdfReader(str(redone)).pages[0].extract_text().count("OpenFolio") == 1

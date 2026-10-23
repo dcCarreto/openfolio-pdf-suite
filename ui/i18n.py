@@ -296,6 +296,14 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Algarismos romanos vão de 1 a 3999.": "Roman numerals go from 1 to 3999.",
     "Informe as páginas a numerar.": "Enter the pages to number.",
     "Nenhuma página sobrou para numerar.": "No page is left to number.",
+    # OCR (M22)
+    "Refazer o OCR (tira o texto reconhecido antes)": "Redo the OCR (removes the text recognized before)",
+    "Endireitar as páginas no documento": "Straighten the pages in the document",
+    "Gira as páginas tortas (até 5°) e põe de pé as digitalizadas de lado, como a aba "
+    "Limpar escaneados. Sem isso, o OCR lê na orientação certa, mas a página fica como está.": (
+        "Rotates crooked pages (up to 5°) and turns pages scanned sideways upright, like the "
+        "Clean up scans tab. Without it, the OCR reads in the right orientation, but the page stays as it is."
+    ),
     # Pages (rotate/reorder/remove/insert/replace)
     "Rotacionar": "Rotate",
     "Reordenar": "Reorder",

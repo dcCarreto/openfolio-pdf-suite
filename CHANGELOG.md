@@ -39,6 +39,8 @@ Ainda não publicada.
 - A numeração de páginas escolhe a posição, algarismos romanos, a fonte e o tamanho, pula
   a capa, numera só as páginas escolhidas e pode escrever os rótulos de página do
   documento.
+- O OCR pode ser refeito (o texto reconhecido antes sai, em vez de ficar duplicado) e
+  endireita as páginas tortas ou digitalizadas de lado no próprio documento.
 - No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
 - No Linux, o AppImage oferece aparecer no menu de aplicativos e na escolha do programa para
   abrir PDF (Ajuda > Mostrar no menu de aplicativos).
