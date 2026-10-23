@@ -48,7 +48,8 @@ Ainda não publicada.
   endireita as páginas tortas ou digitalizadas de lado no próprio documento.
 - A assinatura digital mostra o certificado antes de assinar, recusa um certificado vencido,
   põe no selo o nome do certificado (e, se quiser, a imagem da sua assinatura), grava motivo,
-  local e contato, usa o formato PAdES e aceita um carimbo de tempo de um servidor TSA.
+  local e contato, usa o formato PAdES e aceita um carimbo de tempo de um servidor TSA. O
+  selo tem fundo branco, legível também sobre uma capa escura.
 - Marcadores: edita os que o documento já tem (renomear, reordenar e aninhar, arrastando ou
   pelos botões) e gera um sumário a partir dos títulos do documento.
 - Formulários: os campos existentes podem ser renomeados, ganhar dica, virar somente leitura

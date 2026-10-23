@@ -179,18 +179,32 @@ def _timestamper(url: str):
     return timestamps.HTTPTimeStamper(url, timeout=20)
 
 
+class _OpaqueStamp(stamp.TextStamp):
+    """O selo do pyhanko é transparente: numa capa escura ou sobre um logotipo o texto preto
+    some. Um fundo branco o deixa legível em qualquer página."""
+
+    def render(self):
+        content = super().render()  # só depois dele a caixa tem tamanho
+        return b"q 1 g 0 0 %g %g re f Q " % (self.box.width, self.box.height) + content
+
+
+class _StampStyle(stamp.TextStampStyle):
+    def create_stamp(self, writer, box, text_params):
+        return _OpaqueStamp(writer=writer, style=self, box=box, text_params=text_params)
+
+
 def _stamp_style(lines: list[str], image_path: str | None, box) -> stamp.TextStampStyle:
     # O pyhanko usa "%(nome)s" no texto: um "%" digitado pelo usuário vira "%%".
     text = "\n".join(lines)
     if image_path is None:
-        return stamp.TextStampStyle(stamp_text=text)
+        return _StampStyle(stamp_text=text)
     # A imagem na metade esquerda do selo, o texto na direita.
     half = int((box[2] - box[0]) / 2)
     try:
         image = images.PdfImage(image_path)
     except Exception as error:  # o Pillow avisa de vários jeitos que não é uma imagem
         raise ValueError(Message("Não foi possível ler a imagem do selo: {error}", error=str(error))) from error
-    return stamp.TextStampStyle(
+    return _StampStyle(
         stamp_text=text,
         background=image,
         background_opacity=1,

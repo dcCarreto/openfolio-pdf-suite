@@ -508,6 +508,27 @@ def test_an_image_goes_into_the_stamp(tmp_path):
     assert DescribeSignatures().run(str(path_out))[0].valid
 
 
+def test_the_stamp_stays_readable_on_a_dark_page(tmp_path):
+    import pypdfium2 as pdfium
+    from reportlab.pdfgen import canvas as rl_canvas
+
+    path_in, path_out = tmp_path / "capa.pdf", tmp_path / "assinado.pdf"
+    canvas = rl_canvas.Canvas(str(path_in), pagesize=(400, 400))
+    canvas.setFillColorRGB(0.5, 0.1, 0.1)  # capa vermelho-escura, como a de um e-book
+    canvas.rect(0, 0, 400, 400, fill=1, stroke=0)
+    canvas.save()
+
+    SignDocument().run(str(path_in), str(path_out), test_common_name="Fulano", box=(100, 100, 300, 160))
+
+    document = pdfium.PdfDocument(str(path_out))
+    document.init_forms()
+    image = document[0].render(may_draw_forms=True).to_pil().convert("RGB")
+    inside = image.crop((110, 245, 290, 295))  # dentro do selo, longe da borda (y da imagem cresce para baixo)
+    white = sum(count for count, color in inside.getcolors(1 << 16) if min(color) > 240)
+    assert white > inside.width * inside.height * 0.6  # fundo branco, não a capa por baixo
+    document.close()
+
+
 def test_the_test_certificate_never_touches_the_disk(tmp_path, monkeypatch):
     import tempfile
 
