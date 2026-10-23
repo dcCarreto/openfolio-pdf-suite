@@ -9,6 +9,13 @@ motores prontos em vez de reimplementar algo sensível a erros sutis (mesmo prin
 OCR com o Tesseract). Por isso usamos `pyhanko`, uma biblioteca madura mantida
 especificamente para assinar/validar PDFs.
 
+O nome no selo é o do certificado (um texto livre podia contradizê-lo). Opcionais: motivo,
+local e contato (gravados na assinatura e mostrados no selo), carimbo de tempo de um servidor
+TSA (a data passa a ser atestada por terceiros, não pelo relógio de quem assina; o servidor
+recebe só o resumo criptográfico do documento), o formato PAdES (ETSI.CAdES.detached, o
+padrão europeu, em vez do adbe.pkcs7.detached) e uma imagem, como a assinatura escaneada,
+no selo.
+
 Dois jeitos de obter o certificado usado para assinar:
 - Um arquivo .pfx/.p12 de verdade do usuário (ex.: certificado ICP-Brasil) — assinatura com
   identidade real.
@@ -29,9 +36,10 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from oscrypto import trust_list
 from pyhanko import stamp
+from pyhanko.pdf_utils import images, layout
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.sign import fields, signers
+from pyhanko.sign import fields, signers, timestamps
 from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.validation import validate_pdf_signature
 from pyhanko.sign.validation.status import SignatureCoverageLevel
@@ -39,6 +47,7 @@ from pyhanko_certvalidator import ValidationContext
 
 from .base import atomic_output, open_reader, require_valid_page_index
 from .geometry import PageGeometry, intersect_rects, normalize_rect
+from .messages import Message
 
 _STAMP_WIDTH = 175
 _STAMP_HEIGHT = 50
@@ -129,6 +138,69 @@ def _load_pfx_signer(pfx_path: str, password: str | None):
     return signer
 
 
+@dataclass
+class CertificateSummary:
+    """Os dados de um certificado que importam antes de assinar com ele."""
+
+    name: str
+    issuer_name: str
+    valid_from: str
+    valid_until: str
+    self_signed: bool
+    expired: bool
+
+
+def describe_certificate(pfx_path: str, password: str | None) -> CertificateSummary:
+    """Abre o .pfx/.p12 (mesma senha da assinatura) e resume o certificado."""
+    return _summary(_load_pfx_signer(pfx_path, password).signing_cert)
+
+
+def _summary(cert) -> CertificateSummary:
+    validity = cert["tbs_certificate"]["validity"]
+    valid_until = validity["not_after"].native
+    return CertificateSummary(
+        name=_common_name(cert.subject),
+        issuer_name=_common_name(cert.issuer),
+        valid_from=validity["not_before"].native.date().isoformat(),
+        valid_until=valid_until.date().isoformat(),
+        self_signed=cert.self_signed != "no",
+        expired=valid_until < datetime.datetime.now(datetime.timezone.utc),
+    )
+
+
+def _timestamper(url: str):
+    """O servidor de carimbo de tempo (isolado para os testes, que não usam a rede)."""
+    return timestamps.HTTPTimeStamper(url, timeout=20)
+
+
+def _stamp_style(lines: list[str], image_path: str | None, box) -> stamp.TextStampStyle:
+    # O pyhanko usa "%(nome)s" no texto: um "%" digitado pelo usuário vira "%%".
+    text = "\n".join(lines)
+    if image_path is None:
+        return stamp.TextStampStyle(stamp_text=text)
+    # A imagem na metade esquerda do selo, o texto na direita.
+    half = int((box[2] - box[0]) / 2)
+    try:
+        image = images.PdfImage(image_path)
+    except Exception as error:  # o Pillow avisa de vários jeitos que não é uma imagem
+        raise ValueError(Message("Não foi possível ler a imagem do selo: {error}", error=str(error))) from error
+    return stamp.TextStampStyle(
+        stamp_text=text,
+        background=image,
+        background_opacity=1,
+        background_layout=layout.SimpleBoxLayoutRule(
+            x_align=layout.AxisAlignment.ALIGN_MIN,
+            y_align=layout.AxisAlignment.ALIGN_MID,
+            margins=layout.Margins(left=4, right=half, top=4, bottom=4),
+        ),
+        inner_content_layout=layout.SimpleBoxLayoutRule(
+            x_align=layout.AxisAlignment.ALIGN_MIN,
+            y_align=layout.AxisAlignment.ALIGN_MID,
+            margins=layout.Margins(left=half + 2, right=4),
+        ),
+    )
+
+
 def _load_test_signer(common_name: str, email: str, tmp_dir: str):
     key_pem, cert_pem = generate_test_certificate(common_name, email)
     key_path = Path(tmp_dir) / "signer_key.pem"
@@ -153,7 +225,7 @@ class SignDocument:
         input_path: str,
         output_path: str,
         *,
-        signer_name: str,
+        signer_name: str | None = None,
         page_index: int = 0,
         position: str = "bottom-right",
         pfx_path: str | None = None,
@@ -161,9 +233,16 @@ class SignDocument:
         test_common_name: str | None = None,
         test_email: str | None = None,
         box: tuple[float, float, float, float] | None = None,
+        reason: str = "",
+        location: str = "",
+        contact: str = "",
+        timestamp_url: str = "",
+        pades: bool = False,
+        stamp_image: str | None = None,
     ) -> None:
         """`box` (left, bottom, right, top no espaço do usuário), se informado, é a área do
-        selo marcada no visualizador e substitui `position`."""
+        selo marcada no visualizador e substitui `position`. `signer_name` vazio usa o nome
+        do certificado."""
         if box is None and position not in _POSITIONS:
             raise ValueError(f"Posição inválida: {position}")
         if box is not None and (box[2] - box[0] < 20 or box[3] - box[1] < 10):
@@ -178,28 +257,55 @@ class SignDocument:
                 raise ValueError(
                     "Informe um certificado .pfx ou os dados para gerar um certificado de teste."
                 )
+            certificate = _summary(signer.signing_cert)
+            if certificate.expired:
+                raise ValueError(
+                    Message(
+                        "O certificado venceu em {date}: a assinatura não seria válida. Use um certificado em dia.",
+                        date=certificate.valid_until,
+                    )
+                )
 
             reader = open_reader(input_path)
             require_valid_page_index(len(reader.pages), page_index)
             if box is None:
                 box = _stamp_box(reader.pages[page_index], position)
             field_name = _unique_field_name(reader)
-            stamp_style = stamp.TextStampStyle(
-                stamp_text="Assinado digitalmente por %(signer)s\n%(ts)s"
+            reason, location, contact = reason.strip(), location.strip(), contact.strip()
+            lines = ["Assinado digitalmente por %(signer)s", "%(ts)s"]
+            lines += [f"{label}: {value.replace('%', '%%')}" for label, value in (("Motivo", reason), ("Local", location)) if value]
+            stamp_style = _stamp_style(lines, stamp_image, box)
+            meta = signers.PdfSignatureMetadata(
+                field_name=field_name,
+                reason=reason or None,
+                location=location or None,
+                contact_info=contact or None,
+                subfilter=fields.SigSeedSubFilter.PADES if pades else None,
             )
-            meta = signers.PdfSignatureMetadata(field_name=field_name)
             # O pyhanko anota a caixa como inteiros, mas grava frações de ponto sem problema.
             field_spec = fields.SigFieldSpec(field_name, on_page=page_index, box=box)  # type: ignore[arg-type]
             pdf_signer = signers.PdfSigner(
-                meta, signer=signer, stamp_style=stamp_style, new_field_spec=field_spec
+                meta,
+                signer=signer,
+                stamp_style=stamp_style,
+                new_field_spec=field_spec,
+                timestamper=_timestamper(timestamp_url.strip()) if timestamp_url.strip() else None,
             )
+            name = (signer_name or "").strip() or certificate.name
 
             with open(input_path, "rb") as inf, atomic_output(output_path) as temp_path:
                 writer = IncrementalPdfFileWriter(inf)
                 with open(temp_path, "wb") as outf:
-                    pdf_signer.sign_pdf(
-                        writer, output=outf, appearance_text_params={"signer": signer_name}
-                    )
+                    try:
+                        pdf_signer.sign_pdf(writer, output=outf, appearance_text_params={"signer": name})
+                    except timestamps.TimestampRequestError as error:
+                        raise ValueError(
+                            Message(
+                                "Não foi possível obter o carimbo de tempo de {url}: {error}",
+                                url=timestamp_url.strip(),
+                                error=str(error),
+                            )
+                        ) from error
 
 
 VERDICT_VALID = "valid"
@@ -246,6 +352,12 @@ class SignatureInfo:
     modification: str = "unknown"  # "none" | "lta_updates" | "form_filling" | "annotations" | "other" | "unknown"
     docmdp_ok: bool | None = None
     revisions_after: int = 0  # revisões (atualizações incrementais) gravadas depois desta assinatura
+    reason: str = ""
+    location: str = ""
+    contact: str = ""
+    pades: bool = False  # formato ETSI.CAdES.detached
+    timestamp: str = ""  # data atestada pelo servidor de carimbo de tempo, se houver
+    timestamp_valid: bool | None = None  # o carimbo confere (None: sem carimbo)
     error: str = ""
 
     @property
@@ -326,6 +438,8 @@ def _describe(embedded, total_revisions: int) -> SignatureInfo:
     cert = status.signing_cert
     validity = cert["tbs_certificate"]["validity"]
     modification = status.modification_level
+    sig_object = embedded.sig_object
+    timestamp = status.timestamp_validity
     return SignatureInfo(
         field_name=field_name,
         signer_name=_common_name(cert.subject),
@@ -341,4 +455,10 @@ def _describe(embedded, total_revisions: int) -> SignatureInfo:
         modification=_MODIFICATION_NAMES.get(modification, "unknown") if modification is not None else "unknown",
         docmdp_ok=status.docmdp_ok,
         revisions_after=max(0, total_revisions - 1 - embedded.signed_revision),
+        reason=str(sig_object.get("/Reason", "")),
+        location=str(sig_object.get("/Location", "")),
+        contact=str(sig_object.get("/ContactInfo", "")),
+        pades=sig_object.get("/SubFilter") == "/ETSI.CAdES.detached",
+        timestamp=str(timestamp.timestamp) if timestamp is not None else "",
+        timestamp_valid=bool(timestamp.intact and timestamp.valid) if timestamp is not None else None,
     )

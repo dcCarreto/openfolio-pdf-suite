@@ -3,7 +3,10 @@ com verificação de integridade."""
 
 from pypdf import PdfReader
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
+    QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -21,6 +24,7 @@ from core.signature import (
     DescribeSignatures,
     SignatureInfo,
     SignDocument,
+    describe_certificate,
 )
 from ui import i18n
 from ui.area_pick_state import AreaPickState
@@ -116,6 +120,14 @@ def format_signature_info(info: SignatureInfo, number: int, total: int) -> str:
     )
     if info.signing_time:
         lines.append(tr("Data declarada pelo signatário: {date}").format(date=info.signing_time))
+    if info.timestamp:
+        status = tr("confere") if info.timestamp_valid else tr("NÃO CONFERE")
+        lines.append(tr("Carimbo de tempo: {date} ({status})").format(date=info.timestamp, status=status))
+    for label, value in (("Motivo: {value}", info.reason), ("Local: {value}", info.location), ("Contato: {value}", info.contact)):
+        if value:
+            lines.append(tr(label).format(value=value))
+    if info.pades:
+        lines.append(tr("Formato: PAdES"))
     lines.append(
         tr("Conteúdo assinado: {status}").format(
             status=tr("íntegro") if info.intact else tr("ALTERADO depois da assinatura")
@@ -181,8 +193,36 @@ class SignaturePage(QWidget):
         self.cert_stack.addWidget(self._build_pfx_panel())
         self.cert_stack.addWidget(self._build_test_cert_panel())
 
-        self.signer_name_edit = QLineEdit()
-        self.signer_name_edit.setPlaceholderText(tr("Nome exibido na assinatura"))
+        self.reason_edit = QLineEdit()
+        self.reason_edit.setPlaceholderText(tr("Opcional, ex: Aprovo este documento"))
+        self.location_edit = QLineEdit()
+        self.location_edit.setPlaceholderText(tr("Opcional, ex: Curitiba, PR"))
+        self.contact_edit = QLineEdit()
+        self.contact_edit.setPlaceholderText(tr("Opcional, ex: telefone ou e-mail"))
+        self.stamp_image_picker = FilePicker(mode="open", file_filter=tr("Imagens") + " (*.png *.jpg *.jpeg)")
+        self.stamp_image_picker.setToolTip(
+            tr("Opcional: a imagem da sua assinatura (PNG com fundo transparente fica melhor) na metade esquerda do selo.")
+        )
+        self.pades_check = QCheckBox(tr("Formato PAdES"))
+        self.pades_check.setChecked(True)
+        self.pades_check.setToolTip(
+            tr("O padrão europeu de assinatura de PDF (ETSI). Desmarque só se um sistema antigo exigir o formato da Adobe.")
+        )
+        self.timestamp_edit = QLineEdit()
+        self.timestamp_edit.setPlaceholderText(tr("Opcional: endereço do servidor de carimbo de tempo (TSA)"))
+        self.timestamp_edit.setToolTip(
+            tr(
+                "Um servidor de carimbo de tempo atesta a data da assinatura, em vez do relógio deste "
+                "computador. O app envia a ele só o resumo criptográfico do documento, não o documento."
+            )
+        )
+        details = QFormLayout()
+        details.addRow(tr("Motivo:"), self.reason_edit)
+        details.addRow(tr("Local:"), self.location_edit)
+        details.addRow(tr("Contato:"), self.contact_edit)
+        details.addRow(tr("Imagem no selo:"), self.stamp_image_picker)
+        details.addRow(tr("Carimbo de tempo:"), self.timestamp_edit)
+        details.addRow("", self.pades_check)
 
         self.page_combo = QComboBox()
         self._refresh_page_combo()
@@ -203,8 +243,7 @@ class SignaturePage(QWidget):
         layout.addWidget(QLabel(tr("Certificado:")))
         layout.addWidget(self.cert_mode_combo)
         layout.addWidget(self.cert_stack)
-        layout.addWidget(QLabel(tr("Nome do signatário:")))
-        layout.addWidget(self.signer_name_edit)
+        layout.addLayout(details)
         layout.addWidget(QLabel(tr("Página:")))
         layout.addWidget(self.page_combo)
         layout.addWidget(QLabel(tr("Posição do selo:")))
@@ -225,11 +264,51 @@ class SignaturePage(QWidget):
         self.pfx_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.pfx_password_edit.setPlaceholderText(tr("Senha do certificado"))
 
+        show_button = QPushButton(tr("Ver o certificado"))
+        show_button.setToolTip(tr("Mostra de quem é o certificado, quem o emitiu e até quando vale."))
+        show_button.clicked.connect(self._show_certificate)
+        password_row = QHBoxLayout()
+        password_row.addWidget(self.pfx_password_edit, 1)
+        password_row.addWidget(show_button)
+        self.certificate_label = QLabel(tr("O selo leva o nome que está no certificado."))
+        self.certificate_label.setWordWrap(True)
+
         layout.addWidget(QLabel(tr("Arquivo .pfx/.p12:")))
         layout.addWidget(self.pfx_picker)
         layout.addWidget(QLabel(tr("Senha:")))
-        layout.addWidget(self.pfx_password_edit)
+        layout.addLayout(password_row)
+        layout.addWidget(self.certificate_label)
         return widget
+
+    def _show_certificate(self):
+        pfx_path = self.pfx_picker.path()
+        if not pfx_path:
+            QMessageBox.warning(self, tr("Assinar"), tr("Escolha o arquivo .pfx/.p12."))
+            return
+
+        def done(summary):
+            lines = [
+                tr("Signatário (segundo o certificado): {name}").format(name=summary.name),
+                tr("Emitido por: {issuer}").format(
+                    issuer=tr("{name} (certificado autoassinado)").format(name=summary.issuer_name)
+                    if summary.self_signed
+                    else summary.issuer_name
+                ),
+                tr("Validade do certificado: {start} a {end}").format(
+                    start=_format_date(summary.valid_from), end=_format_date(summary.valid_until)
+                ),
+            ]
+            if summary.expired:
+                lines.append(tr("VENCIDO: não dá para assinar com ele."))
+            self.certificate_label.setText("\n".join(lines))
+
+        run_task(
+            self,
+            tr("Assinar"),
+            call(describe_certificate, pfx_path, self.pfx_password_edit.text()),
+            on_success=done,
+            error_message=tr("Falha ao abrir o certificado: {error}"),
+        )
 
     def _build_test_cert_panel(self) -> QWidget:
         widget = QWidget()
@@ -298,7 +377,6 @@ class SignaturePage(QWidget):
     def _apply_sign(self):
         input_path = self.session.path()
         output_path = self.sign_output_picker.path()
-        signer_name = self.signer_name_edit.text().strip()
 
         if not input_path:
             QMessageBox.warning(self, tr("Assinar"), tr("Abra um PDF para começar."))
@@ -306,18 +384,20 @@ class SignaturePage(QWidget):
         if not output_path:
             QMessageBox.warning(self, tr("Assinar"), tr("Escolha o arquivo de saída."))
             return
-        if not signer_name:
-            QMessageBox.warning(self, tr("Assinar"), tr("Digite o nome do signatário."))
-            return
         if self.page_combo.currentIndex() < 0:
             QMessageBox.warning(self, tr("Assinar"), tr("O PDF de entrada não tem páginas."))
             return
 
         position = _POSITION_VALUES[_POSITION_LABELS[self.position_combo.currentIndex()]]
         kwargs = {
-            "signer_name": signer_name,
             "page_index": self.page_combo.currentIndex(),
             "position": position,
+            "reason": self.reason_edit.text(),
+            "location": self.location_edit.text(),
+            "contact": self.contact_edit.text(),
+            "timestamp_url": self.timestamp_edit.text(),
+            "pades": self.pades_check.isChecked(),
+            "stamp_image": self.stamp_image_picker.path() or None,
         }
         if position == "custom":
             if self._stamp_area is None:

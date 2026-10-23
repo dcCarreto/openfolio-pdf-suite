@@ -364,3 +364,140 @@ def test_the_system_authorities_are_passed_to_pyhanko(tmp_path, recwarn):
 
     # O pyhanko avisa (e vai deixar de funcionar) quando ninguém passa as autoridades.
     assert not [w for w in recwarn if "trust_roots" in str(w.message)]
+
+
+def _self_signed(common_name, days, extended_usage=None):
+    """Chave e certificado autoassinado (cryptography), válido de ontem até `days` dias a
+    partir de hoje (negativo: já vencido)."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)])
+    builder = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(days=max(2, 1 - days)))
+        .not_valid_after(now + datetime.timedelta(days=days))
+    )
+    if extended_usage:
+        builder = builder.add_extension(x509.ExtendedKeyUsage(extended_usage), critical=True)
+    return key, builder.sign(key, hashes.SHA256())
+
+
+def _pfx(tmp_path, common_name, days):
+    key, cert = _self_signed(common_name, days)
+    path = tmp_path / f"{common_name}.pfx"
+    path.write_bytes(pkcs12.serialize_key_and_certificates(
+        name=b"x", key=key, cert=cert, cas=None, encryption_algorithm=BestAvailableEncryption(b"senha"),
+    ))
+    return path
+
+
+def _appearance_bytes(path) -> bytes:
+    """Todo o conteúdo da aparência do selo (o stream e os XObjects dentro dele)."""
+    widget = next(
+        annot.get_object() for annot in PdfReader(str(path)).pages[0]["/Annots"] if annot.get_object().get("/FT") == "/Sig"
+    )
+    data, pending = b"", [widget["/AP"]["/N"].get_object()]
+    while pending:
+        stream = pending.pop()
+        data += stream.get_data() + str(stream.get("/Subtype", "")).encode()
+        for xobject in stream.get("/Resources", {}).get("/XObject", {}).values():
+            pending.append(xobject.get_object())
+    return data
+
+
+def test_reason_location_contact_and_pades_are_recorded(tmp_path):
+    path_in, path_out = tmp_path / "doc.pdf", tmp_path / "assinado.pdf"
+    _make_pdf(path_in, "Contrato")
+
+    SignDocument().run(
+        str(path_in), str(path_out), test_common_name="Fulano de Tal",
+        reason="Aprovo o contrato 100%", location="Curitiba", contact="fulano@example.com", pades=True,
+    )  # fmt: skip
+
+    (info,) = DescribeSignatures().run(str(path_out))
+    assert (info.reason, info.location, info.contact, info.pades) == (
+        "Aprovo o contrato 100%", "Curitiba", "fulano@example.com", True,
+    )  # fmt: skip
+    assert info.valid and info.intact
+    appearance = _appearance_bytes(path_out)
+    assert b"Fulano de Tal" in appearance  # o nome vem do certificado
+    assert b"Aprovo o contrato 100" in appearance and b"Curitiba" in appearance  # ":" e "%" vão com escape
+
+
+def test_the_stamp_name_comes_from_the_certificate(tmp_path):
+    path_in, path_out = tmp_path / "doc.pdf", tmp_path / "assinado.pdf"
+    _make_pdf(path_in, "Contrato")
+
+    SignDocument().run(str(path_in), str(path_out), pfx_path=str(_pfx(tmp_path, "Beltrano", 30)), pfx_password="senha")
+
+    assert b"Beltrano" in _appearance_bytes(path_out)
+
+
+def test_an_expired_certificate_is_refused_and_shown_as_expired(tmp_path):
+    from core.signature import describe_certificate
+
+    pfx_path = _pfx(tmp_path, "Vencido", -1)
+    path_in = tmp_path / "doc.pdf"
+    _make_pdf(path_in, "Contrato")
+
+    summary = describe_certificate(str(pfx_path), "senha")
+    assert (summary.name, summary.expired, summary.self_signed) == ("Vencido", True, True)
+    with pytest.raises(ValueError, match="venceu"):
+        SignDocument().run(str(path_in), str(tmp_path / "out.pdf"), pfx_path=str(pfx_path), pfx_password="senha")
+    assert not (tmp_path / "out.pdf").exists()
+    assert describe_certificate(str(_pfx(tmp_path, "Em dia", 30)), "senha").expired is False
+
+
+def test_timestamp_from_a_tsa_is_embedded(tmp_path, monkeypatch):
+    from asn1crypto import keys as asn1_keys
+    from cryptography.hazmat.primitives.serialization import NoEncryption, PrivateFormat
+    from cryptography.x509.oid import ExtendedKeyUsageOID
+    from pyhanko.sign.timestamps import DummyTimeStamper
+
+    tsa_key, tsa_cert = _self_signed("TSA de Teste", 30, [ExtendedKeyUsageOID.TIME_STAMPING])
+    dummy = DummyTimeStamper(
+        tsa_cert=asn1_x509.Certificate.load(tsa_cert.public_bytes(Encoding.DER)),
+        tsa_key=asn1_keys.PrivateKeyInfo.load(tsa_key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())),
+    )
+    urls = []
+    monkeypatch.setattr("core.signature._timestamper", lambda url: urls.append(url) or dummy)
+    path_in, path_out = tmp_path / "doc.pdf", tmp_path / "assinado.pdf"
+    _make_pdf(path_in, "Contrato")
+
+    SignDocument().run(str(path_in), str(path_out), test_common_name="Fulano", timestamp_url=" http://tsa.example/ ", pades=True)
+
+    (info,) = DescribeSignatures().run(str(path_out))
+    assert urls == ["http://tsa.example/"]
+    assert info.timestamp and info.timestamp_valid is True
+    (unstamped,) = DescribeSignatures().run(str(_signed_with_test_certificate(tmp_path)))
+    assert (unstamped.timestamp, unstamped.timestamp_valid) == ("", None)
+
+
+def test_an_unreachable_tsa_is_reported_without_writing(tmp_path, monkeypatch):
+    from pyhanko.sign.timestamps import HTTPTimeStamper
+
+    monkeypatch.setattr("core.signature._timestamper", lambda url: HTTPTimeStamper(url, timeout=2))
+    path_in = tmp_path / "doc.pdf"
+    _make_pdf(path_in, "Contrato")
+
+    with pytest.raises(ValueError, match="carimbo de tempo de http://127.0.0.1:9/"):
+        SignDocument().run(str(path_in), str(tmp_path / "out.pdf"), test_common_name="Fulano", timestamp_url="http://127.0.0.1:9/")
+    assert not (tmp_path / "out.pdf").exists()
+
+
+def test_an_image_goes_into_the_stamp(tmp_path):
+    from PIL import Image
+
+    image = tmp_path / "rubrica.png"
+    Image.new("RGB", (120, 40), "navy").save(image)
+    path_in, path_out = tmp_path / "doc.pdf", tmp_path / "assinado.pdf"
+    _make_pdf(path_in, "Contrato")
+
+    SignDocument().run(str(path_in), str(path_out), test_common_name="Fulano", stamp_image=str(image))
+
+    assert b"/Image" in _appearance_bytes(path_out)
+    assert DescribeSignatures().run(str(path_out))[0].valid

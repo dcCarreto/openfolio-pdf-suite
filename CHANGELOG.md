@@ -41,6 +41,9 @@ Ainda não publicada.
   documento.
 - O OCR pode ser refeito (o texto reconhecido antes sai, em vez de ficar duplicado) e
   endireita as páginas tortas ou digitalizadas de lado no próprio documento.
+- A assinatura digital mostra o certificado antes de assinar, recusa um certificado vencido,
+  põe no selo o nome do certificado (e, se quiser, a imagem da sua assinatura), grava motivo,
+  local e contato, usa o formato PAdES e aceita um carimbo de tempo de um servidor TSA.
 - No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
 - No Linux, o AppImage oferece aparecer no menu de aplicativos e na escolha do programa para
   abrir PDF (Ajuda > Mostrar no menu de aplicativos).

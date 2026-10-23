@@ -84,3 +84,48 @@ def test_report_for_signature_that_could_not_be_checked():
 
     assert "Resultado: INVÁLIDA" in text
     assert "Não foi possível verificar esta assinatura: estrutura inválida" in text
+
+
+def test_report_shows_reason_location_timestamp_and_format():
+    _app()
+    info = _info(reason="Aprovo", location="Curitiba", pades=True, timestamp="2026-10-22 10:00:00+00:00", timestamp_valid=False)
+
+    text = format_signature_info(info, 1, 1)
+
+    assert "Motivo: Aprovo" in text and "Local: Curitiba" in text and "Formato: PAdES" in text
+    assert "Carimbo de tempo: 2026-10-22 10:00:00+00:00 (NÃO CONFERE)" in text
+    assert "Contato" not in text  # vazio não aparece
+
+
+def test_signature_tab_shows_the_certificate_and_signs_with_its_name(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    from core.signature import DescribeSignatures
+    from tests.test_signature import _appearance_bytes, _make_pdf, _pfx
+    from ui.document_session import DocumentSession
+    from ui.pages.signature_page import SignaturePage
+    from ui.tasks import wait_for_tasks
+
+    _app()
+    monkeypatch.setattr(QMessageBox, "information", lambda *_args: None)
+    source, output = tmp_path / "doc.pdf", tmp_path / "assinado.pdf"
+    _make_pdf(source, "Contrato")
+    session = DocumentSession()
+    session.open(str(source))
+    page = SignaturePage(session)
+    pfx_path = _pfx(tmp_path, "Ciclano", 30)
+    monkeypatch.setattr(page.pfx_picker, "path", lambda: str(pfx_path))
+    monkeypatch.setattr(page.sign_output_picker, "path", lambda: str(output))
+    page.pfx_password_edit.setText("senha")
+
+    page._show_certificate()
+    assert wait_for_tasks()
+    assert "Ciclano" in page.certificate_label.text() and "VENCIDO" not in page.certificate_label.text()
+
+    page.reason_edit.setText("De acordo")
+    page._apply_sign()
+    assert wait_for_tasks()
+
+    (info,) = DescribeSignatures().run(str(output))
+    assert (info.signer_name, info.reason, info.pades) == ("Ciclano", "De acordo", True)
+    assert b"Ciclano" in _appearance_bytes(output)

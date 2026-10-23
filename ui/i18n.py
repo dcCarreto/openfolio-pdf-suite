@@ -296,6 +296,47 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Algarismos romanos vão de 1 a 3999.": "Roman numerals go from 1 to 3999.",
     "Informe as páginas a numerar.": "Enter the pages to number.",
     "Nenhuma página sobrou para numerar.": "No page is left to number.",
+    # Assinatura (M24)
+    "Motivo: {value}": "Reason: {value}",
+    "Local: {value}": "Location: {value}",
+    "Contato: {value}": "Contact: {value}",
+    "confere": "checks out",
+    "NÃO CONFERE": "DOES NOT CHECK OUT",
+    "Carimbo de tempo: {date} ({status})": "Timestamp: {date} ({status})",
+    "Formato: PAdES": "Format: PAdES",
+    "Opcional, ex: Aprovo este documento": "Optional, e.g.: I approve this document",
+    "Opcional, ex: Curitiba, PR": "Optional, e.g.: Curitiba, PR",
+    "Opcional, ex: telefone ou e-mail": "Optional, e.g.: phone or e-mail",
+    "Opcional: a imagem da sua assinatura (PNG com fundo transparente fica melhor) na metade esquerda do selo.": (
+        "Optional: the image of your signature (a PNG with a transparent background looks best) on the left half of the stamp."
+    ),
+    "Formato PAdES": "PAdES format",
+    "O padrão europeu de assinatura de PDF (ETSI). Desmarque só se um sistema antigo exigir o formato da Adobe.": (
+        "The European PDF signature standard (ETSI). Uncheck it only if an old system requires the Adobe format."
+    ),
+    "Opcional: endereço do servidor de carimbo de tempo (TSA)": "Optional: address of the timestamp server (TSA)",
+    "Um servidor de carimbo de tempo atesta a data da assinatura, em vez do relógio deste "
+    "computador. O app envia a ele só o resumo criptográfico do documento, não o documento.": (
+        "A timestamp server attests the date of the signature, instead of this computer's clock. "
+        "The app sends it only the cryptographic digest of the document, not the document."
+    ),
+    "Motivo:": "Reason:",
+    "Local:": "Location:",
+    "Contato:": "Contact:",
+    "Imagem no selo:": "Image in the stamp:",
+    "Carimbo de tempo:": "Timestamp:",
+    "Ver o certificado": "View the certificate",
+    "Mostra de quem é o certificado, quem o emitiu e até quando vale.": (
+        "Shows whose certificate it is, who issued it and until when it is valid."
+    ),
+    "O selo leva o nome que está no certificado.": "The stamp carries the name on the certificate.",
+    "Falha ao abrir o certificado: {error}": "Failed to open the certificate: {error}",
+    "VENCIDO: não dá para assinar com ele.": "EXPIRED: it cannot be used to sign.",
+    "Não foi possível ler a imagem do selo: {error}": "Could not read the stamp image: {error}",
+    "O certificado venceu em {date}: a assinatura não seria válida. Use um certificado em dia.": (
+        "The certificate expired on {date}: the signature would not be valid. Use a current certificate."
+    ),
+    "Não foi possível obter o carimbo de tempo de {url}: {error}": "Could not get the timestamp from {url}: {error}",
     # OCR (M22)
     "Refazer o OCR (tira o texto reconhecido antes)": "Redo the OCR (removes the text recognized before)",
     "Endireitar as páginas no documento": "Straighten the pages in the document",
@@ -746,9 +787,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Verificar assinatura": "Verify signature",
     "Arquivo .pfx": "Certificate file (.pfx)",
     "Gerar certificado de teste": "Generate test certificate",
-    "Nome exibido na assinatura": "Name shown on the signature",
     "Certificado:": "Certificate:",
-    "Nome do signatário:": "Signer name:",
     "Página:": "Page:",
     "Posição do selo:": "Stamp position:",
     "Inferior direito": "Bottom right",
@@ -771,7 +810,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "PDF file to verify (empty = the open document):"
     ),
     "Verificar": "Verify",
-    "Digite o nome do signatário.": "Enter the signer's name.",
     "O PDF de entrada não tem páginas.": "The input PDF has no pages.",
     "Escolha o arquivo .pfx/.p12.": "Choose the .pfx/.p12 file.",
     "Digite o nome para o certificado de teste.": "Enter the name for the test certificate.",
