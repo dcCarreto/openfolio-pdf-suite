@@ -13,7 +13,7 @@ from pypdf.generic import DictionaryObject, StreamObject
 from .annotations import _object_key
 from .base import READ, open_reader
 from .messages import Message
-from .metadata import ReadMetadata
+from .metadata import ReadMetadata, read_xmp
 from .pdfa import _declared_identification
 
 # As 14 fontes que todo leitor tem; sem elas embutidas, o leitor usa uma equivalente.
@@ -80,6 +80,7 @@ class DocumentProperties:
     permissions: dict[str, bool] | None  # None sem proteção
     fonts: list[FontInfo]
     page_sizes: list[PageSizeGroup]
+    xmp: str = ""  # o pacote XMP como texto; vazio se não houver
 
 
 def _version(reader: PdfReader) -> str:
@@ -276,4 +277,5 @@ class ReadDocumentProperties:
             permissions=permissions,
             fonts=_merge_fonts(fonts.values()),
             page_sizes=sizes,
+            xmp=read_xmp(input_path),
         )

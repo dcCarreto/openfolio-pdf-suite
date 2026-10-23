@@ -5,7 +5,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication, QLabel, QPlainTextEdit, QPushButton
 from reportlab.pdfgen import canvas as rl_canvas
 
 from ui import i18n
@@ -57,4 +57,63 @@ def test_file_menu_opens_the_properties_of_the_working_document(tmp_path):
     assert [font.text(c) for c in (0, 2, 4)] == ["Helvetica", "Não (fonte padrão)", "1"]
     assert dialog.pages_tree.topLevelItem(0).text(0) == "210 × 297 mm (A4, retrato)"
     dialog.close()
+    window.session.clear()
+
+
+def _open_dialog(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    _app()
+    monkeypatch.setattr(QMessageBox, "information", lambda *_args: None)
+    # Fechar o documento editado pergunta se salva: o teste descarta.
+    monkeypatch.setattr(QMessageBox, "question", lambda *_a, **_k: QMessageBox.StandardButton.Discard)
+    path = tmp_path / "contrato.pdf"
+    canvas = rl_canvas.Canvas(str(path), pagesize=(300, 300))
+    canvas.setTitle("Antigo")
+    canvas.drawString(40, 200, "texto")
+    canvas.save()
+    window = MainWindow(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    window.session.open(str(path))
+    assert window.show_document_properties()
+    wait_for_tasks()
+    return window, window._properties_dialog
+
+
+def test_the_description_is_edited_in_a_new_version(tmp_path, monkeypatch):
+    from core.metadata import ReadMetadata
+
+    window, dialog = _open_dialog(tmp_path, monkeypatch)
+    assert dialog.description_edits["title"].text() == "Antigo"
+
+    dialog.description_edits["title"].setText("Contrato de locação")
+    dialog.description_edits["author"].setText("Imobiliária")
+    assert dialog._save_description()
+    wait_for_tasks()
+
+    assert not dialog.isVisible()
+    metadata = ReadMetadata().run(window.session.path())
+    assert (metadata["title"], metadata["author"]) == ("Contrato de locação", "Imobiliária")
+    window.session.undo()
+    assert ReadMetadata().run(window.session.path())["title"] == "Antigo"
+    window.session.clear()
+
+
+def test_the_xmp_tab_saves_the_packet_and_the_checks_run(tmp_path, monkeypatch):
+    from core.metadata import read_xmp
+    from tests.test_metadata import _XMP
+
+    window, dialog = _open_dialog(tmp_path, monkeypatch)
+    pdfa_tab = dialog.tabs.widget([dialog.tabs.tabText(i) for i in range(dialog.tabs.count())].index("PDF/A"))
+    accessibility_tab = dialog.tabs.widget(dialog.tabs.count() - 1)
+
+    for tab in (pdfa_tab, accessibility_tab):
+        next(b for b in tab.findChildren(QPushButton) if b.text() == "Verificar").click()
+        wait_for_tasks()
+    assert "não declaram conformidade PDF/A" in pdfa_tab.findChild(QPlainTextEdit).toPlainText()
+    assert "Problemas encontrados" in accessibility_tab.findChild(QPlainTextEdit).toPlainText()
+
+    dialog.xmp_edit.setPlainText(_XMP)
+    assert dialog._save_xmp()
+    wait_for_tasks()
+    assert read_xmp(window.session.path()) == _XMP
     window.session.clear()

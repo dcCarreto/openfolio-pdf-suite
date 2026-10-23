@@ -589,6 +589,29 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     # Form fields: list existing fields
     "Listar campos": "List fields",
+    # Propriedades (M29)
+    "Descrição": "Description",
+    "XMP": "XMP",
+    "Salvar a descrição": "Save the description",
+    "O pacote XMP completo, como está no arquivo. Se ele existe, salvar a Descrição "
+    "grava os mesmos campos nele; uma mudança feita só aqui não muda a Descrição. "
+    "Vazio tira o XMP.": (
+        "The whole XMP packet, as it is in the file. If there is one, saving the Description "
+        "writes the same fields into it; a change made only here does not change the Description. "
+        "Empty removes the XMP."
+    ),
+    "Salvar o XMP": "Save the XMP",
+    "Os requisitos de PDF/A que o app verifica foram atendidos. Para converter, use a ferramenta PDF/A.": (
+        "The PDF/A requirements the app checks are met. To convert, use the PDF/A tool."
+    ),
+    "Nenhum problema nos itens de acessibilidade que o app verifica.": (
+        "No problem in the accessibility items the app checks."
+    ),
+    "Propriedades salvas.": "Properties saved.",
+    "Falha ao salvar as propriedades: {error}": "Failed to save the properties: {error}",
+    "Declara: {pdfa}": "Declares: {pdfa}",
+    "O XMP precisa ter x:xmpmeta ou rdf:RDF na raiz.": "The XMP must have x:xmpmeta or rdf:RDF at its root.",
+    "O XMP não é um XML válido: {error}": "The XMP is not valid XML: {error}",
     # Anotações (M27)
     "Seta": "Arrow",
     "Espessura (caneta e formas):": "Thickness (pen and shapes):",

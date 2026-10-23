@@ -720,7 +720,7 @@ class MainWindow(QMainWindow):
         modified = self.session.is_modified()
 
         def done(properties):
-            self._properties_dialog = DocumentPropertiesDialog(properties, file_name, modified, self)
+            self._properties_dialog = DocumentPropertiesDialog(properties, file_name, modified, self.session, self)
             self._properties_dialog.open()
 
         return run_task(

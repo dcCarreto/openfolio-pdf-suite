@@ -1,11 +1,14 @@
-"""Metadados de arquivos PDF."""
+"""Metadados de arquivos PDF: o dicionário Info e o XMP."""
 
 import datetime
+import xml.etree.ElementTree as ElementTree
 from typing import Any
 
 from pypdf import PdfWriter
+from pypdf.generic import DecodedStreamObject, NameObject
 
-from .base import READ, open_reader, write_pdf
+from .base import READ, add_object, open_reader, write_pdf
+from .messages import Message
 
 # Campos editáveis: chave usada aqui -> chave do dicionário Info.
 _FIELDS = {
@@ -117,3 +120,44 @@ def _sync_xmp(writer: PdfWriter, values: dict, modified: datetime.datetime) -> N
         xmp.pdf_producer = values["producer"] or None
     xmp.xmp_modify_date = modified
     writer.xmp_metadata = xmp
+
+
+def read_xmp(input_path: str) -> str:
+    """O pacote XMP do documento (`/Metadata` do catálogo), como texto; vazio se não houver."""
+    metadata = open_reader(input_path, purpose=READ).root_object.get("/Metadata")
+    if metadata is None:
+        return ""
+    return metadata.get_object().get_data().decode("utf-8", errors="replace")
+
+
+_XMP_ROOTS = ("{adobe:ns:meta/}xmpmeta", "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}RDF")
+
+
+class SetXMP:
+    """Troca o XMP do documento pelo texto dado, depois de conferir que é um XML com
+    `x:xmpmeta` ou `rdf:RDF` na raiz; vazio tira o XMP. O dicionário Info não muda: quem
+    edita o XMP à mão decide o que vale em cada um.
+
+    O stream vai sem compressão, como o PDF/A pede e para que outros programas achem o
+    pacote lendo os bytes do arquivo.
+    """
+
+    def run(self, input_path: str, output_path: str, xmp: str) -> None:
+        xmp = xmp.strip()
+        if xmp:
+            try:
+                root = ElementTree.fromstring(xmp)
+            except ElementTree.ParseError as error:
+                raise ValueError(Message("O XMP não é um XML válido: {error}", error=str(error))) from error
+            if root.tag not in _XMP_ROOTS:
+                raise ValueError("O XMP precisa ter x:xmpmeta ou rdf:RDF na raiz.")
+        writer = PdfWriter(clone_from=open_reader(input_path))
+        if not xmp:
+            writer.root_object.pop("/Metadata", None)
+        else:
+            stream = DecodedStreamObject()
+            stream.set_data(xmp.encode("utf-8"))
+            stream[NameObject("/Type")] = NameObject("/Metadata")
+            stream[NameObject("/Subtype")] = NameObject("/XML")
+            writer.root_object[NameObject("/Metadata")] = add_object(writer, stream)
+        write_pdf(writer, output_path)

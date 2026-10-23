@@ -92,7 +92,9 @@ O app lembra o idioma, a última pasta usada e os arquivos recentes. **Arquivo >
 selecionadas nas miniaturas, com anotações e campos preenchidos, ajustando cada página ao
 papel; PDFs cujo autor proibiu a impressão não são impressos. **Arquivo > Propriedades do
 documento** (Ctrl+D) mostra versão do PDF, tamanho, produtor, datas, proteção e permissões, as
-fontes usadas (se estão embutidas e em que páginas) e os tamanhos de página.
+fontes usadas (se estão embutidas e em que páginas) e os tamanhos de página. Ali mesmo dá
+para editar título, autor e os outros campos da descrição e o pacote XMP inteiro (numa versão
+nova do documento, que Ctrl+Z desfaz) e verificar o PDF/A e a acessibilidade.
 
 As operações rodam em segundo plano: a janela continua respondendo, a barra de status mostra
 o andamento e o botão "Cancelar" interrompe a operação sem deixar arquivo pela metade. Os

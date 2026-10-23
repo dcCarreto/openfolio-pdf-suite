@@ -1,4 +1,5 @@
 import pytest
+from pypdf import PdfReader
 
 from core.base import EncryptedPDFError
 from core.metadata import ReadMetadata, SetMetadata
@@ -115,3 +116,38 @@ def test_xmp_receives_creator_tool_and_producer(make_pdf, tmp_path):
 
     xmp = PdfReader(str(output_path)).xmp_metadata
     assert xmp.xmp_creator_tool == "Writer" and xmp.pdf_producer == "Gerador X"
+
+
+_XMP = """<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+   <dc:rights><rdf:Alt><rdf:li xml:lang="x-default">Uso interno — São Paulo</rdf:li></rdf:Alt></dc:rights>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>"""
+
+
+def test_xmp_is_written_whole_and_uncompressed(make_pdf, tmp_path):
+    from core.metadata import SetXMP, read_xmp
+
+    source, output, cleared = make_pdf("doc.pdf", [(200, 200)]), tmp_path / "xmp.pdf", tmp_path / "sem.pdf"
+    assert read_xmp(str(source)) == ""
+
+    SetXMP().run(str(source), str(output), _XMP)
+
+    assert read_xmp(str(output)) == _XMP
+    assert "Uso interno — São Paulo".encode() in output.read_bytes()  # sem compressão
+    reader = PdfReader(str(output))
+    assert reader.xmp_metadata.dc_rights == {"x-default": "Uso interno — São Paulo"}
+    SetXMP().run(str(output), str(cleared), "  ")
+    assert "/Metadata" not in PdfReader(str(cleared)).root_object
+
+
+@pytest.mark.parametrize("xmp, message", [("<x:xmpmeta", "não é um XML válido"), ("<html/>", "na raiz")])
+def test_bad_xmp_is_refused(make_pdf, tmp_path, xmp, message):
+    from core.metadata import SetXMP
+
+    with pytest.raises(ValueError, match=message):
+        SetXMP().run(str(make_pdf("doc.pdf", [(200, 200)])), str(tmp_path / "o.pdf"), xmp)

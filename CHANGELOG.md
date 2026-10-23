@@ -52,6 +52,8 @@ Ainda não publicada.
 - Anotações: retângulo, círculo e seta, espessura da caneta e das formas, autor escolhido
   (fica guardado), e os comentários existentes trocam de cor, mudam de lugar e de tamanho
   arrastando no visualizador.
+- Propriedades do documento: edita a descrição (título, autor...) e o XMP completo e verifica
+  o PDF/A e a acessibilidade, sem sair do diálogo.
 - No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
 - No Linux, o AppImage oferece aparecer no menu de aplicativos e na escolha do programa para
   abrir PDF (Ajuda > Mostrar no menu de aplicativos).
