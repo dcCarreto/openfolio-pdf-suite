@@ -1,6 +1,7 @@
 """packaging/release_notes.py: o texto de cada atualização sai do CHANGELOG.md."""
 
 import importlib.util
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -36,4 +37,9 @@ def test_an_update_without_notes_is_refused():
 
 
 def test_the_changelog_has_a_section_for_the_next_update():
-    assert "## Próxima atualização" in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    # Entre uma atualização e outra, a seção "Próxima atualização"; no commit da release (que
+    # troca esse título pela data, ver RELEASING.md), as notas do identificador do pyproject.toml.
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    version = re.search(r'^version = "(.+)"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.MULTILINE)
+    assert version is not None
+    assert "## Próxima atualização" in changelog or release_notes.notes_for(version.group(1), changelog)

@@ -4,9 +4,12 @@ O OpenFolio PDF Suite não tem número de versão: há uma só, que recebe atual
 atualização é identificada pela data em que foi publicada e só é instalada se você aceitar,
 depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no aviso do app).
 
-## Próxima atualização
+## 2026-10-23
 
-Ainda não publicada.
+Primeira atualização depois da beta 0.2.0-beta.1. O app ainda não tem assinatura de código: no
+primeiro uso, o Windows (SmartScreen) e o macOS (Gatekeeper) avisam que o programa é de um
+desenvolvedor não identificado. As versões de Linux e macOS passaram pelos testes automáticos,
+mas foram menos usadas na prática que a do Windows.
 
 ### Segurança e confiabilidade
 
