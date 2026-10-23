@@ -49,6 +49,9 @@ Ainda não publicada.
 - Formulários: os campos existentes podem ser renomeados, ganhar dica, virar somente leitura
   ou obrigatórios, ser removidos e ter a ordem de tabulação mudada; o campo de data pode
   aceitar só datas (opcional, usa JavaScript).
+- Anotações: retângulo, círculo e seta, espessura da caneta e das formas, autor escolhido
+  (fica guardado), e os comentários existentes trocam de cor, mudam de lugar e de tamanho
+  arrastando no visualizador.
 - No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
 - No Linux, o AppImage oferece aparecer no menu de aplicativos e na escolha do programa para
   abrir PDF (Ajuda > Mostrar no menu de aplicativos).

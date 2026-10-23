@@ -4,10 +4,11 @@ from PySide6.QtCore import QObject, Signal
 
 from core.annotations import AnnotationSpec
 
-TOOLS = ("select", "highlight", "underline", "strikeout", "note", "ink", "stamp")
+TOOLS = ("select", "highlight", "underline", "strikeout", "note", "ink", "square", "circle", "arrow", "stamp")
 
 DEFAULT_COLOR = "ffeb3b"
 DEFAULT_STAMP_TEXT = "APROVADO"
+DEFAULT_WIDTH = 2.5
 
 
 class AnnotationState(QObject):
@@ -21,12 +22,15 @@ class AnnotationState(QObject):
     tool_changed = Signal()
     pending_changed = Signal()
     selection_changed = Signal()  # comentário existente escolhido na lista da aba
+    # O comentário escolhido foi arrastado no visualizador: (página, novo /Rect).
+    comment_geometry_requested = Signal(int, object)
 
     def __init__(self):
         super().__init__()
         self._active_tool: str | None = None
         self._active_color = DEFAULT_COLOR
         self._stamp_text = DEFAULT_STAMP_TEXT
+        self._width = DEFAULT_WIDTH
         self._pending: list[AnnotationSpec] = []
         self._page_active = False
         self._selected_comment: tuple[int, tuple[float, float, float, float]] | None = None
@@ -72,6 +76,16 @@ class AnnotationState(QObject):
 
     def set_color(self, color: str) -> None:
         self._active_color = color
+
+    def width(self) -> float:
+        """Espessura do traço da caneta e das formas, em pontos."""
+        return self._width
+
+    def set_width(self, width: float) -> None:
+        self._width = width
+
+    def request_comment_geometry(self, page_index: int, rect: tuple[float, float, float, float]) -> None:
+        self.comment_geometry_requested.emit(page_index, rect)
 
     def stamp_text(self) -> str:
         return self._stamp_text

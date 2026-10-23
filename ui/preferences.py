@@ -83,6 +83,16 @@ class Preferences:
     def set_check_updates_on_start(self, enabled: bool) -> None:
         self._set("updates/check_on_start", "true" if enabled else "false")
 
+    # -- anotações (M27) ----------------------------------------------------------
+
+    def annotation_author(self) -> str | None:
+        """O autor das anotações novas, ou None se ainda não foi escolhido (usa o do sistema)."""
+        value = self._get("annotations/author")
+        return None if value is None else str(value)
+
+    def set_annotation_author(self, author: str) -> None:
+        self._set("annotations/author", author)
+
     # -- menu de aplicativos do Linux (AppImage) -----------------------------------
 
     def app_menu_offered(self) -> bool:

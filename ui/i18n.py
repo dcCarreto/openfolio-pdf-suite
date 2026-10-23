@@ -589,6 +589,25 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     # Form fields: list existing fields
     "Listar campos": "List fields",
+    # Anotações (M27)
+    "Seta": "Arrow",
+    "Espessura (caneta e formas):": "Thickness (pen and shapes):",
+    "O nome que os leitores mostram em cada comentário novo. Fica guardado.": (
+        "The name readers show on each new comment. It is remembered."
+    ),
+    "Trocar a cor dos selecionados pela cor escolhida": "Change the color of the selected ones to the chosen color",
+    "Com Selecionar/Apagar, arraste o comentário escolhido no visualizador para movê-lo, "
+    "ou o canto inferior direito dele para mudar o tamanho.": (
+        "With Select/Erase, drag the chosen comment in the viewer to move it, "
+        "or its bottom right corner to change its size."
+    ),
+    "Trocar a cor": "Change the color",
+    "Mover comentário": "Move comment",
+    "Cor trocada em {count} comentário(s).": "Color changed on {count} comment(s).",
+    "{count} ficou(aram) como estava(m): carimbos, textos livres e polígonos têm o desenho fixo.": (
+        "{count} stayed as they were: stamps, free texts and polygons have a fixed drawing."
+    ),
+    "A anotação ficaria pequena demais.": "The annotation would be too small.",
     # Formulários (M26)
     "Editar campos existentes": "Edit existing fields",
     "A ordem da lista (arraste para mudar)": "The order of the list (drag to change it)",

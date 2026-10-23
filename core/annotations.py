@@ -1,13 +1,15 @@
-"""Anotações e marcação sobre PDFs: realce, sublinhado, riscado, notas, caneta e carimbo.
+"""Anotações e marcação sobre PDFs: realce, sublinhado, riscado, notas, caneta, formas
+(retângulo, círculo e seta) e carimbo; e, nas já gravadas, mover, redimensionar e trocar a cor.
 
 Realce/Sublinhado/Riscado e Nota renderizam corretamente sem aparência (/AP) explícita —
 o pdfium (e a maioria dos leitores) gera uma aparência padrão a partir de /QuadPoints ou do
 ícone padrão de nota. Caneta (Ink) e Carimbo (FreeText), porém, não: confirmado visualmente
 nesta sessão que o pdfium não desenha nada sem um /AP, então ambos ganham uma appearance
-stream (Form XObject) construída à mão.
+stream (Form XObject) construída à mão, como as formas: o pdfium não gera a da seta.
 """
 
 import datetime
+import math
 import getpass
 import io
 import uuid
@@ -44,7 +46,7 @@ class AnnotationSpec:
     """Descreve uma anotação pendente antes de ser gravada no PDF."""
 
     page_index: int
-    kind: str  # "highlight" | "underline" | "strikeout" | "note" | "ink" | "stamp"
+    kind: str  # "highlight" | "underline" | "strikeout" | "note" | "ink" | "square" | "circle" | "arrow" | "stamp"
     color: str = "ffeb3b"
     quads: list[tuple[float, float, float, float]] = field(default_factory=list)
     points: list[tuple[float, float]] = field(default_factory=list)
@@ -53,6 +55,7 @@ class AnnotationSpec:
     # /Rotate da página: nota e carimbo crescem para a direita e para cima *na tela* a
     # partir de `position`, e o texto do carimbo fica de pé também em páginas giradas.
     rotation: int = 0
+    width: float = _INK_STROKE_WIDTH  # espessura do traço: caneta e formas
 
 
 def _hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
@@ -96,11 +99,27 @@ def _bounding_rect(quads: list[tuple[float, float, float, float]]) -> tuple[floa
     return (min(lefts), min(bottoms), max(rights), max(tops))
 
 
-def _points_bounding_rect(points: list[tuple[float, float]]) -> tuple[float, float, float, float]:
+def _points_bounding_rect(points: list[tuple[float, float]], pad: float = _INK_STROKE_WIDTH) -> tuple[float, float, float, float]:
     xs = [p[0] for p in points]
     ys = [p[1] for p in points]
-    pad = _INK_STROKE_WIDTH
     return (min(xs) - pad, min(ys) - pad, max(xs) + pad, max(ys) + pad)
+
+
+SHAPES = ("square", "circle", "arrow")
+
+
+def _arrow_head_length(width: float) -> float:
+    return 6 + 3 * width
+
+
+def arrow_head(start, end, width: float) -> list[tuple[float, float]]:
+    """As duas pontas da seta (aberta, 25° para cada lado), em volta de `end`."""
+    angle = math.atan2(end[1] - start[1], end[0] - start[0])
+    length = _arrow_head_length(width)
+    return [
+        (end[0] - length * math.cos(angle + side), end[1] - length * math.sin(angle + side))
+        for side in (math.radians(25), -math.radians(25))
+    ]
 
 
 # Direção, no espaço do usuário, dos eixos x e y da tela para cada /Rotate.
@@ -130,7 +149,11 @@ def spec_rect(spec: AnnotationSpec) -> tuple[float, float, float, float]:
     if spec.kind in ("highlight", "underline", "strikeout"):
         return _bounding_rect(spec.quads)
     if spec.kind == "ink":
-        return _points_bounding_rect(spec.points)
+        return _points_bounding_rect(spec.points, spec.width)
+    if spec.kind in ("square", "circle"):
+        return normalize_rect((*spec.points[0], *spec.points[-1]))
+    if spec.kind == "arrow":
+        return _points_bounding_rect([spec.points[0], spec.points[-1]], spec.width + _arrow_head_length(spec.width))
     if spec.kind == "note":
         assert spec.position is not None
         x, y = spec.position
@@ -180,6 +203,41 @@ def _ink_appearance_content(
             lines.append(f"{x:.2f} {y:.2f} l")
         lines.append("s" if closed else "S")
     return "\n".join(lines) + "\n"
+
+
+def _shape_appearance_content(kind: str, rect, color: str, width: float, line=None) -> str:
+    """O desenho de um retângulo, elipse (dentro de `rect`, recuado meio traço), seta ou
+    linha sem ponta (`line` = (x1, y1, x2, y2)), no espaço do usuário."""
+    r, g, b = _hex_to_rgb01(color)
+    lines = [f"{width:.2f} w", "1 J", "1 j", f"{r:.3f} {g:.3f} {b:.3f} RG"]
+    if kind in ("arrow", "line"):
+        start, end = (line[0], line[1]), (line[2], line[3])
+        lines += [f"{start[0]:.2f} {start[1]:.2f} m {end[0]:.2f} {end[1]:.2f} l S"]
+        if kind == "arrow":
+            (lx, ly), (rx, ry) = arrow_head(start, end, width)
+            lines += [f"{lx:.2f} {ly:.2f} m {end[0]:.2f} {end[1]:.2f} l {rx:.2f} {ry:.2f} l S"]
+        return "\n".join(lines) + "\n"
+    half = width / 2
+    left, bottom, right, top = rect[0] + half, rect[1] + half, rect[2] - half, rect[3] - half
+    if kind == "square":
+        lines.append(f"{left:.2f} {bottom:.2f} {right - left:.2f} {top - bottom:.2f} re S")
+    else:
+        # Elipse com quatro curvas de Bézier (constante 0,5523 da aproximação do círculo).
+        cx, cy, rx, ry = (left + right) / 2, (bottom + top) / 2, (right - left) / 2, (top - bottom) / 2
+        kx, ky = 0.5523 * rx, 0.5523 * ry
+        lines += [
+            f"{cx + rx:.2f} {cy:.2f} m",
+            f"{cx + rx:.2f} {cy + ky:.2f} {cx + kx:.2f} {cy + ry:.2f} {cx:.2f} {cy + ry:.2f} c",
+            f"{cx - kx:.2f} {cy + ry:.2f} {cx - rx:.2f} {cy + ky:.2f} {cx - rx:.2f} {cy:.2f} c",
+            f"{cx - rx:.2f} {cy - ky:.2f} {cx - kx:.2f} {cy - ry:.2f} {cx:.2f} {cy - ry:.2f} c",
+            f"{cx + kx:.2f} {cy - ry:.2f} {cx + rx:.2f} {cy - ky:.2f} {cx + rx:.2f} {cy:.2f} c",
+            "S",
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def _border(width: float) -> DictionaryObject:
+    return DictionaryObject({NameObject("/W"): FloatObject(width), NameObject("/S"): NameObject("/S")})
 
 
 def _stamp_appearance(writer: PdfWriter, width: float, height: float, text: str, color: str):
@@ -263,15 +321,33 @@ def _build_annotation(writer: PdfWriter, spec: AnnotationSpec):
                     [ArrayObject([FloatObject(v) for point in spec.points for v in point])]
                 ),
                 NameObject("/C"): _color_array(spec.color),
-                NameObject("/BS"): DictionaryObject(
-                    {NameObject("/W"): FloatObject(_INK_STROKE_WIDTH), NameObject("/S"): NameObject("/S")}
-                ),
+                NameObject("/BS"): _border(spec.width),
             }
         )
         appearance_ref = _make_appearance_stream(
-            writer, rect, _ink_appearance_content([spec.points], spec.color)
+            writer, rect, _ink_appearance_content([spec.points], spec.color, spec.width)
         )
         annotation[NameObject("/AP")] = DictionaryObject({NameObject("/N"): appearance_ref})
+        return annotation
+    if spec.kind in SHAPES:
+        rect = spec_rect(spec)
+        subtype = {"square": "/Square", "circle": "/Circle", "arrow": "/Line"}[spec.kind]
+        annotation = DictionaryObject(
+            {
+                NameObject("/Type"): NameObject("/Annot"),
+                NameObject("/Subtype"): NameObject(subtype),
+                NameObject("/Rect"): ArrayObject([FloatObject(v) for v in rect]),
+                NameObject("/C"): _color_array(spec.color),
+                NameObject("/BS"): _border(spec.width),
+            }
+        )
+        line = None
+        if spec.kind == "arrow":
+            line = (*spec.points[0], *spec.points[-1])
+            annotation[NameObject("/L")] = ArrayObject([FloatObject(v) for v in line])
+            annotation[NameObject("/LE")] = ArrayObject([NameObject("/None"), NameObject("/OpenArrow")])
+        content = _shape_appearance_content(spec.kind, rect, spec.color, spec.width, line)
+        annotation[NameObject("/AP")] = DictionaryObject({NameObject("/N"): _make_appearance_stream(writer, rect, content)})
         return annotation
     if spec.kind == "stamp":
         rect = spec_rect(spec)
@@ -455,6 +531,99 @@ class RemoveAnnotations:
         removed = sum(remove_page_annotations(writer.pages[p], indexes) for p, indexes in by_page.items())
         write_pdf(writer, output_path)
         return removed
+
+
+_POINT_LISTS = ("/QuadPoints", "/Vertices", "/CL", "/L")
+
+
+class MoveAnnotation:
+    """Leva um comentário existente para `new_rect` (left, bottom, right, top, no espaço do
+    usuário): move e muda o tamanho junto o /Rect e os pontos que desenham a anotação
+    (realce, caneta, seta, polígono). A aparência gravada (/AP) acompanha sozinha, porque o
+    leitor a encaixa no /Rect."""
+
+    def run(
+        self, input_path: str, output_path: str, page_index: int, index: int, new_rect: tuple[float, float, float, float]
+    ) -> None:
+        new_left, new_bottom, new_right, new_top = normalize_rect(new_rect)
+        if new_right - new_left < 1 or new_top - new_bottom < 1:
+            raise ValueError(Message("A anotação ficaria pequena demais."))
+        writer = PdfWriter(clone_from=open_reader(input_path))
+        annotation = _comment_at(writer, page_index, index)
+        left, bottom, right, top = normalize_rect(annotation["/Rect"])
+        scale_x = (new_right - new_left) / (right - left) if right > left else 1
+        scale_y = (new_top - new_bottom) / (top - bottom) if top > bottom else 1
+
+        def moved(values) -> ArrayObject:
+            return ArrayObject(
+                FloatObject(
+                    round(new_left + (float(v) - left) * scale_x if i % 2 == 0 else new_bottom + (float(v) - bottom) * scale_y, 4)
+                )
+                for i, v in enumerate(values)
+            )
+
+        annotation[NameObject("/Rect")] = ArrayObject(FloatObject(v) for v in (new_left, new_bottom, new_right, new_top))
+        for key in _POINT_LISTS:
+            if key in annotation:
+                annotation[NameObject(key)] = moved(annotation[key])
+        if "/InkList" in annotation:
+            annotation[NameObject("/InkList")] = ArrayObject(moved(stroke) for stroke in annotation["/InkList"])
+        annotation[NameObject("/M")] = TextStringObject(_pdf_date(datetime.datetime.now().astimezone()))
+        write_pdf(writer, output_path)
+
+
+# O pdfium (e os leitores em geral) desenha estes sozinhos, pela cor, quando não há /AP.
+_REDRAWN_BY_READERS = {"/Highlight", "/Underline", "/StrikeOut", "/Squiggly", "/Text"}
+_REDRAWN_HERE = {"/Ink", "/Square", "/Circle", "/Line"}
+
+
+class RecolorAnnotations:
+    """Troca a cor de comentários existentes, dados como (página, posição em /Annots).
+    Realces, sublinhados, riscados e notas perdem a aparência gravada (os leitores a refazem
+    com a cor nova); caneta, retângulo, círculo e linha ganham uma aparência nova, desenhada
+    aqui. Os outros (carimbo, texto livre, polígono...) têm o desenho fixo e ficam como
+    estão. Devolve (trocados, deixados como estavam)."""
+
+    def run(self, input_path: str, output_path: str, items: list[tuple[int, int]], color: str) -> tuple[int, int]:
+        writer = PdfWriter(clone_from=open_reader(input_path))
+        changed = skipped = 0
+        now = TextStringObject(_pdf_date(datetime.datetime.now().astimezone()))
+        for page_index, index in items:
+            annotation = _comment_at(writer, page_index, index)
+            subtype = str(annotation.get("/Subtype", ""))
+            if subtype not in _REDRAWN_BY_READERS | _REDRAWN_HERE:
+                skipped += 1
+                continue
+            annotation[NameObject("/C")] = _color_array(color)
+            annotation[NameObject("/M")] = now
+            if subtype in _REDRAWN_BY_READERS:
+                annotation.pop("/AP", None)
+            else:
+                annotation[NameObject("/AP")] = DictionaryObject({NameObject("/N"): _redraw(writer, annotation, color)})
+            changed += 1
+        write_pdf(writer, output_path)
+        return changed, skipped
+
+
+def _redraw(writer: PdfWriter, annotation, color: str):
+    """Aparência nova de caneta, retângulo, círculo ou linha, pela geometria gravada."""
+    rect = normalize_rect(annotation["/Rect"])
+    width = float(annotation.get("/BS", {}).get("/W", 1))
+    subtype = str(annotation["/Subtype"])
+    if subtype == "/Ink":
+        strokes = [
+            [(float(stroke[i]), float(stroke[i + 1])) for i in range(0, len(stroke) - 1, 2)]
+            for stroke in annotation["/InkList"]
+        ]
+        content = _ink_appearance_content([stroke for stroke in strokes if stroke], color, width)
+    elif subtype == "/Line":
+        line = tuple(float(v) for v in annotation["/L"])
+        # shortcut: só a ponta aberta no fim (a que o app grava); outras pontas viram traço simples.
+        kind = "arrow" if "/OpenArrow" in [str(name) for name in annotation.get("/LE", [])] else "line"
+        content = _shape_appearance_content(kind, rect, color, width, line)
+    else:
+        content = _shape_appearance_content("square" if subtype == "/Square" else "circle", rect, color, width)
+    return _make_appearance_stream(writer, rect, content)
 
 
 def _describe_annotation_color(color_array) -> str:

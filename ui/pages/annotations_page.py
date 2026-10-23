@@ -1,5 +1,6 @@
-"""Aba de anotações e marcação: realce, sublinhado, riscado, notas, caneta e carimbo,
-e os comentários já gravados no documento (editar, remover, XFDF)."""
+"""Aba de anotações e marcação: realce, sublinhado, riscado, notas, caneta, formas e
+carimbo, e os comentários já gravados no documento (editar, mover, trocar a cor, remover,
+XFDF)."""
 
 import re
 
@@ -8,7 +9,9 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
     QComboBox,
+    QDoubleSpinBox,
     QFileDialog,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -25,15 +28,18 @@ from core.annotations import (
     AnnotationInfo,
     ExportAnnotationsCSV,
     ListAnnotations,
+    MoveAnnotation,
+    RecolorAnnotations,
     RemoveAnnotations,
     UpdateAnnotation,
+    default_author,
 )
 from core.xfdf import ExportAnnotationsXFDF, ImportAnnotationsXFDF
 from ui.annotation_state import AnnotationState, DEFAULT_COLOR
 from ui.document_session import DocumentSession
 from ui.errors import show_error
 from ui.i18n import tr
-from ui.preferences import remember_folder_of, start_folder
+from ui.preferences import preferences, remember_folder_of, start_folder
 from ui.tasks import call, run_task
 from ui.stamp_library import StampLibrary
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -46,6 +52,9 @@ _TOOLS = [
     ("strikeout", "Riscado"),
     ("note", "Nota adesiva"),
     ("ink", "Caneta"),
+    ("square", "Retângulo"),
+    ("circle", "Círculo"),
+    ("arrow", "Seta"),
     ("stamp", "Carimbo"),
 ]
 
@@ -153,6 +162,24 @@ class AnnotationsPage(QWidget):
         colors_layout.addStretch()
         self.color_buttons.get(annotation_state.active_color(), self.color_buttons[DEFAULT_COLOR]).setChecked(True)
 
+        self.width_spin = QDoubleSpinBox()
+        self.width_spin.setRange(0.5, 20)
+        self.width_spin.setSingleStep(0.5)
+        self.width_spin.setSuffix(" pt")
+        self.width_spin.setValue(annotation_state.width())
+        self.width_spin.valueChanged.connect(annotation_state.set_width)
+        self._preferences = preferences()
+        self.author_edit = QLineEdit()
+        author = self._preferences.annotation_author()
+        self.author_edit.setText(default_author() if author is None else author)
+        self.author_edit.setToolTip(tr("O nome que os leitores mostram em cada comentário novo. Fica guardado."))
+        self.author_edit.editingFinished.connect(
+            lambda: self._preferences.set_annotation_author(self.author_edit.text().strip())
+        )
+        drawing_form = QFormLayout()
+        drawing_form.addRow(tr("Espessura (caneta e formas):"), self.width_spin)
+        drawing_form.addRow(tr("Autor:"), self.author_edit)
+
         self.stamp_label = QLabel(tr("Texto do carimbo:"))
         self.stamp_combo = QComboBox()
         self.stamp_combo.setEditable(True)
@@ -202,6 +229,16 @@ class AnnotationsPage(QWidget):
         self.update_comment_button.clicked.connect(self._update_comment)
         self.remove_comments_button = QPushButton(tr("Remover comentários selecionados"))
         self.remove_comments_button.clicked.connect(self._remove_comments)
+        self.recolor_button = QPushButton(tr("Trocar a cor dos selecionados pela cor escolhida"))
+        self.recolor_button.clicked.connect(self._recolor_comments)
+        move_hint = QLabel(
+            tr(
+                "Com Selecionar/Apagar, arraste o comentário escolhido no visualizador para movê-lo, "
+                "ou o canto inferior direito dele para mudar o tamanho."
+            )
+        )
+        move_hint.setWordWrap(True)
+        annotation_state.comment_geometry_requested.connect(self._move_comment)
         import_xfdf_button = QPushButton(tr("Importar comentários (XFDF)..."))
         import_xfdf_button.clicked.connect(self._import_xfdf)
         session.path_changed.connect(self._load_comments)
@@ -219,6 +256,7 @@ class AnnotationsPage(QWidget):
         layout.addLayout(tools_layout)
         layout.addWidget(QLabel(tr("Cor:")))
         layout.addLayout(colors_layout)
+        layout.addLayout(drawing_form)
         layout.addWidget(self.stamp_label)
         layout.addWidget(self.stamp_combo)
         layout.addWidget(self.new_stamp_name_edit)
@@ -235,6 +273,8 @@ class AnnotationsPage(QWidget):
         layout.addWidget(self.comment_author_edit)
         layout.addWidget(self.update_comment_button)
         layout.addWidget(self.remove_comments_button)
+        layout.addWidget(self.recolor_button)
+        layout.addWidget(move_hint)
         layout.addWidget(import_xfdf_button)
         layout.addWidget(QLabel(tr("Exportar comentários existentes:")))
         layout.addWidget(self.export_csv_picker)
@@ -282,6 +322,7 @@ class AnnotationsPage(QWidget):
         self.comment_author_edit.setEnabled(single is not None)
         self.update_comment_button.setEnabled(single is not None)
         self.remove_comments_button.setEnabled(bool(selected))
+        self.recolor_button.setEnabled(bool(selected))
         self.annotation_state.set_selected_comment(
             (single.page_index, single.rect) if single is not None and single.rect else None
         )
@@ -328,6 +369,38 @@ class AnnotationsPage(QWidget):
             message=lambda count: tr("{count} anotação(ões) removida(s), com popups e respostas.").format(
                 count=count
             ),
+        )
+
+    def _recolor_comments(self):
+        items = [(c.page_index, c.index) for c in self._selected_comments()]
+        if not items:
+            return
+        color = self.annotation_state.active_color()
+
+        def message(result):
+            changed, skipped = result
+            text = tr("Cor trocada em {count} comentário(s).").format(count=changed)
+            if skipped:
+                text += " " + tr(
+                    "{count} ficou(aram) como estava(m): carimbos, textos livres e polígonos têm o desenho fixo."
+                ).format(count=skipped)
+            return text
+
+        self._apply_to_document(
+            tr("Trocar a cor"),
+            lambda source, output: RecolorAnnotations().run(source, output, items, color),
+            message=message,
+        )
+
+    def _move_comment(self, page_index: int, rect):
+        selected = self._selected_comments()
+        if len(selected) != 1 or selected[0].page_index != page_index:
+            return
+        comment = selected[0]
+        self._apply_to_document(
+            tr("Mover comentário"),
+            lambda source, output: MoveAnnotation().run(source, output, comment.page_index, comment.index, rect),
+            message=lambda _result: "",
         )
 
     def _import_xfdf(self):
@@ -460,7 +533,9 @@ class AnnotationsPage(QWidget):
             )
             return
 
-        task = call(AddAnnotations().run, input_path, output_path, pending)
+        author = self.author_edit.text().strip()
+        self._preferences.set_annotation_author(author)
+        task = call(AddAnnotations().run, input_path, output_path, pending, author=author)
 
         def done(_result):
             self.annotation_state.clear_pending()

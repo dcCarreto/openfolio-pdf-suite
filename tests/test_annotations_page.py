@@ -4,6 +4,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import pytest
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 from reportlab.pdfgen import canvas as rl_canvas
 
@@ -110,3 +111,85 @@ def test_format_pdf_date():
     assert format_pdf_date("D:20261019143005-03'00'") == "19/10/2026 14:30"
     assert format_pdf_date("D:20261019") == "19/10/2026"
     assert format_pdf_date("ontem") == ""
+
+
+def _viewer_with(tmp_path, monkeypatch):
+    from ui.redaction_state import RedactionState
+    from ui.viewer.pdf_viewer import PdfViewer
+
+    page, session, state = _page_with_comments(tmp_path, monkeypatch)
+    viewer = PdfViewer(session, state, RedactionState())
+    viewer._show_single_page(0)
+    state.set_page_active(True)
+    return viewer, page, session, state
+
+
+def test_dragging_draws_a_shape_with_the_chosen_width(tmp_path, monkeypatch):
+    viewer, page, _session, state = _viewer_with(tmp_path, monkeypatch)
+    page.tool_buttons["arrow"].click()
+    page.width_spin.setValue(5)
+
+    viewer._on_canvas_pressed(20, 20)
+    viewer._on_canvas_moved(80, 60)
+    viewer._on_canvas_released(140, 80)
+    viewer._on_canvas_pressed(50, 50)
+    viewer._on_canvas_released(51, 50)  # clique sem arrastar: nada
+
+    (spec,) = state.pending()
+    assert (spec.kind, spec.width) == ("arrow", 5)
+    assert spec.points == [viewer._widget_point_to_pdf(0, 20, 20), viewer._widget_point_to_pdf(0, 140, 80)]
+
+
+def test_dragging_the_selected_comment_moves_and_resizes_it(tmp_path, monkeypatch):
+    viewer, page, session, state = _viewer_with(tmp_path, monkeypatch)
+    page.tool_buttons["select"].click()
+    _select(page, 1)  # o realce
+    before = ListAnnotations().run(session.path())[1].rect
+    screen = viewer._user_rect_to_screen(0, before)
+
+    viewer._on_canvas_pressed(screen.center().x(), screen.center().y())
+    viewer._on_canvas_moved(screen.center().x() + 30, screen.center().y() + 60)
+    viewer._on_canvas_released(screen.center().x() + 30, screen.center().y() + 60)
+    wait_for_tasks()
+
+    moved = ListAnnotations().run(session.path())[1]
+    scale = viewer._scale
+    assert moved.kind == "Highlight"
+    assert moved.rect[0] - before[0] == pytest.approx(30 / scale, abs=0.5)
+    assert moved.rect[1] - before[1] == pytest.approx(-60 / scale, abs=0.5)  # para baixo na tela
+    assert moved.rect[2] - moved.rect[0] == pytest.approx(before[2] - before[0], abs=0.5)
+
+    _select(page, 1)
+    screen = viewer._user_rect_to_screen(0, moved.rect)
+    corner = screen.bottomRight()
+    viewer._on_canvas_pressed(corner.x() - 2, corner.y() - 2)
+    viewer._on_canvas_moved(corner.x() + 40, corner.y() - 2)
+    viewer._on_canvas_released(corner.x() + 40, corner.y() - 2)
+    wait_for_tasks()
+
+    resized = ListAnnotations().run(session.path())[1]
+    assert resized.rect[2] - resized.rect[0] == pytest.approx(moved.rect[2] - moved.rect[0] + 42 / scale, abs=0.5)
+    session.undo()
+    session.undo()
+    assert ListAnnotations().run(session.path())[1].rect == before
+
+
+def test_recolor_and_author_of_new_annotations(tmp_path, monkeypatch):
+    from ui.preferences import Preferences
+
+    monkeypatch.setattr("ui.preferences._current", Preferences())  # em memória, só neste teste
+    shown = []
+    page, session, state = _page_with_comments(tmp_path, monkeypatch)
+    monkeypatch.setattr(QMessageBox, "information", lambda _p, _t, text, *a: shown.append(text))
+    stamp_color = ListAnnotations().run(session.path())[2].color
+    page.color_buttons["2196f3"].click()
+    _select(page, 0, 1, 2)
+    page._recolor_comments()
+    wait_for_tasks()
+
+    assert [c.color for c in ListAnnotations().run(session.path())] == ["2196f3", "2196f3", stamp_color]
+    assert "Cor trocada em 2 comentário(s)." in shown[-1] and "1 ficou(aram)" in shown[-1]
+
+    page.author_edit.setText("Revisora")
+    page.author_edit.editingFinished.emit()
+    assert AnnotationsPage(session, state).author_edit.text() == "Revisora"  # fica guardado

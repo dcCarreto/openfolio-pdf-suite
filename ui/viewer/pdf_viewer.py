@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.annotations import AnnotationSpec, spec_rect
+from core.annotations import AnnotationSpec, arrow_head, spec_rect
 from core.base import known_password, remember_password
 from core.document_info import document_notices
 from core.form_fields import FillFormFields, FormWidget, ListFormWidgets
@@ -69,7 +69,9 @@ _HIGHLIGHT_COLOR = QColor(255, 235, 59, 110)  # outras ocorrências da busca
 _CURRENT_MATCH_COLOR = QColor(255, 152, 0, 150)  # a ocorrência atual
 _TEXT_SELECTION_COLOR = QColor(33, 150, 243, 90)
 _FORM_FIELD_COLOR = QColor(100, 149, 237, 45)  # campos preenchíveis, como nos leitores de PDF
-_DRAWING_TOOLS = ("highlight", "underline", "strikeout", "note", "ink", "stamp")
+_DRAWING_TOOLS = ("highlight", "underline", "strikeout", "note", "ink", "square", "circle", "arrow", "stamp")
+_SHAPE_TOOLS = ("square", "circle", "arrow")
+_RESIZE_HANDLE = 10  # pixels em volta do canto inferior direito que redimensionam
 # Rolagem contínua: páginas a mais de N alturas de tela da área visível têm a imagem
 # descartada (voltam a ser renderizadas se o usuário rolar até elas). Antes nenhuma página
 # era liberada e a memória crescia sem limite ao rolar documentos longos.
@@ -128,6 +130,13 @@ class PdfViewer(QWidget):
         self._drag_start_pdf: tuple[float, float] | None = None
         self._ink_points_pdf: list[tuple[float, float]] = []
         self._ink_preview_base: QPixmap | None = None
+        self._shape_start_pdf: tuple[float, float] | None = None
+        self._shape_preview_base: QPixmap | None = None
+        # Arrastar o comentário escolhido (ferramenta Selecionar): "move" ou "resize", o
+        # ponto inicial e o retângulo na tela, e a imagem da página sem a prévia.
+        self._comment_drag: tuple[str, QPointF, QRectF] | None = None
+        self._comment_drag_rect: QRectF | None = None
+        self._comment_preview_base: QPixmap | None = None
         self._redaction_drag_start_pdf: tuple[float, float] | None = None
         self._area_drag_start_pdf: tuple[float, float] | None = None
         self._area_preview_base: QPixmap | None = None
@@ -740,7 +749,9 @@ class PdfViewer(QWidget):
                     mid_y = rect.center().y()
                     painter.drawLine(QPointF(rect.left(), mid_y), QPointF(rect.right(), mid_y))
         elif spec.kind == "ink":
-            self._paint_ink_stroke(painter, page_index, spec.points, color)
+            self._paint_ink_stroke(painter, page_index, spec.points, color, spec.width)
+        elif spec.kind in _SHAPE_TOOLS:
+            self._paint_shape(painter, page_index, spec, color)
         elif spec.kind == "note":
             rect = self._user_rect_to_screen(page_index, spec_rect(spec))
             painter.setPen(QPen(QColor("#000000"), 1))
@@ -872,8 +883,27 @@ class PdfViewer(QWidget):
     def _pdf_point_to_widget(self, page_index: int, x_pdf: float, y_pdf: float) -> QPointF:
         return QPointF(*self._geometry(page_index).user_to_screen(x_pdf, y_pdf, self._scale))
 
-    def _paint_ink_stroke(self, painter: QPainter, page_index: int, points, color: QColor):
-        pen = QPen(color, max(1.0, 2.5 * self._scale))
+    def _paint_shape(self, painter: QPainter, page_index: int, spec: AnnotationSpec, color: QColor):
+        pen = QPen(color, max(1.0, spec.width * self._scale))
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        if spec.kind == "arrow":
+            start = self._pdf_point_to_widget(page_index, *spec.points[0])
+            end = self._pdf_point_to_widget(page_index, *spec.points[-1])
+            painter.drawLine(start, end)
+            for x, y in arrow_head(spec.points[0], spec.points[-1], spec.width):
+                painter.drawLine(self._pdf_point_to_widget(page_index, x, y), end)
+            return
+        rect = self._user_rect_to_screen(page_index, spec_rect(spec))
+        if spec.kind == "square":
+            painter.drawRect(rect)
+        else:
+            painter.drawEllipse(rect)
+
+    def _paint_ink_stroke(self, painter: QPainter, page_index: int, points, color: QColor, width: float = 2.5):
+        pen = QPen(color, max(1.0, width * self._scale))
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
@@ -1324,7 +1354,12 @@ class PdfViewer(QWidget):
         pdf_point = self._widget_point_to_pdf(page_index, x, y)
 
         if tool == "select":
-            self._erase_pending_at(page_index, pdf_point)
+            if not self._start_comment_drag(page_index, QPointF(x, y)):
+                self._erase_pending_at(page_index, pdf_point)
+            return
+        if tool in _SHAPE_TOOLS:
+            self._shape_start_pdf = pdf_point
+            self._shape_preview_base = QPixmap(self._page_labels[0].pixmap())
             return
         if tool == "ink":
             self._ink_points_pdf = [pdf_point]
@@ -1369,6 +1404,30 @@ class PdfViewer(QWidget):
             self._page_labels[0].setPixmap(preview)
             return
 
+        if self._comment_drag is not None and self._comment_preview_base is not None:
+            mode, start, original = self._comment_drag
+            delta = QPointF(x, y) - start
+            if mode == "move":
+                new_rect = original.translated(delta)
+            else:
+                new_rect = QRectF(original.topLeft(), original.bottomRight() + delta).normalized()
+            self._comment_drag_rect = new_rect
+            preview = QPixmap(self._comment_preview_base)
+            painter = QPainter(preview)
+            painter.setPen(QPen(QColor("#ff5252"), 2, Qt.PenStyle.DashLine))
+            painter.drawRect(new_rect)
+            painter.end()
+            self._page_labels[0].setPixmap(preview)
+            return
+        if self._shape_start_pdf is not None and self._shape_preview_base is not None:
+            preview = QPixmap(self._shape_preview_base)
+            painter = QPainter(preview)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            spec = self._shape_spec(self._widget_point_to_pdf(self._current_page, x, y))
+            self._paint_shape(painter, self._current_page, spec, QColor(f"#{spec.color}"))
+            painter.end()
+            self._page_labels[0].setPixmap(preview)
+            return
         if self.annotation_state.active_tool() != "ink" or not self._ink_points_pdf:
             return
         page_index = self._current_page
@@ -1379,7 +1438,7 @@ class PdfViewer(QWidget):
         painter = QPainter(preview)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         color = QColor(f"#{self.annotation_state.active_color()}")
-        self._paint_ink_stroke(painter, page_index, self._ink_points_pdf, color)
+        self._paint_ink_stroke(painter, page_index, self._ink_points_pdf, color, self.annotation_state.width())
         painter.end()
         self._page_labels[0].setPixmap(preview)
 
@@ -1421,6 +1480,20 @@ class PdfViewer(QWidget):
         page_index = self._current_page
         pdf_point = self._widget_point_to_pdf(page_index, x, y)
 
+        if self._comment_drag is not None:
+            self._finish_comment_drag(page_index)
+            return
+        if self._shape_start_pdf is not None:
+            spec = self._shape_spec(pdf_point)
+            self._shape_start_pdf = None
+            self._shape_preview_base = None
+            (x0, y0), (x1, y1) = spec.points
+            if max(abs(x1 - x0), abs(y1 - y0)) >= 3:  # um clique sem arrastar não desenha nada
+                self.annotation_state.add_pending(spec)
+            else:
+                self._refresh_current_render()
+            return
+
         if tool == "ink":
             if len(self._ink_points_pdf) >= 2:
                 self.annotation_state.add_pending(
@@ -1429,6 +1502,7 @@ class PdfViewer(QWidget):
                         kind="ink",
                         color=self.annotation_state.active_color(),
                         points=list(self._ink_points_pdf),
+                        width=self.annotation_state.width(),
                     )
                 )
             self._ink_points_pdf = []
@@ -1438,6 +1512,45 @@ class PdfViewer(QWidget):
         if tool in ("highlight", "underline", "strikeout") and self._drag_start_pdf is not None:
             self._finish_text_markup(page_index, self._drag_start_pdf, pdf_point, tool)
             self._drag_start_pdf = None
+
+    def _shape_spec(self, end_pdf) -> AnnotationSpec:
+        assert self._shape_start_pdf is not None
+        return AnnotationSpec(
+            page_index=self._current_page,
+            kind=self.annotation_state.active_tool() or "square",
+            color=self.annotation_state.active_color(),
+            points=[self._shape_start_pdf, end_pdf],
+            width=self.annotation_state.width(),
+        )
+
+    def _start_comment_drag(self, page_index: int, point: QPointF) -> bool:
+        """Começa a mover (dentro) ou redimensionar (no canto inferior direito) o comentário
+        escolhido na lista, se o clique caiu nele."""
+        selected = self.annotation_state.selected_comment()
+        if selected is None or selected[0] != page_index:
+            return False
+        rect = self._user_rect_to_screen(page_index, selected[1])
+        corner = rect.bottomRight()
+        near_corner = abs(point.x() - corner.x()) <= _RESIZE_HANDLE and abs(point.y() - corner.y()) <= _RESIZE_HANDLE
+        if not (near_corner or rect.contains(point)):
+            return False
+        self._comment_drag = ("resize" if near_corner else "move", point, rect)
+        self._comment_drag_rect = None
+        self._comment_preview_base = QPixmap(self._page_labels[0].pixmap())
+        return True
+
+    def _finish_comment_drag(self, page_index: int) -> None:
+        new_rect = self._comment_drag_rect
+        self._comment_drag = None
+        self._comment_drag_rect = None
+        self._comment_preview_base = None
+        if new_rect is None:  # clicou sem arrastar
+            self._refresh_current_render()
+            return
+        x0, y0 = self._widget_point_to_pdf(page_index, new_rect.left(), new_rect.top())
+        x1, y1 = self._widget_point_to_pdf(page_index, new_rect.right(), new_rect.bottom())
+        self._refresh_current_render()
+        self.annotation_state.request_comment_geometry(page_index, (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)))
 
     # -- seleção de texto (M11) ---------------------------------------------------
 

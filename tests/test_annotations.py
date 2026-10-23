@@ -408,3 +408,131 @@ def test_new_annotations_get_a_unique_name(tmp_path):
 
     names = [a.get_object()["/NM"] for a in PdfReader(str(path_out)).pages[0]["/Annots"]]
     assert len(set(names)) == 2
+
+
+
+def _render(path):
+    import pypdfium2 as pdfium
+
+    document = pdfium.PdfDocument(str(path))
+    image = document[0].render(scale=1, draw_annots=True).to_pil().convert("RGB")
+    document.close()
+    return image
+
+
+def _count(image, box, color) -> int:
+    """Pixels de `color` (com folga) dentro de `box` (left, top, right, bottom na imagem)."""
+    left, top, right, bottom = box
+    return sum(
+        1
+        for x in range(left, right)
+        for y in range(top, bottom)
+        if all(abs(a - b) < 60 for a, b in zip(image.getpixel((x, y)), color))
+    )
+
+
+def test_shapes_get_their_subtype_width_and_appearance(tmp_path):
+    path_in, path_out = tmp_path / "doc.pdf", tmp_path / "formas.pdf"
+    _make_pdf(path_in, "")
+    specs = [
+        AnnotationSpec(page_index=0, kind="square", color="ff0000", points=[(50, 50), (150, 120)], width=4),
+        AnnotationSpec(page_index=0, kind="circle", color="0000ff", points=[(200, 50), (300, 150)], width=3),
+        AnnotationSpec(page_index=0, kind="arrow", color="00aa00", points=[(60, 250), (300, 250)], width=2),
+    ]
+
+    AddAnnotations().run(str(path_in), str(path_out), specs)
+
+    found = _annotations_by_subtype(path_out)
+    assert set(found) == {"/Square", "/Circle", "/Line"}
+    assert [float(v) for v in found["/Square"]["/Rect"]] == [50, 50, 150, 120]
+    assert float(found["/Square"]["/BS"]["/W"]) == 4
+    assert [float(v) for v in found["/Line"]["/L"]] == [60, 250, 300, 250]
+    assert list(found["/Line"]["/LE"]) == ["/None", "/OpenArrow"]
+    image = _render(path_out)  # 400 x 400, y de cima para baixo
+    assert _count(image, (48, 278, 152, 284), (255, 0, 0)) > 100  # a borda de baixo do retângulo
+    assert _count(image, (95, 290, 105, 340), (255, 0, 0)) == 0  # vazado: o meio não é pintado
+    assert _count(image, (245, 247, 255, 256), (0, 0, 255)) > 10  # o topo do círculo
+    assert _count(image, (280, 135, 300, 165), (0, 170, 0)) > 20  # a ponta da seta
+
+
+def test_pen_width_is_used_for_ink(tmp_path):
+    path_in, path_out = tmp_path / "doc.pdf", tmp_path / "caneta.pdf"
+    _make_pdf(path_in, "")
+    spec = AnnotationSpec(page_index=0, kind="ink", color="000000", points=[(50, 200), (300, 200)], width=8)
+
+    AddAnnotations().run(str(path_in), str(path_out), [spec])
+
+    ink = _annotations_by_subtype(path_out)["/Ink"]
+    assert float(ink["/BS"]["/W"]) == 8
+    assert spec_rect(spec) == (42, 192, 308, 208)
+    assert _count(_render(path_out), (150, 195, 152, 206), (0, 0, 0)) >= 14  # 8 pt de traço, não 2,5
+
+
+def test_author_is_written_on_new_annotations(tmp_path):
+    path_in, path_out = tmp_path / "doc.pdf", tmp_path / "out.pdf"
+    _make_pdf(path_in, "Texto")
+
+    AddAnnotations().run(str(path_in), str(path_out), [AnnotationSpec(0, "note", position=(50, 50))], author="Ana Revisora")
+
+    assert _annotations_by_subtype(path_out)["/Text"]["/T"] == "Ana Revisora"
+
+
+def test_moving_a_highlight_moves_its_quad_points(tmp_path):
+    from core.annotations import MoveAnnotation
+
+    path_in, marked, moved = tmp_path / "doc.pdf", tmp_path / "marcado.pdf", tmp_path / "movido.pdf"
+    _make_pdf(path_in, "Texto")
+    AddAnnotations().run(str(path_in), str(marked), [AnnotationSpec(0, "highlight", quads=[(40, 330, 140, 350)])])
+    (info,) = ListAnnotations().run(str(marked))
+
+    MoveAnnotation().run(str(marked), str(moved), 0, info.index, (100, 100, 300, 140))
+
+    highlight = _annotations_by_subtype(moved)["/Highlight"]
+    assert [float(v) for v in highlight["/Rect"]] == [100, 100, 300, 140]
+    assert [float(v) for v in highlight["/QuadPoints"]] == [100, 140, 300, 140, 100, 100, 300, 100]
+
+
+def test_moving_ink_moves_the_drawing(tmp_path):
+    from core.annotations import MoveAnnotation
+
+    path_in, marked, moved = tmp_path / "doc.pdf", tmp_path / "marcado.pdf", tmp_path / "movido.pdf"
+    _make_pdf(path_in, "")
+    AddAnnotations().run(
+        str(path_in), str(marked), [AnnotationSpec(0, "ink", color="000000", points=[(50, 350), (150, 350)], width=6)]
+    )
+    (info,) = ListAnnotations().run(str(marked))
+    left, bottom, right, top = info.rect
+
+    MoveAnnotation().run(str(marked), str(moved), 0, info.index, (left, bottom - 250, right, top - 250))
+
+    ink = _annotations_by_subtype(moved)["/Ink"]
+    assert [round(float(v)) for v in ink["/InkList"][0]] == [50, 100, 150, 100]
+    image = _render(moved)
+    assert _count(image, (95, 45, 105, 55), (0, 0, 0)) == 0  # saiu de y 350 (50 px do topo)
+    assert _count(image, (95, 295, 105, 305), (0, 0, 0)) > 20  # e foi para y 100
+
+
+def test_recolor_redraws_or_drops_the_appearance(tmp_path):
+    from core.annotations import RecolorAnnotations
+
+    path_in, marked, recolored = tmp_path / "doc.pdf", tmp_path / "marcado.pdf", tmp_path / "cor.pdf"
+    _make_pdf(path_in, "Texto")
+    AddAnnotations().run(
+        str(path_in),
+        str(marked),
+        [
+            AnnotationSpec(0, "highlight", quads=[(40, 330, 140, 350)]),
+            AnnotationSpec(0, "square", color="ff0000", points=[(50, 50), (150, 120)], width=4),
+            AnnotationSpec(0, "stamp", position=(200, 200), text="OK"),
+        ],
+    )
+    items = [(info.page_index, info.index) for info in ListAnnotations().run(str(marked))]
+
+    assert RecolorAnnotations().run(str(marked), str(recolored), items, "0000ff") == (2, 1)  # o carimbo fica
+
+    found = _annotations_by_subtype(recolored)
+    assert [round(float(v), 2) for v in found["/Highlight"]["/C"]] == [0, 0, 1] and "/AP" not in found["/Highlight"]
+    assert [round(float(v), 2) for v in found["/Square"]["/C"]] == [0, 0, 1]
+    image = _render(recolored)
+    assert _count(image, (48, 278, 152, 284), (0, 0, 255)) > 100  # o retângulo foi redesenhado em azul
+    assert _count(image, (48, 278, 152, 284), (255, 0, 0)) == 0
