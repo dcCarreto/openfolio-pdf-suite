@@ -172,7 +172,7 @@ Três relatórios mensais são adicionados à lista, na ordem em que devem apare
 um arquivo de saída é escolhido:
 
 <p align="center">
-  <img src="assets/screenshots/02-mesclar-arquivos.png" alt="Aba Mesclar com três PDFs carregados e arquivo de saída definido" width="720">
+  <img src="assets/screenshots/02-mesclar-arquivos.png" alt="Aba Mesclar com três relatórios mensais na lista, um marcador por arquivo e o arquivo de saída definido" width="900">
 </p>
 
 Ao clicar em **Mesclar**, os três arquivos são combinados em um único PDF de verdade:
@@ -183,16 +183,17 @@ Ao clicar em **Mesclar**, os três arquivos são combinados em um único PDF de 
 
 ### Comprimindo um PDF
 
-Um contrato de 25 páginas é escolhido como entrada:
+Um contrato de 25 páginas, com uma foto na primeira, está aberto no visualizador:
 
 <p align="center">
-  <img src="assets/screenshots/04-comprimir-config.png" alt="Aba Comprimir com arquivo de entrada e saída definidos" width="720">
+  <img src="assets/screenshots/04-comprimir-config.png" alt="Aba Comprimir com o contrato de 25 páginas aberto e o nível médio escolhido" width="900">
 </p>
 
-O resultado mostra o tamanho real antes e depois da compressão:
+O resultado mostra o tamanho real antes e depois da compressão (a foto é recomprimida a
+150 DPI) e fica no documento aberto, com Ctrl+Z para desfazer:
 
 <p align="center">
-  <img src="assets/screenshots/05-comprimir-sucesso.png" alt="Mensagem de sucesso mostrando reducao de 22.5 KB para 18.8 KB">
+  <img src="assets/screenshots/05-comprimir-sucesso.png" alt="Mensagem de sucesso mostrando a redução de 2646 KB para 64 KB, com uma imagem recomprimida">
 </p>
 
 ### Marca d'água
@@ -205,7 +206,7 @@ uma imagem cobrindo a página toda. O campo Páginas limita a marca às páginas
 Pré-visualizar mostra a página atual com a marca, sem gravar nada:
 
 <p align="center">
-  <img src="assets/screenshots/06-marca-dagua.png" alt="Aba Marca d'água configurada com o texto CONFIDENCIAL" width="720">
+  <img src="assets/screenshots/06-marca-dagua.png" alt="Aba Marca d'água com o texto CONFIDENCIAL em vermelho e a pré-visualização da página" width="900">
 </p>
 
 ### Campos de formulário
@@ -215,7 +216,7 @@ verdade: o PDF resultante pode ser aberto em qualquer leitor (Adobe Reader, nave
 campo pode ser clicado e preenchido normalmente.
 
 <p align="center">
-  <img src="assets/screenshots/07-campos-formulario.png" alt="Aba Campos de formulário configurada para adicionar um campo de texto" width="720">
+  <img src="assets/screenshots/07-campos-formulario.png" alt="Aba Campos de formulário com um campo de texto marcado ao lado de Nome completo" width="900">
 </p>
 
 ### Anotações sobre o visualizador
@@ -230,16 +231,16 @@ separado:
 
 ### OCR (texto pesquisável)
 
-Um contrato gerado a partir de texto puro (sem camada pesquisável) é reconhecido pelo
-Tesseract, que vem junto com o app:
+Um contrato escaneado (só a imagem das páginas, sem texto pesquisável) vai ser reconhecido pelo
+Tesseract, que vem junto com o app, com os idiomas inglês e português:
 
 <p align="center">
-  <img src="assets/screenshots/09-ocr.png" alt="Aba OCR com o Tesseract detectado e idioma disponível" width="900">
+  <img src="assets/screenshots/09-ocr.png" alt="Aba OCR com um contrato escaneado aberto e os idiomas inglês e português marcados" width="900">
 </p>
 
 ### Redigir e sanitizar
 
-Uma linha inteira contendo o CPF do contratante é marcada no visualizador; ao aplicar a
+A linha com o CPF do responsável é marcada no visualizador; ao aplicar a
 redação, a página vira uma imagem com a área pintada de preto nos próprios pixels — não sobra
 texto, vetor nem pixel original recuperável, e o resultado é conferido antes de ser salvo:
 
