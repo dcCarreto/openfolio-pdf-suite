@@ -336,6 +336,8 @@ Ele vem com a instalação pelo código-fonte e com os instaladores:
 
 ```bash
 openfolio merge capa.pdf contrato.pdf anexos.pdf -o completo.pdf
+openfolio merge frentes.pdf versos.pdf -o lote.pdf --intercalar --versos-invertidos
+openfolio split lote.pdf -o partes --intervalos "1-3; 4-10; 11-"
 openfolio extract completo.pdf -o resumo.pdf --paginas "1, 4-6"
 openfolio compress completo.pdf -o menor.pdf --nivel strong
 openfolio protect menor.pdf -o protegido.pdf        # pergunta a senha

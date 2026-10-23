@@ -37,6 +37,8 @@ Ainda não publicada.
   marcadores dele dentro) e intercala frentes e versos escaneados em arquivos separados.
 - Dividir também por intervalos (ou as páginas selecionadas nas miniaturas), por tamanho
   máximo de arquivo e a cada página em branco de um lote escaneado.
+- Os modos novos de Mesclar e Dividir também estão na linha de comando (`openfolio merge` e
+  `openfolio split`).
 - PDF para imagens grava também JPEG ou um TIFF com todas as páginas e pode converter só
   as páginas escolhidas (ou as selecionadas nas miniaturas).
 - Marca d'água com imagem ou logotipo, cor do texto, nos cantos ou em mosaico, atrás do

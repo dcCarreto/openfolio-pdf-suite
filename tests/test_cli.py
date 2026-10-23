@@ -38,6 +38,52 @@ def test_merge_then_extract_rotate_and_remove(make_pdf, tmp_path, capsys):
     assert _widths(removed) == [100, 300]
 
 
+def test_merge_with_pages_per_file_bookmarks_and_interleave(make_pdf, tmp_path, capsys):
+    a = make_pdf("frentes.pdf", [(100, 500), (200, 500)])
+    b = make_pdf("versos.pdf", [(300, 500), (400, 500)])
+    chosen, interleaved = tmp_path / "escolhidas.pdf", tmp_path / "intercalado.pdf"
+
+    assert main(["merge", str(a), str(b), "-o", str(chosen), "--paginas", "2", "--paginas", "todas", "--marcador-por-arquivo"]) == 0
+    assert _widths(chosen) == [200, 300, 400]
+    assert [item.title for item in PdfReader(str(chosen)).outline] == ["frentes", "versos"]
+
+    assert main(["merge", str(a), str(b), "-o", str(interleaved), "--intercalar", "--versos-invertidos"]) == 0
+    assert _widths(interleaved) == [100, 400, 200, 300]
+
+    assert main(["merge", str(a), str(b), "-o", str(tmp_path / "x.pdf"), "--paginas", "1"]) == 1
+    assert "uma vez para cada arquivo" in capsys.readouterr().err
+    assert main(["merge", str(a), str(b), "-o", str(tmp_path / "x.pdf"), "--versos-invertidos"]) == 1
+    assert "só vale com --intercalar" in capsys.readouterr().err
+
+
+def test_split_by_ranges_size_and_blank_pages(make_pdf, tmp_path, capsys):
+    source = make_pdf("doc.pdf", [(100, 100), (200, 200), (300, 300)])
+
+    assert main(["split", str(source), "-o", str(tmp_path / "intervalos"), "--intervalos", "3, 1; 2"]) == 0
+    parts = sorted((tmp_path / "intervalos").iterdir())
+    assert [_widths(p) for p in parts] == [[300, 100], [200]]
+
+    assert main(["split", str(source), "-o", str(tmp_path / "tamanho"), "--tamanho-max", "0.0001"]) == 0
+    assert "Passaram do limite" in capsys.readouterr().out  # 100 bytes: nenhuma página cabe
+    assert len(list((tmp_path / "tamanho").iterdir())) == 3
+
+    from reportlab.pdfgen import canvas as rl_canvas
+
+    scanned = tmp_path / "lote.pdf"
+    canvas = rl_canvas.Canvas(str(scanned))
+    for text in ("Primeiro", "", "Segundo"):  # a do meio é a folha de separação
+        if text:
+            canvas.setFont("Helvetica", 40)
+            canvas.drawString(100, 500, text)
+        canvas.showPage()
+    canvas.save()
+    assert main(["split", str(scanned), "-o", str(tmp_path / "branco"), "--paginas-em-branco"]) == 0
+    assert [len(PdfReader(str(p)).pages) for p in sorted((tmp_path / "branco").iterdir())] == [1, 1]
+
+    with pytest.raises(SystemExit):  # um modo só
+        main(["split", str(source), "-o", str(tmp_path / "y"), "--marcadores", "--intervalos", "1"])
+
+
 def test_nothing_is_overwritten_without_force(make_pdf, tmp_path, capsys):
     a = make_pdf("a.pdf", [(100, 100)])
     existing = make_pdf("existe.pdf", [(400, 400)])

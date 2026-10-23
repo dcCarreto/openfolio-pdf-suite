@@ -88,21 +88,55 @@ def _ask_password(prompt: str, confirm: bool = False) -> str:
 def _merge(args):
     from .merge import MergePDF
 
-    MergePDF().run(args.inputs, _output(args), progress=_progress(args))
+    pages = None
+    if args.paginas is not None:
+        if len(args.paginas) != len(args.inputs):
+            raise _Failure("use --paginas uma vez para cada arquivo, na mesma ordem (\"todas\" para o arquivo inteiro).")
+        pages = [
+            None if text.strip().lower() == "todas" else _pages(args, path, text)
+            for path, text in zip(args.inputs, args.paginas)
+        ]
+    if args.versos_invertidos and not args.intercalar:
+        raise _Failure("--versos-invertidos só vale com --intercalar.")
+    MergePDF().run(
+        args.inputs,
+        _output(args),
+        progress=_progress(args),
+        pages=pages,
+        bookmark_per_file=args.marcador_por_arquivo,
+        interleave=args.intercalar,
+        reverse_second=args.versos_invertidos,
+    )
     return f"{len(args.inputs)} arquivo(s) juntado(s) em {args.output}."
 
 
 def _split(args):
-    from .split import SplitByBookmarks, SplitPDF
+    from .split import SplitAtBlankPages, SplitByBookmarks, SplitByRanges, SplitBySize, SplitPDF
 
     folder = _output_dir(args)
+    note = ""
     if args.marcadores:
         paths = SplitByBookmarks().run(args.input, folder)
+    elif args.intervalos is not None:
+        groups = [_pages(args, args.input, group) for group in args.intervalos.split(";") if group.strip(", ")]
+        if not groups:
+            raise _Failure('informe as páginas de cada arquivo, separadas por ";": --intervalos "1-3; 4-".')
+        paths = SplitByRanges().run(args.input, folder, groups)
+    elif args.tamanho_max is not None:
+        if args.tamanho_max <= 0:
+            raise _Failure("--tamanho-max precisa ser maior que zero.")
+        max_bytes = round(args.tamanho_max * 1024 * 1024)
+        paths = SplitBySize().run(args.input, folder, max_bytes, _progress(args))
+        big = [Path(p).name for p in paths if Path(p).stat().st_size > max_bytes]
+        if big:
+            note = f" Passaram do limite, por terem uma página maior que ele: {', '.join(big)}."
+    elif args.paginas_em_branco:
+        paths = SplitAtBlankPages().run(args.input, folder, _progress(args))
     else:
         if args.paginas_por_arquivo < 1:
             raise _Failure("--paginas-por-arquivo precisa ser pelo menos 1.")
         paths = SplitPDF().run(args.input, folder, pages_per_file=args.paginas_por_arquivo)
-    return f"{len(paths)} arquivo(s) em {args.output}."
+    return f"{len(paths)} arquivo(s) em {args.output}.{note}"
 
 
 def _rotate(args):
@@ -337,10 +371,23 @@ def _parser() -> argparse.ArgumentParser:
     sub.set_defaults(handler=_merge)
     sub.add_argument("inputs", nargs="+", metavar="ENTRADA.pdf")
     sub.add_argument("-o", "--output", required=True, metavar="SAIDA")
+    sub.add_argument(
+        "--paginas",
+        action="append",
+        metavar="PAGINAS",
+        help='páginas de cada arquivo: repita uma vez por arquivo, na ordem ("todas" para o arquivo inteiro)',
+    )
+    sub.add_argument("--marcador-por-arquivo", action="store_true", help="um marcador no começo de cada arquivo")
+    sub.add_argument("--intercalar", action="store_true", help="dois arquivos, frentes e versos: 1ª do primeiro, 1ª do segundo...")
+    sub.add_argument("--versos-invertidos", action="store_true", help="com --intercalar: o segundo arquivo está na ordem inversa")
 
     sub = command("split", _split, "divide em vários PDFs (numa pasta)", output="pasta")
-    sub.add_argument("--paginas-por-arquivo", type=int, default=1, metavar="N")
-    sub.add_argument("--marcadores", action="store_true", help="um arquivo por marcador de primeiro nível")
+    mode = sub.add_mutually_exclusive_group()
+    mode.add_argument("--paginas-por-arquivo", type=int, default=1, metavar="N")
+    mode.add_argument("--marcadores", action="store_true", help="um arquivo por marcador de primeiro nível")
+    mode.add_argument("--intervalos", metavar="PAGINAS", help='as páginas de cada arquivo, separadas por ";": "1-3; 4-10; 11-"')
+    mode.add_argument("--tamanho-max", type=float, metavar="MB", help="arquivos de até MB megabytes")
+    mode.add_argument("--paginas-em-branco", action="store_true", help="divide nas páginas em branco (que saem)")
 
     sub = command("rotate", _rotate, "gira páginas")
     sub.add_argument("--angulo", type=int, choices=(90, 180, 270), default=90, help="sentido horário (padrão 90)")
