@@ -1,4 +1,5 @@
-"""Criação de campos de formulário (AcroForm) em arquivos PDF.
+"""Campos de formulário (AcroForm) em arquivos PDF: criar, editar, remover, ordem de
+tabulação, preencher, exportar/importar os dados e achatar.
 
 Os campos são desenhados com o reportlab em um PDF de uma página (o que gera
 os widgets AcroForm corretamente), mesclados na página alvo, e registrados no
@@ -19,7 +20,9 @@ from pypdf.generic import (
     DictionaryObject,
     IndirectObject,
     NameObject,
+    NumberObject,
     StreamObject,
+    TextStringObject,
     read_object,
 )
 from reportlab.pdfgen import canvas
@@ -33,13 +36,18 @@ _VALID_FIELD_TYPES = ("text", "checkbox", "date", "dropdown", "listbox")
 _CHOICE_FIELD_TYPES = ("dropdown", "listbox")
 
 
+_DATE_FORMAT = "dd/mm/yyyy"
+
+
 class AddFormField:
     """Adiciona um campo de formulário interativo (texto, data, caixa de seleção, lista
     suspensa ou lista de seleção) a uma página do PDF. Campo de data é um campo de texto
-    comum com uma dica de formato no tooltip — PDF não tem um tipo de campo "data" nativo,
-    e validar o formato exigiria uma ação de JavaScript, que este projeto evita adicionar
-    de propósito (o mesmo motivo por trás de `core/pdfa.py` e `core/redaction.py` removerem
-    JavaScript de PDFs de entrada)."""
+    comum com uma dica de formato no tooltip — PDF não tem um tipo de campo "data" nativo.
+
+    `date_mask=True` faz o campo de data aceitar só datas (DD/MM/AAAA), com as funções de
+    data padrão dos leitores (AFDate_KeystrokeEx/AFDate_FormatEx). Isso é JavaScript, então
+    vem desligado: o app evita pôr JavaScript em PDFs (pelo mesmo motivo `core/pdfa.py` e
+    `core/redaction.py` o removem), e leitores sem JavaScript simplesmente não validam."""
 
     def run(
         self,
@@ -54,6 +62,7 @@ class AddFormField:
         field_type: str = "text",
         checked: bool = False,
         options: list[str] | None = None,
+        date_mask: bool = False,
     ) -> None:
         if field_type not in _VALID_FIELD_TYPES:
             raise ValueError(f"field_type inválido: {field_type}")
@@ -141,8 +150,21 @@ class AddFormField:
 
             _merge_default_fonts(writer, acroform_obj, overlay_acroform)
 
+        if field_type == "date" and date_mask:
+            for annot in new_annots:
+                annot.get_object()[NameObject("/AA")] = DictionaryObject(
+                    {
+                        NameObject("/K"): _javascript(f'AFDate_KeystrokeEx("{_DATE_FORMAT}");'),
+                        NameObject("/F"): _javascript(f'AFDate_FormatEx("{_DATE_FORMAT}");'),
+                    }
+                )
+
         acroform_obj[NameObject("/NeedAppearances")] = BooleanObject(True)
         write_pdf(writer, output_path)
+
+
+def _javascript(code: str) -> DictionaryObject:
+    return DictionaryObject({NameObject("/S"): NameObject("/JavaScript"), NameObject("/JS"): TextStringObject(code)})
 
 
 def _require_new_field_name(reader: PdfReader, field_name: str) -> None:
@@ -296,12 +318,16 @@ class FormFieldInfo:
     name: str
     field_type: str
     value: str
+    tooltip: str = ""
+    read_only: bool = False
+    required: bool = False
 
 
 # Bits de /Ff (ISO 32000-1, tabela 221/226/227) que distinguem subtipos de /Btn e /Ch.
 _FLAG_RADIO = 1 << 15
 _FLAG_PUSHBUTTON = 1 << 16
 _FLAG_COMBO = 1 << 17
+_FLAG_REQUIRED = 1 << 1
 
 
 def _describe_field_type(field_type, flags) -> str:
@@ -322,22 +348,180 @@ def _describe_field_type(field_type, flags) -> str:
 
 
 class ListFormFields:
-    """Lista os campos de formulário já existentes num PDF: nome, tipo e valor atual.
-    Campos que só agrupam outros (nomes hierárquicos como "cliente" em "cliente.nome") não
-    são campos preenchíveis e ficam de fora."""
+    """Lista os campos de formulário já existentes num PDF: nome, tipo, valor atual, dica e
+    se é somente leitura ou obrigatório, na ordem de tabulação (a dos widgets nas páginas;
+    um campo sem widget vai no fim). Campos que só agrupam outros (nomes hierárquicos como
+    "cliente" em "cliente.nome") não são campos preenchíveis e ficam de fora."""
 
     def run(self, input_path: str) -> list[FormFieldInfo]:
         reader = open_reader(input_path, purpose=READ)
         fields = reader.get_fields() or {}
-        return [
+        order = {
+            name: position
+            for position, name in enumerate(
+                dict.fromkeys(_qualified_name(widget) for page in reader.pages for widget in _page_widgets(page))
+            )
+        }
+        infos = [
             FormFieldInfo(
                 name=name,
                 field_type=_describe_field_type(field.field_type, field.flags),
                 value="" if field.value is None else str(field.value),
+                tooltip=str(field.alternate_name or ""),
+                read_only=bool(int(field.flags or 0) & _FLAG_READ_ONLY),
+                required=bool(int(field.flags or 0) & _FLAG_REQUIRED),
             )
             for name, field in fields.items()
             if field.field_type is not None
         ]
+        return sorted(infos, key=lambda info: order.get(info.name, len(order)))
+
+
+def _field_widgets(writer: PdfWriter, name: str) -> list:
+    """As referências (em `/Annots`) dos widgets do campo `name` (nome completo)."""
+    return [
+        ref
+        for page in writer.pages
+        for ref in cast(ArrayObject, page.get("/Annots", ArrayObject()))
+        if ref.get_object().get("/Subtype") == "/Widget" and _qualified_name(ref.get_object()) == name
+    ]
+
+
+def _field_node(widget, name: str) -> DictionaryObject:
+    """O dicionário do campo dono do widget: o próprio widget (campo e widget juntos) ou o
+    pai que tem o último pedaço do nome."""
+    node = widget.get_object()
+    visited: set[int] = set()
+    while node is not None and id(node) not in visited:
+        visited.add(id(node))
+        if "/T" in node and _qualified_name(node) == name:
+            return node
+        parent = node.get("/Parent")
+        node = parent.get_object() if parent is not None else None
+    return widget.get_object()
+
+
+def _require_field(writer: PdfWriter, name: str) -> list:
+    widgets = _field_widgets(writer, name)
+    if not widgets:
+        raise ValueError(Message('Não há campo chamado "{name}" neste PDF.', name=name))
+    return widgets
+
+
+class EditFormField:
+    """Muda um campo existente: o nome (só o último pedaço, num nome hierárquico), a dica
+    (o texto que os leitores mostram ao passar o mouse; vazio tira) e os sinalizadores
+    somente leitura e obrigatório. None deixa o que estava."""
+
+    def run(
+        self,
+        input_path: str,
+        output_path: str,
+        name: str,
+        *,
+        new_name: str | None = None,
+        tooltip: str | None = None,
+        read_only: bool | None = None,
+        required: bool | None = None,
+    ) -> None:
+        reader = open_reader(input_path)
+        writer = PdfWriter(clone_from=reader)
+        node = _field_node(_require_field(writer, name)[0], name)
+
+        if new_name is not None and new_name.strip() != name.rpartition(".")[2]:
+            new_name = new_name.strip()
+            if not new_name or "." in new_name:
+                raise ValueError("O nome do campo não pode ficar vazio nem ter ponto.")
+            prefix = name.rpartition(".")[0]
+            _require_new_field_name(reader, f"{prefix}.{new_name}" if prefix else new_name)
+            node[NameObject("/T")] = TextStringObject(new_name)
+        if tooltip is not None:
+            if tooltip.strip():
+                node[NameObject("/TU")] = TextStringObject(tooltip.strip())
+            elif "/TU" in node:
+                del node["/TU"]
+        flags = int(_inherited(node, "/Ff") or 0)
+        for wanted, bit in ((read_only, _FLAG_READ_ONLY), (required, _FLAG_REQUIRED)):
+            if wanted is not None:
+                flags = flags | bit if wanted else flags & ~bit
+        node[NameObject("/Ff")] = NumberObject(flags)
+        write_pdf(writer, output_path)
+
+
+class RemoveFormField:
+    """Tira um campo do formulário: os widgets dele saem das páginas e da árvore de campos
+    (o formulário some se ficar sem campos). Devolve quantos widgets saíram."""
+
+    def run(self, input_path: str, output_path: str, name: str) -> int:
+        reader = open_reader(input_path)
+        writer = PdfWriter(clone_from=reader)
+        widgets = _require_field(writer, name)
+        doomed = {id(ref.get_object()) for ref in widgets}
+        for page in writer.pages:
+            if "/Annots" not in page:
+                continue
+            kept = ArrayObject(ref for ref in cast(ArrayObject, page["/Annots"]) if id(ref.get_object()) not in doomed)
+            if kept:
+                page[NameObject("/Annots")] = kept
+            else:
+                del page["/Annots"]
+        remove_widgets_from_form(writer, widgets)
+        acroform = writer.root_object.get("/AcroForm")
+        if acroform is not None and not acroform.get_object().get("/Fields"):
+            del writer.root_object["/AcroForm"]
+        write_pdf(writer, output_path)
+        return len(widgets)
+
+
+TAB_ORDERS = ("list", "rows", "columns")
+
+
+class SetTabOrder:
+    """Muda a ordem em que Tab percorre os campos de cada página.
+
+    - "list": a ordem de `order` (nomes completos); campos fora da lista vêm depois, na
+      ordem em que estavam.
+    - "rows": por linhas, de cima para baixo e da esquerda para a direita (`/Tabs /R`).
+    - "columns": por colunas, da esquerda para a direita e de cima para baixo (`/Tabs /C`).
+
+    Os widgets são reordenados em `/Annots` (o que os leitores seguem quando a página não
+    diz outra coisa) nas mesmas posições que ocupavam: as outras anotações não se mexem.
+    """
+
+    def run(self, input_path: str, output_path: str, mode: str = "list", order: list[str] | None = None) -> None:
+        if mode not in TAB_ORDERS:
+            raise ValueError(f"Ordem de tabulação inválida: {mode}")
+        if mode == "list" and not order:
+            raise ValueError("Informe a ordem dos campos.")
+        rank = {name: position for position, name in enumerate(order or [])}
+
+        def key(widget):
+            left, bottom, right, top = (float(v) for v in widget["/Rect"])
+            top, left = max(bottom, top), min(left, right)
+            if mode == "rows":
+                return (-round(top), left)
+            if mode == "columns":
+                return (round(left), -top)
+            return (rank.get(_qualified_name(widget), len(rank)),)
+
+        reader = open_reader(input_path)
+        writer = PdfWriter(clone_from=reader)
+        for page in writer.pages:
+            if "/Annots" not in page:
+                continue
+            annots = cast(ArrayObject, page["/Annots"])
+            slots = [i for i, ref in enumerate(annots) if ref.get_object().get("/Subtype") == "/Widget"]
+            ordered = sorted((annots[i] for i in slots), key=lambda ref: key(ref.get_object()))  # sorted é estável
+            new_annots = ArrayObject(annots)
+            for slot, ref in zip(slots, ordered):
+                new_annots[slot] = ref
+            page[NameObject("/Annots")] = new_annots
+            if mode == "list":
+                if "/Tabs" in page:
+                    del page["/Tabs"]
+            else:
+                page[NameObject("/Tabs")] = NameObject("/R" if mode == "rows" else "/C")
+        write_pdf(writer, output_path)
 
 
 _FLAG_READ_ONLY = 1

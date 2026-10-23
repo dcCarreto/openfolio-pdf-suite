@@ -46,6 +46,9 @@ Ainda não publicada.
   local e contato, usa o formato PAdES e aceita um carimbo de tempo de um servidor TSA.
 - Marcadores: edita os que o documento já tem (renomear, reordenar e aninhar, arrastando ou
   pelos botões) e gera um sumário a partir dos títulos do documento.
+- Formulários: os campos existentes podem ser renomeados, ganhar dica, virar somente leitura
+  ou obrigatórios, ser removidos e ter a ordem de tabulação mudada; o campo de data pode
+  aceitar só datas (opcional, usa JavaScript).
 - No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
 - No Linux, o AppImage oferece aparecer no menu de aplicativos e na escolha do programa para
   abrir PDF (Ajuda > Mostrar no menu de aplicativos).

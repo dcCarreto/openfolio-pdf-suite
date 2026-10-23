@@ -1,7 +1,10 @@
-"""Aba de campos de formulário (AcroForm) em PDFs: criar campos, grupos de opções, listar
-campos existentes, exportar/importar dados preenchidos e achatar o formulário."""
+"""Aba de campos de formulário (AcroForm) em PDFs: criar campos, grupos de opções, editar,
+remover e ordenar os campos existentes, exportar/importar dados preenchidos e achatar o
+formulário."""
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -10,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -23,13 +27,17 @@ from PySide6.QtWidgets import (
 from core.form_fields import (
     AddFormField,
     AddRadioGroup,
+    EditFormField,
     ExportFormDataCSV,
     ExportFormDataFDF,
+    FormFieldInfo,
     FlattenFormFields,
     ImportFormDataCSV,
     ImportFormDataFDF,
     ListFormFields,
     RadioOption,
+    RemoveFormField,
+    SetTabOrder,
 )
 from ui.area_pick_state import AreaPickState
 from ui.i18n import tr
@@ -45,12 +53,17 @@ _FIELD_TYPE_VALUES = {
     "Lista suspensa": "dropdown",
     "Lista de seleção": "listbox",
 }
+_TAB_ORDERS = [
+    ("A ordem da lista (arraste para mudar)", "list"),
+    ("Por linhas", "rows"),
+    ("Por colunas", "columns"),
+]
 _ADD_FIELD_MODE = 0
 _RADIO_MODE = 1
 _MODES = [
     "Adicionar campo",
     "Adicionar grupo de opções",
-    "Listar campos",
+    "Editar campos existentes",
     "Exportar dados (CSV ou Excel)",
     "Exportar dados (FDF)",
     "Importar dados (CSV ou Excel)",
@@ -181,6 +194,16 @@ class FormFieldsPage(QWidget):
         self.checked_box = QCheckBox(tr("Marcado"))
         self.checked_box.setToolTip(tr("Aplica-se apenas ao tipo caixa de seleção"))
 
+        self.date_mask_box = QCheckBox(tr("Aceitar só datas (usa JavaScript)"))
+        self.date_mask_box.setToolTip(
+            tr(
+                "Os leitores com JavaScript (como o Acrobat) recusam o que não for uma data DD/MM/AAAA. "
+                "Fica desligado porque põe JavaScript no PDF; sem ele, o campo tem só a dica do formato."
+            )
+        )
+        self.type_combo.currentIndexChanged.connect(self._update_date_mask_state)
+        self._update_date_mask_state()
+
         self.options_edit = QLineEdit()
         self.options_edit.setPlaceholderText(tr("Opções separadas por vírgula (ex: SP,RJ,MG)"))
         self.options_edit.setToolTip(
@@ -214,10 +237,15 @@ class FormFieldsPage(QWidget):
         layout.addLayout(position_layout)
         layout.addLayout(size_layout)
         layout.addWidget(self.checked_box)
+        layout.addWidget(self.date_mask_box)
         layout.addWidget(QLabel(tr("Opções (lista suspensa/lista de seleção):")))
         layout.addWidget(self.options_edit)
         layout.addWidget(add_button)
         return widget
+
+    def _update_date_mask_state(self):
+        is_date = _FIELD_TYPE_VALUES[_FIELD_TYPE_LABELS[self.type_combo.currentIndex()]] == "date"
+        self.date_mask_box.setEnabled(is_date)
 
     def _add_field(self):
         input_path = self.session.path()
@@ -255,6 +283,7 @@ class FormFieldsPage(QWidget):
             field_type=field_type,
             checked=self.checked_box.isChecked(),
             options=options or None,
+            date_mask=field_type == "date" and self.date_mask_box.isChecked(),
         )
 
         def done(_result):
@@ -397,7 +426,7 @@ class FormFieldsPage(QWidget):
             error_message=tr("Falha ao criar grupo: {error}"),
         )
 
-    # ---- Listar campos -----------------------------------------------------
+    # ---- Editar campos existentes --------------------------------------------
 
     def _build_list_panel(self) -> QWidget:
         widget = QWidget()
@@ -408,14 +437,60 @@ class FormFieldsPage(QWidget):
         list_button.clicked.connect(self._list_fields)
 
         self.fields_list = QListWidget()
+        self.fields_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.fields_list.setToolTip(tr("Na ordem de tabulação: arraste para mudar a ordem."))
+        self.fields_list.currentItemChanged.connect(self._show_field)
+        self._field_infos: dict[str, FormFieldInfo] = {}
+
+        self.edit_name_edit = QLineEdit()
+        self.edit_tooltip_edit = QLineEdit()
+        self.edit_tooltip_edit.setPlaceholderText(tr("Texto que aparece ao passar o mouse (opcional)"))
+        self.edit_read_only_box = QCheckBox(tr("Somente leitura"))
+        self.edit_required_box = QCheckBox(tr("Obrigatório"))
+        edit_form = QFormLayout()
+        edit_form.addRow(tr("Nome:"), self.edit_name_edit)
+        edit_form.addRow(tr("Dica:"), self.edit_tooltip_edit)
+        flags_row = QHBoxLayout()
+        flags_row.addWidget(self.edit_read_only_box)
+        flags_row.addWidget(self.edit_required_box)
+        edit_form.addRow("", flags_row)
+
+        apply_button = QPushButton(tr("Aplicar ao campo"))
+        apply_button.clicked.connect(self._apply_field_edit)
+        remove_button = QPushButton(tr("Remover campo"))
+        remove_button.clicked.connect(self._remove_field)
+        field_buttons = QHBoxLayout()
+        field_buttons.addWidget(apply_button)
+        field_buttons.addWidget(remove_button)
+
+        self.tab_order_combo = QComboBox()
+        for label, value in _TAB_ORDERS:
+            self.tab_order_combo.addItem(tr(label), value)
+        tab_button = QPushButton(tr("Gravar ordem de tabulação"))
+        tab_button.clicked.connect(self._apply_tab_order)
+        tab_row = QHBoxLayout()
+        tab_row.addWidget(self.tab_order_combo, 1)
+        tab_row.addWidget(tab_button)
+
+        self.edit_output_picker = FilePicker(
+            mode="save", suggested_source=self.session.path, suggested_suffix="formulario"
+        )
 
         layout.addWidget(list_button)
         layout.addWidget(self.fields_list)
+        layout.addWidget(QLabel(tr("Campo selecionado:")))
+        layout.addLayout(edit_form)
+        layout.addLayout(field_buttons)
+        layout.addWidget(QLabel(tr("Ordem de tabulação:")))
+        layout.addLayout(tab_row)
+        layout.addWidget(QLabel(tr("Arquivo de saída:")))
+        layout.addWidget(self.edit_output_picker)
         return widget
 
     def _list_fields(self):
         input_path = self.session.path()
         self.fields_list.clear()
+        self._field_infos = {}
         if not input_path:
             QMessageBox.warning(self, tr("Campos de formulário"), tr("Abra um PDF para começar."))
             return
@@ -423,12 +498,16 @@ class FormFieldsPage(QWidget):
         task = call(ListFormFields().run, input_path)
 
         def done(fields):
+            self.fields_list.clear()
             if not fields:
                 self.fields_list.addItem(tr("Nenhum campo de formulário encontrado."))
                 return
 
             for field in fields:
-                self.fields_list.addItem(f"{field.name} — {field.field_type} — {field.value}")
+                self._field_infos[field.name] = field
+                item = QListWidgetItem(f"{field.name} — {field.field_type} — {field.value}")
+                item.setData(Qt.ItemDataRole.UserRole, field.name)
+                self.fields_list.addItem(item)
 
         run_task(
             self,
@@ -436,6 +515,85 @@ class FormFieldsPage(QWidget):
             task,
             on_success=done,
             error_message=tr("Falha ao listar campos: {error}"),
+        )
+
+    def _selected_field(self) -> str | None:
+        item = self.fields_list.currentItem()
+        return item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+
+    def _show_field(self, *_args):
+        info = self._field_infos.get(self._selected_field() or "")
+        self.edit_name_edit.setText(info.name.rpartition(".")[2] if info else "")
+        self.edit_tooltip_edit.setText(info.tooltip if info else "")
+        self.edit_read_only_box.setChecked(bool(info and info.read_only))
+        self.edit_required_box.setChecked(bool(info and info.required))
+
+    def _run_on_form(self, title: str, operation, success: str) -> None:
+        """Roda `operation(entrada, saída)`, abre o resultado e lista os campos de novo."""
+        input_path = self.session.path()
+        output_path = self.edit_output_picker.path()
+        if not input_path:
+            QMessageBox.warning(self, title, tr("Abra um PDF para começar."))
+            return
+        if not output_path:
+            QMessageBox.warning(self, title, tr("Escolha o arquivo de saída."))
+            return
+
+        def done(_result):
+            self.session.open(output_path)
+            self._list_fields()
+            QMessageBox.information(self, title, success)
+
+        run_task(
+            self,
+            title,
+            call(operation, input_path, output_path),
+            on_success=done,
+            error_message=tr("Falha ao alterar o formulário: {error}"),
+        )
+
+    def _apply_field_edit(self):
+        name = self._selected_field()
+        if name is None:
+            QMessageBox.warning(self, tr("Campos de formulário"), tr("Escolha um campo da lista."))
+            return
+        options = {
+            "new_name": self.edit_name_edit.text(),
+            "tooltip": self.edit_tooltip_edit.text(),
+            "read_only": self.edit_read_only_box.isChecked(),
+            "required": self.edit_required_box.isChecked(),
+        }
+        self._run_on_form(
+            tr("Campos de formulário"),
+            lambda src, dst: EditFormField().run(src, dst, name, **options),
+            tr("Campo alterado com sucesso."),
+        )
+
+    def _remove_field(self):
+        name = self._selected_field()
+        if name is None:
+            QMessageBox.warning(self, tr("Campos de formulário"), tr("Escolha um campo da lista."))
+            return
+        self._run_on_form(
+            tr("Campos de formulário"),
+            lambda src, dst: RemoveFormField().run(src, dst, name),
+            tr('Campo "{name}" removido.').format(name=name),
+        )
+
+    def _apply_tab_order(self):
+        mode = self.tab_order_combo.currentData()
+        order = [
+            name
+            for row in range(self.fields_list.count())
+            if (name := self.fields_list.item(row).data(Qt.ItemDataRole.UserRole))
+        ]
+        if mode == "list" and not order:
+            QMessageBox.warning(self, tr("Campos de formulário"), tr('Clique em "Listar campos" primeiro.'))
+            return
+        self._run_on_form(
+            tr("Campos de formulário"),
+            lambda src, dst: SetTabOrder().run(src, dst, mode=mode, order=order),
+            tr("Ordem de tabulação gravada."),
         )
 
     # ---- Exportar dados -----------------------------------------------------

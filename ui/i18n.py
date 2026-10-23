@@ -589,6 +589,35 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     # Form fields: list existing fields
     "Listar campos": "List fields",
+    # Formulários (M26)
+    "Editar campos existentes": "Edit existing fields",
+    "A ordem da lista (arraste para mudar)": "The order of the list (drag to change it)",
+    "Por linhas": "By rows",
+    "Por colunas": "By columns",
+    "Aceitar só datas (usa JavaScript)": "Accept only dates (uses JavaScript)",
+    "Os leitores com JavaScript (como o Acrobat) recusam o que não for uma data DD/MM/AAAA. "
+    "Fica desligado porque põe JavaScript no PDF; sem ele, o campo tem só a dica do formato.": (
+        "Readers with JavaScript (such as Acrobat) refuse anything that is not a DD/MM/YYYY date. "
+        "It is off because it puts JavaScript in the PDF; without it, the field has only the format hint."
+    ),
+    "Na ordem de tabulação: arraste para mudar a ordem.": "In tab order: drag to change the order.",
+    "Texto que aparece ao passar o mouse (opcional)": "Text shown when hovering (optional)",
+    "Somente leitura": "Read only",
+    "Obrigatório": "Required",
+    "Dica:": "Tooltip:",
+    "Aplicar ao campo": "Apply to the field",
+    "Remover campo": "Remove field",
+    "Gravar ordem de tabulação": "Save tab order",
+    "Campo alterado com sucesso.": "Field changed successfully.",
+    "Ordem de tabulação gravada.": "Tab order saved.",
+    "Campo selecionado:": "Selected field:",
+    "Ordem de tabulação:": "Tab order:",
+    "Falha ao alterar o formulário: {error}": "Failed to change the form: {error}",
+    "Escolha um campo da lista.": "Choose a field from the list.",
+    'Clique em "Listar campos" primeiro.': 'Click "List fields" first.',
+    'Campo "{name}" removido.': 'Field "{name}" removed.',
+    'Não há campo chamado "{name}" neste PDF.': 'There is no field named "{name}" in this PDF.',
+    "O nome do campo não pode ficar vazio nem ter ponto.": "The field name cannot be empty or contain a dot.",
     "Nenhum campo de formulário encontrado.": "No form fields found.",
     "Falha ao listar campos: {error}": "Failed to list fields: {error}",
     # Form fields: export/import data
