@@ -6,7 +6,7 @@ arquivos a mesclar, os marcadores montados, os arquivos de saída escolhidos.
 
 Como a aba nova é montada pelo mesmo código, a árvore de widgets tem a mesma forma: os
 widgets com estado são pareados pela ordem em que aparecem e pelo tipo. Widgets compostos
-(caixas de número, combos, seletores de arquivo, listas, tabelas) são tratados como uma
+(caixas de número, combos, seletores de arquivo, listas, árvores, tabelas) são tratados como uma
 unidade, sem descer nos widgets internos deles.
 """
 
@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
+    QTreeWidget,
+    QTreeWidgetItem,
     QWidget,
 )
 
@@ -42,10 +44,11 @@ _STATEFUL_TYPES = (
     QTextEdit,
     QTableWidget,
     QListWidget,
+    QTreeWidget,
     QAbstractButton,
 )
 # Widgets cujo conteúdo interno não deve ser visitado.
-_OPAQUE_TYPES = (FilePicker, QComboBox, QAbstractSpinBox, QTableWidget, QListWidget)
+_OPAQUE_TYPES = (FilePicker, QComboBox, QAbstractSpinBox, QTableWidget, QListWidget, QTreeWidget)
 _ROLES = (Qt.ItemDataRole.UserRole, Qt.ItemDataRole.CheckStateRole)
 
 
@@ -79,6 +82,22 @@ def _list_item_state(item: QListWidgetItem) -> dict[str, Any]:
     }
 
 
+def _tree_item_state(item: QTreeWidgetItem | None) -> dict[str, Any]:
+    assert item is not None  # child(i) com i dentro de childCount()
+    return {
+        "texts": [item.text(column) for column in range(item.columnCount())],
+        "flags": item.flags(),
+        "children": [_tree_item_state(item.child(index)) for index in range(item.childCount())],
+    }
+
+
+def _tree_item(state: dict[str, Any]) -> QTreeWidgetItem:
+    item = QTreeWidgetItem(state["texts"])
+    item.setFlags(state["flags"])
+    item.addChildren([_tree_item(child) for child in state["children"]])
+    return item
+
+
 def _capture_one(widget: QWidget) -> Any:
     if isinstance(widget, FilePicker):
         return widget.snapshot()
@@ -98,6 +117,8 @@ def _capture_one(widget: QWidget) -> Any:
         return cells
     if isinstance(widget, QListWidget):
         return [_list_item_state(widget.item(row)) for row in range(widget.count())]
+    if isinstance(widget, QTreeWidget):
+        return _tree_item_state(widget.invisibleRootItem())["children"]
     if isinstance(widget, QAbstractButton):
         return widget.isChecked()
     return None
@@ -141,6 +162,10 @@ def _restore_one(widget: QWidget, state: Any) -> None:
             for role, value in item_state["data"].items():
                 item.setData(Qt.ItemDataRole(role), value)
             widget.addItem(item)
+    elif isinstance(widget, QTreeWidget):
+        widget.clear()
+        widget.addTopLevelItems([_tree_item(item_state) for item_state in state])
+        widget.expandAll()
     elif isinstance(widget, QAbstractButton):
         widget.setChecked(state)
 

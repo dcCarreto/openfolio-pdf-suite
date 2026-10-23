@@ -515,8 +515,36 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Adicionar": "Add",
     "Marcadores:": "Bookmarks:",
     "Digite um título para o marcador.": "Enter a title for the bookmark.",
-    "{title} — página {page}": "{title} — page {page}",
-    "Adicione pelo menos um marcador.": "Add at least one bookmark.",
+    # Marcadores (M25)
+    "Título": "Title",
+    "Arraste para reordenar ou solte sobre outro marcador para aninhar. Duplo clique edita o título ou a página.": (
+        "Drag to reorder, or drop onto another bookmark to nest it. Double-click edits the title or the page."
+    ),
+    "Move o marcador para cima, entre os do mesmo nível.": "Moves the bookmark up, among those at the same level.",
+    "Move o marcador para baixo, entre os do mesmo nível.": "Moves the bookmark down, among those at the same level.",
+    "Para dentro": "Indent",
+    "Põe o marcador dentro do que está acima dele.": "Puts the bookmark inside the one above it.",
+    "Para fora": "Outdent",
+    "Tira o marcador de dentro do marcador pai.": "Takes the bookmark out of its parent bookmark.",
+    "Remove o marcador e os que estão dentro dele.": "Removes the bookmark and the ones inside it.",
+    "Recarregar do documento": "Reload from the document",
+    "Descarta as mudanças e volta aos marcadores do documento aberto.": (
+        "Discards the changes and goes back to the bookmarks of the open document."
+    ),
+    "Gerar a partir dos títulos": "Generate from the headings",
+    "Sugere um sumário com as linhas em fonte maior que a do texto; cada tamanho vira um nível.": (
+        "Suggests an outline from the lines in a font larger than the text's; each size becomes a level."
+    ),
+    "Falha ao procurar os títulos: {error}": "Failed to look for the headings: {error}",
+    "Há um marcador sem título.": "There is a bookmark without a title.",
+    "Nenhum título encontrado: o texto todo tem o mesmo tamanho.": "No heading found: all the text has the same size.",
+    "Trocar os marcadores da lista pelos {count} títulos encontrados?": (
+        "Replace the bookmarks in the list with the {count} headings found?"
+    ),
+    'A página "{page}" do marcador "{title}" não existe: o documento tem {total} página(s).': (
+        'Page "{page}" of bookmark "{title}" does not exist: the document has {total} page(s).'
+    ),
+    "Procurando os títulos": "Looking for the headings",
     "Falha ao salvar marcadores: {error}": "Failed to save bookmarks: {error}",
     "Marcadores salvos com sucesso.": "Bookmarks saved successfully.",
     # Create PDF

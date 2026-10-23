@@ -30,6 +30,7 @@ _INTERNAL_ERRORS = {
     "digits deve ser pelo menos 1.",
     "pages_per_file deve ser maior ou igual a 1.",
     "max_bytes deve ser maior ou igual a 1.",
+    "Nível de marcador fora da hierarquia.",
 }
 
 

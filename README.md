@@ -140,7 +140,7 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | 📷 Extrair imagens | Extrai as imagens embutidas nas páginas de um PDF, em seus formatos originais |
 | 📐 Cortar/Redimensionar | Corta margens ou redimensiona as páginas de um PDF para um novo tamanho |
 | ✏️ Editar | Substitui uma imagem já embutida por outra (mantendo posição e tamanho, sem distorcer), "edita" texto cobrindo uma área marcada no visualizador e reescrevendo por cima com fonte, tamanho e cores à escolha, com quebra de linha (achatando a página, como na redação), e adiciona, lista ou remove links (URL externa ou página do documento) |
-| 🔖 Marcadores | Monta um sumário de navegação (outline) com título e página de destino |
+| 🔖 Marcadores | Edita o sumário de navegação (outline): começa pelos marcadores do documento, que podem ser renomeados, reordenados e aninhados (arrastando ou pelos botões); também sugere um sumário a partir dos títulos (as linhas em fonte maior que a do texto). Um marcador apagado sai do arquivo de verdade |
 | 🗂️ Camadas | Lista as camadas (Optional Content Groups) de um PDF, inclusive as desligadas por padrão, e alterna a visibilidade padrão de cada uma |
 | 📎 Anexos | Lista, adiciona, remove ou extrai os anexos embutidos de um PDF (a extração nunca grava fora da pasta escolhida, mesmo que o nome do anexo tente) |
 | 🧾 Campos de formulário | Adiciona campos de formulário **interativos** (texto, data, caixa de seleção, lista suspensa, lista de seleção ou grupo de opções) — o PDF resultante é preenchível em qualquer leitor. Também lista campos já existentes, exporta/importa dados preenchidos (CSV, Excel ou FDF) e achata o formulário (Fill & Sign simplificado) |

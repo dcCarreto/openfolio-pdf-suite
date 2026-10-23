@@ -44,6 +44,8 @@ Ainda não publicada.
 - A assinatura digital mostra o certificado antes de assinar, recusa um certificado vencido,
   põe no selo o nome do certificado (e, se quiser, a imagem da sua assinatura), grava motivo,
   local e contato, usa o formato PAdES e aceita um carimbo de tempo de um servidor TSA.
+- Marcadores: edita os que o documento já tem (renomear, reordenar e aninhar, arrastando ou
+  pelos botões) e gera um sumário a partir dos títulos do documento.
 - No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
 - No Linux, o AppImage oferece aparecer no menu de aplicativos e na escolha do programa para
   abrir PDF (Ajuda > Mostrar no menu de aplicativos).
