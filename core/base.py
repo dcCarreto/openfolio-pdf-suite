@@ -1,6 +1,7 @@
 """Classes e helpers base compartilhados pelos módulos de core."""
 
 import contextlib
+import math
 import os
 import shutil
 import tempfile
@@ -159,6 +160,19 @@ def replace_object(writer: PdfWriter, reference, obj) -> None:
     """Põe `obj` no lugar do objeto indireto `reference` do `writer`: quem aponta para a
     referência (páginas, formulários) passa a ver o objeto novo."""
     writer._replace_object(reference, obj)
+
+
+# Uma página de 200 x 200 polegadas (o máximo do formato) a 300 DPI dá 3,6 bilhões de pixels,
+# uns 14 GB de memória para renderizar: um PDF malicioso derrubaria o app. Acima disto, a
+# página é renderizada com menos resolução (100 milhões de pixels são um A0 a 250 DPI).
+MAX_RENDER_PIXELS = 100_000_000
+
+
+def render_scale(pdfium_page, scale: float) -> float:
+    """`scale`, ou a escala menor que mantém a imagem da página em `MAX_RENDER_PIXELS`."""
+    width, height = pdfium_page.get_size()
+    pixels = width * height * scale * scale
+    return scale if pixels <= MAX_RENDER_PIXELS else scale * math.sqrt(MAX_RENDER_PIXELS / pixels)
 
 
 def write_pdf(writer: PdfWriter, output_path: str) -> None:

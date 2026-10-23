@@ -35,7 +35,7 @@ import pypdfium2 as pdfium
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject, StreamObject
 
-from .base import EXTRACT, atomic_output, open_pdfium, open_reader, require_valid_page_index
+from .base import EXTRACT, atomic_output, open_pdfium, open_reader, render_scale, require_valid_page_index
 from .geometry import PageGeometry, Rect
 from .messages import Message
 from .progress import PDFIUM_LOCK, Progress, ensure_progress
@@ -309,7 +309,8 @@ def _verify_redaction(path: str, burned: dict[int, list[Rect]]) -> None:
                     )
                 )
             with PDFIUM_LOCK:
-                rendered = document[index].render(scale=_VERIFY_RENDER_SCALE).to_pil().convert("RGB")
+                verify_scale = render_scale(document[index], _VERIFY_RENDER_SCALE)
+                rendered = document[index].render(scale=verify_scale).to_pil().convert("RGB")
             for candidate, max_level in ((images[0].convert("RGB"), 0), (rendered, _VERIFY_MAX_LEVEL)):
                 for rect in visual_rects:
                     if not _area_is_filled(candidate, geometry, rect, max_level):

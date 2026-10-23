@@ -12,7 +12,7 @@ from PySide6.QtCore import QRectF
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtPrintSupport import QPrinter
 
-from core.base import PRINT, open_pdfium, open_reader
+from core.base import PRINT, open_pdfium, open_reader, render_scale
 from core.messages import Message
 from core.progress import PDFIUM_LOCK, OperationCancelled, Progress, ensure_progress
 
@@ -65,7 +65,9 @@ def print_pages(path: str, printer: QPrinter, pages: list[int], progress: Progre
                 page = document[index]
                 width, height = page.get_size()  # já com a /Rotate da página
                 rotation = 90 if (width > height) != (area.width() > area.height()) else 0
-                image = page.render(scale=scale, draw_annots=True, may_draw_forms=True, rotation=rotation).to_pil()
+                image = page.render(
+                    scale=render_scale(page, scale), draw_annots=True, may_draw_forms=True, rotation=rotation
+                ).to_pil()
                 page.close()
             fit = min(area.width() / image.width, area.height() / image.height)
             target = QRectF(0, 0, image.width * fit, image.height * fit)

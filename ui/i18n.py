@@ -589,6 +589,13 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     # Form fields: list existing fields
     "Listar campos": "List fields",
+    # Entrada não confiável (M30)
+    "{name} descompacta para mais de {limit} MB: parece malformado e não foi aberto.": (
+        "{name} unpacks to more than {limit} MB: it looks malformed and was not opened."
+    ),
+    "{name} não é um documento do Office válido (.docx, .xlsx ou .pptx).": (
+        "{name} is not a valid Office document (.docx, .xlsx or .pptx)."
+    ),
     # Propriedades (M29)
     "Descrição": "Description",
     "XMP": "XMP",

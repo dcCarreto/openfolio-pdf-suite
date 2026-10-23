@@ -9,6 +9,7 @@ rodapés. O que foi descartado volta como aviso no resultado
 aviso (tabelas do Word inteiras, e o texto que não cabia num slide).
 """
 
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -26,6 +27,33 @@ from .progress import Progress, ensure_progress
 SUPPORTED_SUFFIXES = (".docx", ".xlsx", ".pptx")
 
 _MAX_SHEET_COLUMNS = 40  # acima disso as colunas ficariam ilegíveis numa página
+
+# Um .docx/.xlsx/.pptx é um zip de XMLs, que as bibliotecas carregam inteiros na memória. Um
+# zip de poucos KB pode descompactar para gigabytes (zip bomb): os tamanhos declarados no
+# índice do zip (que o zipfile respeita ao ler) são conferidos antes de abrir.
+_MAX_UNPACKED_BYTES = 256 * 1024 * 1024
+_MAX_ENTRIES = 20_000
+
+
+def check_office_archive(path: str) -> None:
+    """Recusa, com uma mensagem clara, um arquivo do Office que não é um zip ou que
+    descompacta para mais do que um documento de verdade precisaria."""
+    name = Path(path).name
+    try:
+        with zipfile.ZipFile(path) as archive:
+            entries = archive.infolist()
+    except zipfile.BadZipFile as error:
+        raise ValueError(
+            Message("{name} não é um documento do Office válido (.docx, .xlsx ou .pptx).", name=name)
+        ) from error
+    if len(entries) > _MAX_ENTRIES or sum(entry.file_size for entry in entries) > _MAX_UNPACKED_BYTES:
+        raise ValueError(
+            Message(
+                "{name} descompacta para mais de {limit} MB: parece malformado e não foi aberto.",
+                name=name,
+                limit=_MAX_UNPACKED_BYTES // (1024 * 1024),
+            )
+        )
 
 
 @dataclass
@@ -49,6 +77,7 @@ class ConvertOfficeToPDF:
         return result
 
     def _convert(self, input_path: str, output_path: str, suffix: str) -> list[Message]:
+        check_office_archive(input_path)
         register_fonts()
         if suffix == ".docx":
             return _docx_to_pdf(input_path, output_path)

@@ -12,7 +12,7 @@ from typing import NamedTuple
 import pypdfium2 as pdfium
 from PIL import Image, ImageChops, ImageStat
 
-from .base import EXTRACT, READ, open_pdfium, open_reader
+from .base import EXTRACT, READ, open_pdfium, open_reader, render_scale
 from .progress import PDFIUM_LOCK, Progress, ensure_progress
 
 _DIFF_SCALE = 1.5
@@ -366,8 +366,8 @@ class CompareVisual:
                 continue
 
             with PDFIUM_LOCK:
-                image_a = doc_a[index].render(scale=scale).to_pil().convert("RGB")
-                image_b = doc_b[index].render(scale=scale).to_pil().convert("RGB")
+                image_a = doc_a[index].render(scale=render_scale(doc_a[index], scale)).to_pil().convert("RGB")
+                image_b = doc_b[index].render(scale=render_scale(doc_b[index], scale)).to_pil().convert("RGB")
             if image_a.size != image_b.size:
                 results.append(VisualDiffResult(page_index=index, status="size_mismatch"))
                 continue

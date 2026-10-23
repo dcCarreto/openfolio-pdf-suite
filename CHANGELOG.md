@@ -16,6 +16,8 @@ Ainda não publicada.
 - A verificação de assinaturas digitais diz o que a assinatura cobre e se o documento foi
   alterado depois dela.
 - Anexos extraídos não podem sair da pasta escolhida nem sobrescrever arquivos.
+- Um PDF com páginas gigantes ou um arquivo do Office que descompacta para gigabytes não
+  derruba mais o app: a página é renderizada com menos resolução e o arquivo é recusado.
 - Mesclar, dividir e reorganizar páginas mantêm marcadores, metadados, anexos, camadas e
   rótulos de página; toda gravação é feita por inteiro ou não é feita.
 

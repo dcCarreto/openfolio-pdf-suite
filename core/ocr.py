@@ -43,7 +43,7 @@ from PIL import Image
 from pypdf import PdfWriter
 from pypdf.generic import ContentStream
 
-from .base import open_pdfium, open_reader, write_pdf
+from .base import open_pdfium, open_reader, render_scale, write_pdf
 from .fonts import SANS, register_fonts, text_width
 from .geometry import PageGeometry
 from .overlay import materialize_inherited_attributes, visual_overlay
@@ -187,7 +187,7 @@ class OCRDocument:
                     needs_ocr = mode == "force" or _needs_ocr(page, pdfium_page)
                     if needs_ocr:
                         geometry = PageGeometry.from_pdfium_page(pdfium_page)
-                        image = pdfium_page.render(scale=scale, may_draw_forms=False).to_pil()
+                        image = pdfium_page.render(scale=render_scale(pdfium_page, scale), may_draw_forms=False).to_pil()
                     pdfium_page.close()
                 if not needs_ocr:
                     continue

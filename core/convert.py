@@ -7,7 +7,7 @@ from PIL import Image, ImageOps, TiffImagePlugin
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 
-from .base import READ, atomic_output, open_pdfium, open_reader
+from .base import READ, atomic_output, open_pdfium, open_reader, render_scale
 from .progress import PDFIUM_LOCK, Progress, ensure_progress
 
 
@@ -56,7 +56,9 @@ class ConvertToImages:
                 for index in progress.steps(pages, len(pages), "Convertendo páginas"):
                     with PDFIUM_LOCK:
                         page = pdf[index]
-                        image = page.render(scale=scale).to_pil()
+                        page_scale = render_scale(page, scale)
+                        image = page.render(scale=page_scale).to_pil()
+                        image.info["dpi"] = (72 * page_scale,) * 2
                         page.close()
                     yield index, image
 
@@ -70,7 +72,7 @@ class ConvertToImages:
                     try:
                         with tiff:
                             for _index, image in rendered():
-                                image.save(tiff, format="TIFF", compression="tiff_deflate", dpi=(72 * scale,) * 2)
+                                image.save(tiff, format="TIFF", compression="tiff_deflate", dpi=image.info["dpi"])
                                 tiff.newFrame()
                     finally:
                         del tiff
@@ -80,7 +82,7 @@ class ConvertToImages:
             suffix = "jpg" if image_format == "jpeg" else "png"
             for index, image in rendered():
                 output_path = output_dir_path / f"{stem}_page{index + 1}.{suffix}"
-                image.save(output_path, quality=90, dpi=(72 * scale,) * 2)
+                image.save(output_path, quality=90, dpi=image.info["dpi"])
                 output_paths.append(str(output_path))
         finally:
             with PDFIUM_LOCK:

@@ -710,6 +710,9 @@ def _unescape_formula(text: str) -> str:
 def _read_xlsx_rows(path: str) -> list[dict]:
     from openpyxl import load_workbook
 
+    from .office_convert import check_office_archive
+
+    check_office_archive(path)
     workbook = load_workbook(path, read_only=True, data_only=True)
     try:
         rows = list(workbook.active.iter_rows(values_only=True))

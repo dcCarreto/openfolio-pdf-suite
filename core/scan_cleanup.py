@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFilter
 from pypdf import PdfReader, PdfWriter, Transformation
 from pypdf.generic import RectangleObject
 
-from .base import open_pdfium, open_reader, write_pdf
+from .base import open_pdfium, open_reader, render_scale, write_pdf
 from .crop import _clip_other_boxes
 from .document import pages_writer
 from .geometry import PageGeometry
@@ -73,7 +73,7 @@ class CleanScannedPages:
                 with PDFIUM_LOCK:
                     pdfium_page = pdfium_doc[index]
                     geometry = PageGeometry.from_pdfium_page(pdfium_page)
-                    gray = pdfium_page.render(scale=_SCALE).to_pil().convert("L")
+                    gray = pdfium_page.render(scale=render_scale(pdfium_page, _SCALE)).to_pil().convert("L")
                     pdfium_page.close()
                 mask = ink_mask(gray)
                 if is_blank(mask):
@@ -140,7 +140,7 @@ def find_blank_pages(input_path: str, progress: Progress | None = None) -> list[
             progress.update(index, total, "Procurando páginas em branco")
             with PDFIUM_LOCK:
                 pdfium_page = pdfium_doc[index]
-                gray = pdfium_page.render(scale=_SCALE).to_pil().convert("L")
+                gray = pdfium_page.render(scale=render_scale(pdfium_page, _SCALE)).to_pil().convert("L")
                 pdfium_page.close()
             if is_blank(ink_mask(gray)):
                 blanks.append(index)

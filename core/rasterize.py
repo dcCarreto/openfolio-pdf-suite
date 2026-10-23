@@ -20,6 +20,7 @@ from pypdf.generic import DictionaryObject, NameObject
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 
+from .base import render_scale
 from .document import remove_widgets_from_form
 from .geometry import PageGeometry, Rect
 
@@ -29,7 +30,7 @@ RASTER_SCALE = 300 / 72  # 300 DPI, a mesma resolução usada no OCR
 def render_visual_page(pdfium_page, scale: float = RASTER_SCALE) -> tuple[Image.Image, PageGeometry]:
     """Renderiza a página como o usuário a vê e devolve a imagem com a geometria dela."""
     geometry = PageGeometry.from_pdfium_page(pdfium_page)
-    image = pdfium_page.render(scale=scale).to_pil().convert("RGB")
+    image = pdfium_page.render(scale=render_scale(pdfium_page, scale)).to_pil().convert("RGB")
     return image, geometry
 
 
