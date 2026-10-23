@@ -29,8 +29,11 @@ class MergePage(QWidget):
             suggested_source=lambda: (self.file_list_editor.paths() or [None])[0],
             suggested_suffix="mesclado",
         )
-        self.bookmark_check = QCheckBox(tr("Um marcador para cada arquivo (com os marcadores dele dentro)"))
-        self.interleave_check = QCheckBox(tr("Intercalar dois arquivos, página a página (frentes e versos escaneados à parte)"))
+        self.bookmark_check = QCheckBox(tr("Um marcador por arquivo (com os marcadores dele dentro)"))
+        self.interleave_check = QCheckBox(tr("Intercalar frentes e versos escaneados à parte"))
+        self.interleave_check.setToolTip(
+            tr("Junta dois arquivos página a página: a 1ª do primeiro, a 1ª do segundo, a 2ª do primeiro...")
+        )
         self.reverse_check = QCheckBox(tr("Versos em ordem inversa (o maço virado no scanner)"))
         self.reverse_check.setEnabled(False)
         self.interleave_check.toggled.connect(self.reverse_check.setEnabled)

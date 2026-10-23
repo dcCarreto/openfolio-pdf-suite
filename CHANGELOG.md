@@ -39,6 +39,8 @@ Ainda não publicada.
   máximo de arquivo e a cada página em branco de um lote escaneado.
 - Os modos novos de Mesclar e Dividir também estão na linha de comando (`openfolio merge` e
   `openfolio split`).
+- A ferramenta escolhida em Anotações fica destacada, e Mesclar, Marcadores e Campos de
+  formulário cabem no painel sem barra de rolagem lateral.
 - PDF para imagens grava também JPEG ou um TIFF com todas as páginas e pode converter só
   as páginas escolhidas (ou as selecionadas nas miniaturas).
 - Marca d'água com imagem ou logotipo, cor do texto, nos cantos ou em mosaico, atrás do

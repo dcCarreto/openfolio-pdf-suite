@@ -52,6 +52,23 @@ def test_light_and_dark_change_palette_stylesheet_and_icons_already_built(app):
     assert theme.current_theme() == theme.LIGHT
 
 
+@pytest.mark.parametrize("key", [theme.DARK, theme.LIGHT])
+def test_the_chosen_tool_button_stands_out(app, key):
+    from PySide6.QtWidgets import QPushButton
+
+    theme.apply_theme(app, key)
+    plain, chosen = QPushButton("Realce"), QPushButton("Realce")
+    for button in (plain, chosen):
+        button.setCheckable(True)
+        button.resize(120, 30)
+    chosen.setChecked(True)
+
+    def fill(button):
+        return button.grab().toImage().pixelColor(6, 15).name()  # dentro da borda, fora do texto
+
+    assert fill(chosen) == theme._COLORS[key]["accent"] != fill(plain)
+
+
 def test_follow_the_system_uses_its_color_scheme(app, monkeypatch):
     class Hints:
         scheme = Qt.ColorScheme.Light

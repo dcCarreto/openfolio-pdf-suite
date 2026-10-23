@@ -213,8 +213,11 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Arquivos a mesclar (na ordem desejada):": "Files to merge (in the desired order):",
     "todas (ex.: 1-3, 5)": "all (e.g. 1-3, 5)",
     "Páginas do arquivo selecionado:": "Pages of the selected file:",
-    "Um marcador para cada arquivo (com os marcadores dele dentro)": "One bookmark for each file (with its bookmarks inside)",
-    "Intercalar dois arquivos, página a página (frentes e versos escaneados à parte)": "Interleave two files, page by page (fronts and backs scanned separately)",
+    "Um marcador por arquivo (com os marcadores dele dentro)": "One bookmark per file (with its bookmarks inside)",
+    "Intercalar frentes e versos escaneados à parte": "Interleave fronts and backs scanned separately",
+    "Junta dois arquivos página a página: a 1ª do primeiro, a 1ª do segundo, a 2ª do primeiro...": (
+        "Joins two files page by page: the 1st of the first, the 1st of the second, the 2nd of the first..."
+    ),
     "Versos em ordem inversa (o maço virado no scanner)": "Backs in reverse order (the stack flipped in the scanner)",
     "Para intercalar, deixe na lista só dois arquivos: o das frentes e o dos versos.": "To interleave, keep only two files in the list: the fronts and the backs.",
     "Adicione pelo menos um arquivo.": "Add at least one file.",
@@ -656,7 +659,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Dica:": "Tooltip:",
     "Aplicar ao campo": "Apply to the field",
     "Remover campo": "Remove field",
-    "Gravar ordem de tabulação": "Save tab order",
+    "Gravar ordem": "Save order",
     "Campo alterado com sucesso.": "Field changed successfully.",
     "Ordem de tabulação gravada.": "Tab order saved.",
     "Campo selecionado:": "Selected field:",

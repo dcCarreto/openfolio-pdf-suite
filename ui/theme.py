@@ -104,6 +104,13 @@ QPushButton:pressed {{
     color: white;
 }}
 
+/* A ferramenta escolhida (Anotações): sem isto, o botão marcado era igual aos outros. */
+QPushButton:checked {{
+    background-color: {_ACCENT};
+    border-color: {_ACCENT};
+    color: white;
+}}
+
 QPushButton:disabled {{
     color: {_TEXT_MUTED};
     background-color: {_PANEL};

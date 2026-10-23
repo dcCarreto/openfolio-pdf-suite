@@ -3,6 +3,7 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -68,18 +69,18 @@ class BookmarksPage(QWidget):
         page_row.addLayout(with_current_page_button(self.page_spin, session), 1)
         page_row.addWidget(add_button)
 
-        move_row = QHBoxLayout()
-        for label, tip, action in (
+        move_row = QGridLayout()  # em duas linhas: as cinco lado a lado não cabem no painel
+        for index, (label, tip, action) in enumerate((
             ("Subir", "Move o marcador para cima, entre os do mesmo nível.", lambda: self._move(-1)),
             ("Descer", "Move o marcador para baixo, entre os do mesmo nível.", lambda: self._move(1)),
+            ("Remover", "Remove o marcador e os que estão dentro dele.", self._remove_selected),
             ("Para dentro", "Põe o marcador dentro do que está acima dele.", self._indent),
             ("Para fora", "Tira o marcador de dentro do marcador pai.", self._outdent),
-            ("Remover", "Remove o marcador e os que estão dentro dele.", self._remove_selected),
-        ):
+        )):
             button = QPushButton(tr(label))
             button.setToolTip(tr(tip))
             button.clicked.connect(action)
-            move_row.addWidget(button)
+            move_row.addWidget(button, index // 3, index % 3)
 
         reload_button = QPushButton(tr("Recarregar do documento"))
         reload_button.setToolTip(tr("Descarta as mudanças e volta aos marcadores do documento aberto."))

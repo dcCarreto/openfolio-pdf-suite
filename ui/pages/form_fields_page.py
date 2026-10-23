@@ -466,7 +466,7 @@ class FormFieldsPage(QWidget):
         self.tab_order_combo = QComboBox()
         for label, value in _TAB_ORDERS:
             self.tab_order_combo.addItem(tr(label), value)
-        tab_button = QPushButton(tr("Gravar ordem de tabulação"))
+        tab_button = QPushButton(tr("Gravar ordem"))  # o rótulo "Ordem de tabulação:" fica logo acima
         tab_button.clicked.connect(self._apply_tab_order)
         tab_row = QHBoxLayout()
         tab_row.addWidget(self.tab_order_combo, 1)
