@@ -2,6 +2,7 @@
 
 import datetime
 import io
+import re
 
 import pytest
 from asn1crypto import x509 as asn1_x509
@@ -97,6 +98,16 @@ def test_sign_with_pfx_certificate(tmp_path):
     assert signatures[0].intact is True
 
 
+def _with_a_covered_byte_changed(data: bytes) -> bytes:
+    """Muda um byte no meio do trecho que a assinatura cobre (antes do /Contents). Mudar um
+    byte numa posição fixa do arquivo podia cair no próprio /Contents, que a assinatura não
+    cobre por definição, conforme o tamanho da assinatura mudasse."""
+    first_range_end = int(re.search(rb"/ByteRange \[\s*\d+ (\d+)", data).group(1))
+    changed = bytearray(data)
+    changed[first_range_end // 2] = (changed[first_range_end // 2] + 1) % 256
+    return bytes(changed)
+
+
 def test_tampering_after_signing_breaks_integrity(tmp_path):
     path_in = tmp_path / "doc.pdf"
     path_out = tmp_path / "doc_signed.pdf"
@@ -110,11 +121,8 @@ def test_tampering_after_signing_breaks_integrity(tmp_path):
         test_email="fulano@example.com",
     )
 
-    data = bytearray(path_out.read_bytes())
-    mid = len(data) // 3
-    data[mid] = (data[mid] + 1) % 256
     path_tampered = tmp_path / "doc_tampered.pdf"
-    path_tampered.write_bytes(bytes(data))
+    path_tampered.write_bytes(_with_a_covered_byte_changed(path_out.read_bytes()))
 
     signatures = DescribeSignatures().run(str(path_tampered))
     assert len(signatures) == 1
@@ -237,11 +245,8 @@ def test_content_added_by_incremental_update_after_signing_is_reported(tmp_path)
 
 def test_tampered_bytes_are_reported_as_invalid(tmp_path):
     signed = _signed_with_test_certificate(tmp_path, "Documento que sera adulterado")
-    data = bytearray(signed.read_bytes())
-    mid = len(data) // 3
-    data[mid] = (data[mid] + 1) % 256
     tampered = tmp_path / "tampered.pdf"
-    tampered.write_bytes(bytes(data))
+    tampered.write_bytes(_with_a_covered_byte_changed(signed.read_bytes()))
 
     (info,) = DescribeSignatures().run(str(tampered))
 
@@ -501,3 +506,20 @@ def test_an_image_goes_into_the_stamp(tmp_path):
 
     assert b"/Image" in _appearance_bytes(path_out)
     assert DescribeSignatures().run(str(path_out))[0].valid
+
+
+def test_the_test_certificate_never_touches_the_disk(tmp_path, monkeypatch):
+    import tempfile
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("a chave de teste não deveria passar por um diretório temporário")
+
+    monkeypatch.setattr(tempfile, "TemporaryDirectory", refuse)
+    monkeypatch.setattr(tempfile, "mkdtemp", refuse)
+    before = set(tmp_path.iterdir())
+
+    signed = _signed_with_test_certificate(tmp_path)
+
+    assert {p.name for p in set(tmp_path.iterdir()) - before} == {"contrato.pdf", "assinado.pdf"}
+    assert not any(p.suffix == ".pem" for p in tmp_path.rglob("*"))
+    assert DescribeSignatures().run(str(signed))[0].valid

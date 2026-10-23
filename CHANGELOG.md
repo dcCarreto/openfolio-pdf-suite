@@ -18,6 +18,7 @@ Ainda não publicada.
 - Anexos extraídos não podem sair da pasta escolhida nem sobrescrever arquivos.
 - Um PDF com páginas gigantes ou um arquivo do Office que descompacta para gigabytes não
   derruba mais o app: a página é renderizada com menos resolução e o arquivo é recusado.
+- A chave do certificado de teste da assinatura fica só na memória, sem passar pelo disco.
 - Mesclar, dividir e reorganizar páginas mantêm marcadores, metadados, anexos, camadas e
   rótulos de página; toda gravação é feita por inteiro ou não é feita.
 

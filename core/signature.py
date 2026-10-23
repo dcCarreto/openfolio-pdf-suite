@@ -26,10 +26,10 @@ Dois jeitos de obter o certificado usado para assinar:
 import contextlib
 import datetime
 import logging
-import tempfile
 from dataclasses import dataclass
-from pathlib import Path
 
+from asn1crypto import keys as asn1_keys
+from asn1crypto import x509 as asn1_x509
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -44,6 +44,7 @@ from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.validation import validate_pdf_signature
 from pyhanko.sign.validation.status import SignatureCoverageLevel
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from .base import atomic_output, open_reader, require_valid_page_index
 from .geometry import PageGeometry, intersect_rects, normalize_rect
@@ -100,7 +101,18 @@ def _stamp_box(page, position: str) -> tuple[float, float, float, float]:
 
 
 def generate_test_certificate(common_name: str, email: str) -> tuple[bytes, bytes]:
-    """Gera um par chave/certificado autoassinado, só para teste/uso local (sem validade jurídica)."""
+    """Gera um par chave/certificado autoassinado, só para teste/uso local (sem validade
+    jurídica), em PEM."""
+    key, cert = _new_test_certificate(common_name, email)
+    key_pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return key_pem, cert.public_bytes(serialization.Encoding.PEM)
+
+
+def _new_test_certificate(common_name: str, email: str):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name(
         [
@@ -119,13 +131,7 @@ def generate_test_certificate(common_name: str, email: str) -> tuple[bytes, byte
         .not_valid_after(now + datetime.timedelta(days=365 * 3))
         .sign(key, hashes.SHA256())
     )
-    key_pem = key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    cert_pem = cert.public_bytes(serialization.Encoding.PEM)
-    return key_pem, cert_pem
+    return key, cert
 
 
 def _load_pfx_signer(pfx_path: str, password: str | None):
@@ -201,16 +207,19 @@ def _stamp_style(lines: list[str], image_path: str | None, box) -> stamp.TextSta
     )
 
 
-def _load_test_signer(common_name: str, email: str, tmp_dir: str):
-    key_pem, cert_pem = generate_test_certificate(common_name, email)
-    key_path = Path(tmp_dir) / "signer_key.pem"
-    cert_path = Path(tmp_dir) / "signer_cert.pem"
-    key_path.write_bytes(key_pem)
-    cert_path.write_bytes(cert_pem)
-    signer = signers.SimpleSigner.load(str(key_path), str(cert_path))
-    if signer is None:
-        raise ValueError("Falha ao gerar o certificado de teste.")
-    return signer
+def _test_signer(common_name: str, email: str) -> signers.SimpleSigner:
+    """Quem assina com um certificado de teste gerado agora, só na memória: a chave privada
+    nunca vai para o disco (antes ia para um diretório temporário, para o pyhanko ler)."""
+    key, cert = _new_test_certificate(common_name, email)
+    signing_cert = asn1_x509.Certificate.load(cert.public_bytes(serialization.Encoding.DER))
+    signing_key = asn1_keys.PrivateKeyInfo.load(
+        key.private_bytes(serialization.Encoding.DER, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    )
+    return signers.SimpleSigner(
+        signing_cert=signing_cert,
+        signing_key=signing_key,
+        cert_registry=SimpleCertificateStore.from_certs([signing_cert]),
+    )
 
 
 class SignDocument:
@@ -248,64 +257,63 @@ class SignDocument:
         if box is not None and (box[2] - box[0] < 20 or box[3] - box[1] < 10):
             raise ValueError("A área do selo é pequena demais: marque pelo menos 20 x 10 pontos.")
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            if pfx_path:
-                signer = _load_pfx_signer(pfx_path, pfx_password)
-            elif test_common_name:
-                signer = _load_test_signer(test_common_name, test_email or "", tmp_dir)
-            else:
-                raise ValueError(
-                    "Informe um certificado .pfx ou os dados para gerar um certificado de teste."
-                )
-            certificate = _summary(signer.signing_cert)
-            if certificate.expired:
-                raise ValueError(
-                    Message(
-                        "O certificado venceu em {date}: a assinatura não seria válida. Use um certificado em dia.",
-                        date=certificate.valid_until,
-                    )
-                )
-
-            reader = open_reader(input_path)
-            require_valid_page_index(len(reader.pages), page_index)
-            if box is None:
-                box = _stamp_box(reader.pages[page_index], position)
-            field_name = _unique_field_name(reader)
-            reason, location, contact = reason.strip(), location.strip(), contact.strip()
-            lines = ["Assinado digitalmente por %(signer)s", "%(ts)s"]
-            lines += [f"{label}: {value.replace('%', '%%')}" for label, value in (("Motivo", reason), ("Local", location)) if value]
-            stamp_style = _stamp_style(lines, stamp_image, box)
-            meta = signers.PdfSignatureMetadata(
-                field_name=field_name,
-                reason=reason or None,
-                location=location or None,
-                contact_info=contact or None,
-                subfilter=fields.SigSeedSubFilter.PADES if pades else None,
+        if pfx_path:
+            signer = _load_pfx_signer(pfx_path, pfx_password)
+        elif test_common_name:
+            signer = _test_signer(test_common_name, test_email or "")
+        else:
+            raise ValueError(
+                "Informe um certificado .pfx ou os dados para gerar um certificado de teste."
             )
-            # O pyhanko anota a caixa como inteiros, mas grava frações de ponto sem problema.
-            field_spec = fields.SigFieldSpec(field_name, on_page=page_index, box=box)  # type: ignore[arg-type]
-            pdf_signer = signers.PdfSigner(
-                meta,
-                signer=signer,
-                stamp_style=stamp_style,
-                new_field_spec=field_spec,
-                timestamper=_timestamper(timestamp_url.strip()) if timestamp_url.strip() else None,
+        certificate = _summary(signer.signing_cert)
+        if certificate.expired:
+            raise ValueError(
+                Message(
+                    "O certificado venceu em {date}: a assinatura não seria válida. Use um certificado em dia.",
+                    date=certificate.valid_until,
+                )
             )
-            name = (signer_name or "").strip() or certificate.name
 
-            with open(input_path, "rb") as inf, atomic_output(output_path) as temp_path:
-                writer = IncrementalPdfFileWriter(inf)
-                with open(temp_path, "wb") as outf:
-                    try:
-                        pdf_signer.sign_pdf(writer, output=outf, appearance_text_params={"signer": name})
-                    except timestamps.TimestampRequestError as error:
-                        raise ValueError(
-                            Message(
-                                "Não foi possível obter o carimbo de tempo de {url}: {error}",
-                                url=timestamp_url.strip(),
-                                error=str(error),
-                            )
-                        ) from error
+        reader = open_reader(input_path)
+        require_valid_page_index(len(reader.pages), page_index)
+        if box is None:
+            box = _stamp_box(reader.pages[page_index], position)
+        field_name = _unique_field_name(reader)
+        reason, location, contact = reason.strip(), location.strip(), contact.strip()
+        lines = ["Assinado digitalmente por %(signer)s", "%(ts)s"]
+        lines += [f"{label}: {value.replace('%', '%%')}" for label, value in (("Motivo", reason), ("Local", location)) if value]
+        stamp_style = _stamp_style(lines, stamp_image, box)
+        meta = signers.PdfSignatureMetadata(
+            field_name=field_name,
+            reason=reason or None,
+            location=location or None,
+            contact_info=contact or None,
+            subfilter=fields.SigSeedSubFilter.PADES if pades else None,
+        )
+        # O pyhanko anota a caixa como inteiros, mas grava frações de ponto sem problema.
+        field_spec = fields.SigFieldSpec(field_name, on_page=page_index, box=box)  # type: ignore[arg-type]
+        pdf_signer = signers.PdfSigner(
+            meta,
+            signer=signer,
+            stamp_style=stamp_style,
+            new_field_spec=field_spec,
+            timestamper=_timestamper(timestamp_url.strip()) if timestamp_url.strip() else None,
+        )
+        name = (signer_name or "").strip() or certificate.name
+
+        with open(input_path, "rb") as inf, atomic_output(output_path) as temp_path:
+            writer = IncrementalPdfFileWriter(inf)
+            with open(temp_path, "wb") as outf:
+                try:
+                    pdf_signer.sign_pdf(writer, output=outf, appearance_text_params={"signer": name})
+                except timestamps.TimestampRequestError as error:
+                    raise ValueError(
+                        Message(
+                            "Não foi possível obter o carimbo de tempo de {url}: {error}",
+                            url=timestamp_url.strip(),
+                            error=str(error),
+                        )
+                    ) from error
 
 
 VERDICT_VALID = "valid"

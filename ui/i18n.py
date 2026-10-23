@@ -1468,7 +1468,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Não foi possível carregar o certificado .pfx (senha incorreta ou arquivo inválido).': (
         'Could not load the .pfx certificate (wrong password or invalid file).'
     ),
-    'Falha ao gerar o certificado de teste.': 'Failed to generate the test certificate.',
     'Informe um certificado .pfx ou os dados para gerar um certificado de teste.': (
         'Provide a .pfx certificate or the details to generate a test certificate.'
     ),
