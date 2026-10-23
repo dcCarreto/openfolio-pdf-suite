@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from core.layers import ListLayers, SetLayerVisibility
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -30,9 +31,12 @@ class LayersPage(QWidget):
         list_button = QPushButton(tr("Listar camadas"))
         list_button.clicked.connect(self._list_layers)
         self.layers_list = QListWidget()
+        self.layers_list.setToolTip(tr("Clique numa camada para escolhê-la."))
+        self.layers_list.currentRowChanged.connect(self._on_layer_chosen)
+        self._layer_indexes: list[int] = []
 
         self.layer_index_spin = QSpinBox()
-        self.layer_index_spin.setRange(0, 9999)
+        self.layer_index_spin.setRange(1, 9999)
         self.visibility_combo = QComboBox()
         self.visibility_combo.addItems([tr("Visível"), tr("Oculta")])
 
@@ -47,7 +51,7 @@ class LayersPage(QWidget):
         layout.addWidget(self.source_bar)
         layout.addWidget(list_button)
         layout.addWidget(self.layers_list)
-        layout.addWidget(QLabel(tr("Índice da camada:")))
+        layout.addWidget(QLabel(tr("Número da camada:")))
         layout.addWidget(self.layer_index_spin)
         layout.addWidget(QLabel(tr("Nova visibilidade:")))
         layout.addWidget(self.visibility_combo)
@@ -55,27 +59,36 @@ class LayersPage(QWidget):
         layout.addWidget(self.output_picker)
         layout.addWidget(apply_button)
 
+    def _on_layer_chosen(self, row: int):
+        if 0 <= row < len(self._layer_indexes):
+            self.layer_index_spin.setValue(self._layer_indexes[row] + 1)
+
     def _list_layers(self):
         input_path = self.session.path()
+        self._layer_indexes = []
         self.layers_list.clear()
         if not input_path:
             QMessageBox.warning(self, tr("Camadas"), tr("Abra um PDF para começar."))
             return
 
-        try:
-            layers = ListLayers().run(input_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Camadas"), tr("Falha ao listar camadas: {error}").format(error=exc)
-            )
-            return
+        task = call(ListLayers().run, input_path)
 
-        if not layers:
-            self.layers_list.addItem(tr("Este PDF não tem camadas (Optional Content Groups)."))
-            return
-        for layer in layers:
-            status = tr("visível") if layer.visible else tr("oculta")
-            self.layers_list.addItem(f"#{layer.index} — {layer.name} — {status}")
+        def done(layers):
+            if not layers:
+                self.layers_list.addItem(tr("Este PDF não tem camadas (Optional Content Groups)."))
+                return
+            self._layer_indexes = [layer.index for layer in layers]
+            for layer in layers:
+                status = tr("visível") if layer.visible else tr("oculta")
+                self.layers_list.addItem(f"#{layer.index + 1} — {layer.name} — {status}")
+
+        run_task(
+            self,
+            tr("Camadas"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao listar camadas: {error}"),
+        )
 
     def _apply_visibility(self):
         input_path = self.session.path()
@@ -90,15 +103,19 @@ class LayersPage(QWidget):
 
         visible = self.visibility_combo.currentIndex() == 0
 
-        try:
-            SetLayerVisibility().run(
-                input_path, output_path, layer_index=self.layer_index_spin.value(), visible=visible
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Camadas"), tr("Falha ao alterar visibilidade: {error}").format(error=exc)
-            )
-            return
+        task = call(
+            SetLayerVisibility().run,
+            input_path, output_path, layer_index=self.layer_index_spin.value() - 1, visible=visible,
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Camadas"), tr("Visibilidade da camada alterada com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Camadas"), tr("Visibilidade da camada alterada com sucesso."))
+
+        run_task(
+            self,
+            tr("Camadas"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao alterar visibilidade: {error}"),
+        )

@@ -1,39 +1,192 @@
 """Conversão de PDF para outros formatos e vice-versa."""
 
+import io
 from pathlib import Path
 
-import pypdfium2 as pdfium
-from PIL import Image
+from PIL import Image, ImageOps, TiffImagePlugin
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas as rl_canvas
 
-from .base import PDFOperation
+from .base import READ, atomic_output, open_pdfium, open_reader, render_scale
+from .progress import PDFIUM_LOCK, Progress, ensure_progress
 
 
-class ConvertToImages(PDFOperation):
-    """Converte páginas de um PDF em imagens."""
+IMAGE_FORMATS = ("png", "jpeg", "tiff")
 
-    def run(self, input_path: str, output_dir: str, scale: float = 2.0) -> list[str]:
-        pdf = pdfium.PdfDocument(input_path)
+
+class ConvertToImages:
+    """Converte páginas de um PDF em imagens.
+
+    - `image_format`: "png" e "jpeg" gravam uma imagem por página (`<nome>_pageN`, com o
+      número da página no documento); "tiff" grava um arquivo só, multipágina (`<nome>.tif`),
+      como pedem sistemas de fax e de arquivo de documentos.
+    - `pages`: índices a partir de 0; None converte todas.
+    """
+
+    def run(
+        self,
+        input_path: str,
+        output_dir: str,
+        scale: float = 2.0,
+        progress: Progress | None = None,
+        *,
+        image_format: str = "png",
+        pages: list[int] | None = None,
+    ) -> list[str]:
+        progress = ensure_progress(progress)
+        if image_format not in IMAGE_FORMATS:
+            raise ValueError(f"Formato de imagem inválido: {image_format}")
+        open_reader(input_path, purpose=READ)  # recusa PDF que não abre, com mensagem clara
         stem = Path(input_path).stem
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(parents=True, exist_ok=True)
 
-        output_paths = []
-        for index, page in enumerate(pdf):
-            bitmap = page.render(scale=scale)
-            image = bitmap.to_pil()
-            output_path = output_dir_path / f"{stem}_page{index + 1}.png"
-            image.save(output_path)
-            output_paths.append(str(output_path))
+        with PDFIUM_LOCK:
+            pdf = open_pdfium(input_path)
+            total_pages = len(pdf)
+        try:
+            if pages is None:
+                pages = list(range(total_pages))
+            if not pages:
+                raise ValueError("Informe as páginas a converter.")
+            if not all(0 <= index < total_pages for index in pages):
+                raise ValueError(f"O documento tem {total_pages} página(s): confira as páginas informadas.")
+
+            def rendered():
+                for index in progress.steps(pages, len(pages), "Convertendo páginas"):
+                    with PDFIUM_LOCK:
+                        page = pdf[index]
+                        page_scale = render_scale(page, scale)
+                        image = page.render(scale=page_scale).to_pil()
+                        image.info["dpi"] = (72 * page_scale,) * 2
+                        page.close()
+                    yield index, image
+
+            if image_format == "tiff":
+                output_path = output_dir_path / f"{stem}.tif"
+                with atomic_output(str(output_path)) as temp_path, open(temp_path, "w+b") as file:
+                    # Uma página por vez na memória, em vez do save_all, que junta todas antes.
+                    # O arquivo é nosso e fica aberto até o writer sumir: o __del__ dele
+                    # fecha de novo e falharia num arquivo já fechado.
+                    tiff = TiffImagePlugin.AppendingTiffWriter(file)
+                    try:
+                        with tiff:
+                            for _index, image in rendered():
+                                image.save(tiff, format="TIFF", compression="tiff_deflate", dpi=image.info["dpi"])
+                                tiff.newFrame()
+                    finally:
+                        del tiff
+                return [str(output_path)]
+
+            output_paths = []
+            suffix = "jpg" if image_format == "jpeg" else "png"
+            for index, image in rendered():
+                output_path = output_dir_path / f"{stem}_page{index + 1}.{suffix}"
+                image.save(output_path, quality=90, dpi=image.info["dpi"])
+                output_paths.append(str(output_path))
+        finally:
+            with PDFIUM_LOCK:
+                pdf.close()
 
         return output_paths
 
 
-class ConvertFromImages(PDFOperation):
-    """Converte um conjunto de imagens em um PDF."""
+# Tamanhos de página para imagens → PDF, em pontos (retrato; a orientação acompanha a imagem).
+IMAGE_PAGE_SIZES = {
+    "A4": (595.28, 841.89),
+    "Letter": (612.0, 792.0),
+    "Legal": (612.0, 1008.0),
+}
+FIT_TO_IMAGE = "fit"
+_MM = 72 / 25.4
+_EXIF_ORIENTATION = 0x0112
 
-    def run(self, input_paths: list[str], output_path: str) -> None:
+
+class ConvertFromImages:
+    """Converte um conjunto de imagens em um PDF, uma imagem por página.
+
+    - `page_size`: "A4", "Letter", "Legal" ou "fit" (página do tamanho da imagem a `dpi`
+      pontos por polegada). Nos tamanhos fixos, a página fica em paisagem quando a imagem é
+      mais larga que alta, e a imagem é centralizada sem distorcer. Antes a página tinha o
+      tamanho em pixels a 72 DPI: uma foto de 4000x3000 virava uma página de 141x106 cm.
+    - `margin_mm`: margem em volta da imagem.
+    - A orientação gravada pela câmera (EXIF) é aplicada: fotos de celular saem de pé.
+    - Transparência é composta sobre fundo branco (antes ficava preta).
+    - Uma imagem por vez na memória. JPEGs que não precisam de ajuste entram como estão,
+      sem recompressão.
+    """
+
+    def run(
+        self,
+        input_paths: list[str],
+        output_path: str,
+        page_size: str = "A4",
+        margin_mm: float = 0,
+        dpi: float = 300,
+        progress: Progress | None = None,
+    ) -> None:
+        progress = ensure_progress(progress)
         if not input_paths:
             raise ValueError("Informe ao menos uma imagem para converter.")
-        images = [Image.open(path).convert("RGB") for path in input_paths]
-        first_image, remaining_images = images[0], images[1:]
-        first_image.save(output_path, save_all=True, append_images=remaining_images)
+        if page_size != FIT_TO_IMAGE and page_size not in IMAGE_PAGE_SIZES:
+            raise ValueError(f"Tamanho de página inválido: {page_size}")
+        if margin_mm < 0:
+            raise ValueError("A margem não pode ser negativa.")
+        if dpi <= 0:
+            raise ValueError("O DPI precisa ser maior que zero.")
+        margin = margin_mm * _MM
+
+        with atomic_output(output_path) as temp_path:
+            pdf = rl_canvas.Canvas(temp_path)
+            for path in progress.steps(input_paths, message="Lendo as imagens"):
+                source, (pixel_width, pixel_height) = _prepared_image(path)
+                if page_size == FIT_TO_IMAGE:
+                    image_width = pixel_width / dpi * 72
+                    image_height = pixel_height / dpi * 72
+                    page_width, page_height = image_width + 2 * margin, image_height + 2 * margin
+                else:
+                    page_width, page_height = IMAGE_PAGE_SIZES[page_size]
+                    if pixel_width > pixel_height:
+                        page_width, page_height = page_height, page_width
+                    available_width = page_width - 2 * margin
+                    available_height = page_height - 2 * margin
+                    if available_width <= 0 or available_height <= 0:
+                        raise ValueError("A margem é maior que a página.")
+                    scale = min(available_width / pixel_width, available_height / pixel_height)
+                    image_width, image_height = pixel_width * scale, pixel_height * scale
+                pdf.setPageSize((page_width, page_height))
+                pdf.drawImage(
+                    source,
+                    (page_width - image_width) / 2,
+                    (page_height - image_height) / 2,
+                    image_width,
+                    image_height,
+                )
+                pdf.showPage()
+            progress.check()
+            pdf.save()
+
+
+def _prepared_image(path: str):
+    """A imagem pronta para o reportlab (o próprio arquivo, se for um JPEG que não precisa
+    de ajuste) e o tamanho dela em pixels, já na orientação certa."""
+    with Image.open(path) as opened:
+        is_jpeg = opened.format == "JPEG"
+        orientation = opened.getexif().get(_EXIF_ORIENTATION, 1)
+        if is_jpeg and orientation == 1 and opened.mode in ("RGB", "L"):
+            return path, opened.size
+        image = ImageOps.exif_transpose(opened)
+        if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
+            rgba = image.convert("RGBA")
+            flattened = Image.new("RGB", rgba.size, "white")
+            flattened.paste(rgba, mask=rgba.getchannel("A"))
+            image = flattened
+        elif image.mode not in ("RGB", "L"):
+            image = image.convert("RGB")
+        buffer = io.BytesIO()
+        if is_jpeg:
+            image.save(buffer, format="JPEG", quality=95)  # foto girada: sem virar um PNG enorme
+        else:
+            image.save(buffer, format="PNG")
+        buffer.seek(0)
+        return ImageReader(buffer), image.size

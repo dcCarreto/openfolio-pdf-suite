@@ -1,10 +1,15 @@
 """Aba de redação real e sanitização de PDFs."""
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QStackedWidget,
@@ -12,8 +17,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.redaction import FindSensitiveData, RedactDocument, SanitizeDocument
+from core.redaction import (
+    CUSTOM_PATTERN_KIND,
+    FindSensitiveData,
+    RedactDocument,
+    RedactionRect,
+    SanitizeDocument,
+    SanitizeReport,
+    TEXT_KIND,
+)
 from ui.i18n import tr
+from ui.tasks import call, call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -24,6 +38,53 @@ _PATTERN_CHECKBOX_LABELS = [
     ("phone", "Telefone"),
     ("credit_card", "Cartão de crédito"),
 ]
+_KIND_LABELS = {
+    **dict(_PATTERN_CHECKBOX_LABELS),
+    CUSTOM_PATTERN_KIND: "Expressão personalizada",
+    TEXT_KIND: "Texto buscado",
+}
+
+
+def describe_redaction_rect(rect: RedactionRect) -> str:
+    """Texto de uma área pendente na lista de revisão."""
+    page = tr("Página {number}").format(number=rect.page_index + 1)
+    if rect.kind:
+        label = tr(_KIND_LABELS.get(rect.kind, rect.kind))
+        return f"{page} — {label}: {rect.text}" if rect.text else f"{page} — {label}"
+    return f"{page} — {tr('área marcada à mão')}"
+
+
+def format_sanitize_report(report: SanitizeReport) -> str:
+    """Resumo, para o usuário, do que a sanitização removeu."""
+    items = []
+    if report.javascript:
+        items.append(tr("{count} script(s) ou ação(ões) de JavaScript").format(count=report.javascript))
+    if report.external_actions:
+        items.append(
+            tr(
+                "{count} ação(ões) que abrem arquivos ou programas, enviam dados ou acessam "
+                "conteúdo externo"
+            ).format(count=report.external_actions)
+        )
+    if report.embedded_files:
+        items.append(tr("{count} arquivo(s) embutido(s)").format(count=report.embedded_files))
+    if report.annotations_removed:
+        items.append(tr("{count} anotação(ões)").format(count=report.annotations_removed))
+    if report.private_data:
+        items.append(
+            tr(
+                "{count} item(ns) de dados privados de aplicativos, miniaturas ou metadados "
+                "de páginas e imagens"
+            ).format(count=report.private_data)
+        )
+    if report.metadata_removed:
+        items.append(tr("metadados do documento (título, autor e outros)"))
+    if report.xfa_removed:
+        items.append(tr("formulário XFA (pode conter scripts)"))
+
+    if not items:
+        return tr("Nada perigoso foi encontrado no documento.")
+    return tr("Removido:") + "\n" + "\n".join(f"• {item}" for item in items)
 
 
 class RedactionPage(QWidget):
@@ -61,14 +122,25 @@ class RedactionPage(QWidget):
         instructions = QLabel(
             tr(
                 "Arraste no visualizador para marcar as áreas a apagar. Cada página marcada "
-                "vira uma imagem achatada (perde a camada de texto pesquisável inteira, não "
-                "só a área marcada) — é assim que garantimos que nada fique recuperável."
+                "vira uma imagem, com as áreas pintadas de preto na própria imagem — e perde "
+                "a camada de texto pesquisável inteira, não só a área marcada. O resultado é "
+                "conferido antes de ser salvo."
             )
         )
         instructions.setWordWrap(True)
 
+        search_label = QLabel(
+            tr(
+                "Ou procure um texto para marcar todas as ocorrências (maiúsculas e acentos não "
+                "importam; separe vários com ;):"
+            )
+        )
+        search_label.setWordWrap(True)
+        self.search_text_edit = QLineEdit()
+        self.search_text_edit.setPlaceholderText(tr("Ex.: Maria da Silva; Rua das Flores"))
+
         detect_label = QLabel(
-            tr("Ou detecte automaticamente padrões de dado sensível no texto do PDF:")
+            tr("E/ou detecte padrões de dado sensível no texto do PDF:")
         )
         detect_label.setWordWrap(True)
 
@@ -80,15 +152,39 @@ class RedactionPage(QWidget):
         self.custom_pattern_edit = QLineEdit()
         self.custom_pattern_edit.setPlaceholderText(tr("Expressão regular personalizada (opcional)"))
 
-        detect_button = QPushButton(tr("Detectar e marcar"))
+        detect_button = QPushButton(tr("Procurar e marcar"))
         detect_button.clicked.connect(self._detect_patterns)
+        self.search_text_edit.returnPressed.connect(self._detect_patterns)
 
         self.pending_label = QLabel()
-        self.redaction_state.pending_changed.connect(self._update_pending_label)
-        self._update_pending_label()
+        self.pending_list = QListWidget()
+        self.pending_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.pending_list.setToolTip(tr("Selecione uma área para vê-la destacada no visualizador."))
+        self.pending_list.currentItemChanged.connect(self._on_current_pending_changed)
 
-        clear_button = QPushButton(tr("Limpar pendentes"))
+        remove_selected_button = QPushButton(tr("Remover selecionadas"))
+        remove_selected_button.clicked.connect(self._remove_selected_pending)
+        clear_button = QPushButton(tr("Limpar todas"))
         clear_button.clicked.connect(self.redaction_state.clear_pending)
+        pending_buttons = QHBoxLayout()
+        pending_buttons.addWidget(remove_selected_button)
+        pending_buttons.addWidget(clear_button)
+
+        self.redaction_state.pending_changed.connect(self._refresh_pending)
+        self._refresh_pending()
+
+        self.also_sanitize_checkbox = QCheckBox(tr("Também sanitizar o documento"))
+        self.also_sanitize_checkbox.setChecked(True)
+        # QCheckBox não quebra linha: a explicação fica num QLabel à parte, para não alargar
+        # o painel (de largura fixa) além do espaço disponível.
+        sanitize_hint = QLabel(
+            tr(
+                "O texto apagado pode aparecer também no título, nos metadados ou em anexos. "
+                "Com esta opção, o arquivo redigido também passa pela sanitização."
+            )
+        )
+        sanitize_hint.setObjectName("pageSubtitle")
+        sanitize_hint.setWordWrap(True)
 
         self.redact_output_picker = FilePicker(
             mode="save", suggested_source=self.session.path, suggested_suffix="redigido"
@@ -97,13 +193,18 @@ class RedactionPage(QWidget):
         redact_button.clicked.connect(self._apply_redaction)
 
         layout.addWidget(instructions)
+        layout.addWidget(search_label)
+        layout.addWidget(self.search_text_edit)
         layout.addWidget(detect_label)
         for checkbox in self.pattern_checkboxes.values():
             layout.addWidget(checkbox)
         layout.addWidget(self.custom_pattern_edit)
         layout.addWidget(detect_button)
         layout.addWidget(self.pending_label)
-        layout.addWidget(clear_button)
+        layout.addWidget(self.pending_list)
+        layout.addLayout(pending_buttons)
+        layout.addWidget(self.also_sanitize_checkbox)
+        layout.addWidget(sanitize_hint)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.redact_output_picker)
         layout.addWidget(redact_button)
@@ -119,7 +220,12 @@ class RedactionPage(QWidget):
         self.remove_annotations_checkbox = QCheckBox(tr("Remover anotações e comentários"))
         self.remove_annotations_checkbox.setChecked(False)
 
-        note = QLabel(tr("JavaScript e anexos embutidos são sempre removidos."))
+        note = QLabel(
+            tr(
+                "JavaScript, ações que abrem arquivos ou programas ou enviam dados, e arquivos "
+                "embutidos são sempre removidos. O resultado é conferido antes de ser salvo."
+            )
+        )
         note.setWordWrap(True)
 
         self.sanitize_output_picker = FilePicker(
@@ -139,9 +245,36 @@ class RedactionPage(QWidget):
     def _on_mode_changed(self, index: int):
         self.stack.setCurrentIndex(index)
 
-    def _update_pending_label(self):
-        count = len(self.redaction_state.pending())
-        self.pending_label.setText(tr("{count} área(s) marcada(s) para redação").format(count=count))
+    # -- lista de áreas pendentes -------------------------------------------------------
+
+    def _refresh_pending(self):
+        pending = self.redaction_state.pending()
+        self.pending_label.setText(
+            tr("{count} área(s) marcada(s) para redação").format(count=len(pending))
+        )
+        selected = self.redaction_state.selected()
+        self.pending_list.blockSignals(True)
+        self.pending_list.clear()
+        for rect in sorted(pending, key=lambda r: (r.page_index, -r.top, r.left)):
+            item = QListWidgetItem(describe_redaction_rect(rect))
+            item.setData(Qt.ItemDataRole.UserRole, rect)
+            self.pending_list.addItem(item)
+            if rect == selected:
+                self.pending_list.setCurrentItem(item)
+        self.pending_list.blockSignals(False)
+
+    def _on_current_pending_changed(self, current: QListWidgetItem | None, _previous=None):
+        rect = current.data(Qt.ItemDataRole.UserRole) if current is not None else None
+        self.redaction_state.set_selected(rect)
+
+    def _remove_selected_pending(self):
+        rects = [item.data(Qt.ItemDataRole.UserRole) for item in self.pending_list.selectedItems()]
+        if not rects:
+            QMessageBox.warning(self, tr("Redigir"), tr("Selecione na lista as áreas a remover."))
+            return
+        self.redaction_state.remove_many(rects)
+
+    # -- ações -------------------------------------------------------------------------
 
     def _detect_patterns(self):
         input_path = self.session.path()
@@ -151,31 +284,40 @@ class RedactionPage(QWidget):
 
         kinds = [kind for kind, checkbox in self.pattern_checkboxes.items() if checkbox.isChecked()]
         custom_pattern = self.custom_pattern_edit.text().strip()
-        if not kinds and not custom_pattern:
+        search_text = self.search_text_edit.text().strip()
+        if not kinds and not custom_pattern and not search_text.strip(";"):
             QMessageBox.warning(
                 self,
                 tr("Redigir"),
-                tr("Marque ao menos um padrão ou digite uma expressão regular."),
+                tr("Digite um texto a procurar, marque um padrão ou digite uma expressão regular."),
             )
             return
 
-        try:
-            rects = FindSensitiveData().run(input_path, kinds=kinds, custom_pattern=custom_pattern or None)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Redigir"), tr("Falha ao detectar padrões: {error}").format(error=exc)
+        task = call_with_progress(
+            FindSensitiveData().run,
+            input_path,
+            kinds=kinds,
+            custom_pattern=custom_pattern or None,
+            search_text=search_text or None,
+        )
+
+        def done(rects):
+            added = self.redaction_state.add_many(rects)
+            QMessageBox.information(
+                self,
+                tr("Redigir"),
+                tr(
+                    "{count} ocorrência(s) encontrada(s), {added} nova(s) marcada(s) para redação. "
+                    "Revise a lista antes de aplicar."
+                ).format(count=len(rects), added=added),
             )
-            return
 
-        for rect in rects:
-            self.redaction_state.add_pending(rect)
-
-        QMessageBox.information(
+        run_task(
             self,
             tr("Redigir"),
-            tr("{count} ocorrência(s) encontrada(s) e marcada(s) para redação.").format(
-                count=len(rects)
-            ),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao detectar padrões: {error}"),
         )
 
     def _apply_redaction(self):
@@ -208,16 +350,25 @@ class RedactionPage(QWidget):
         if confirmation != QMessageBox.StandardButton.Yes:
             return
 
-        try:
-            pages_redacted = RedactDocument().run(input_path, output_path, rects)
-        except Exception as exc:
-            QMessageBox.critical(self, tr("Redigir"), tr("Falha ao redigir: {error}").format(error=exc))
-            return
+        rects = list(rects)
+        also_sanitize = self.also_sanitize_checkbox.isChecked()
 
-        self.redaction_state.clear_pending()
-        self.session.open(output_path)
-        QMessageBox.information(
-            self, tr("Redigir"), tr("{count} página(s) redigida(s) com sucesso.").format(count=pages_redacted)
+        def redact(progress):
+            pages_redacted = RedactDocument().run(input_path, output_path, rects, progress=progress)
+            report = SanitizeDocument().run(output_path, output_path) if also_sanitize else None
+            return pages_redacted, report
+
+        def done(result):
+            pages_redacted, report = result
+            self.redaction_state.clear_pending()
+            self.session.open(output_path)
+            message = tr("{count} página(s) redigida(s) com sucesso.").format(count=pages_redacted)
+            if report is not None:
+                message += "\n\n" + format_sanitize_report(report)
+            QMessageBox.information(self, tr("Redigir"), message)
+
+        run_task(
+            self, tr("Redigir"), redact, on_success=done, error_message=tr("Falha ao redigir: {error}")
         )
 
     def _apply_sanitize(self):
@@ -231,16 +382,26 @@ class RedactionPage(QWidget):
             QMessageBox.warning(self, tr("Sanitizar"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            SanitizeDocument().run(
-                input_path,
-                output_path,
-                remove_metadata=self.remove_metadata_checkbox.isChecked(),
-                remove_annotations=self.remove_annotations_checkbox.isChecked(),
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, tr("Sanitizar"), tr("Falha ao sanitizar: {error}").format(error=exc))
-            return
+        task = call(
+            SanitizeDocument().run,
+            input_path,
+            output_path,
+            remove_metadata=self.remove_metadata_checkbox.isChecked(),
+            remove_annotations=self.remove_annotations_checkbox.isChecked(),
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Sanitizar"), tr("PDF sanitizado com sucesso."))
+        def done(report):
+            self.session.open(output_path)
+            QMessageBox.information(
+                self,
+                tr("Sanitizar"),
+                tr("PDF sanitizado com sucesso.") + "\n\n" + format_sanitize_report(report),
+            )
+
+        run_task(
+            self,
+            tr("Sanitizar"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao sanitizar: {error}"),
+        )

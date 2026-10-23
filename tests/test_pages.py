@@ -148,3 +148,30 @@ def test_replace_pages_rejects_encrypted_input(make_encrypted_pdf, make_pdf, tmp
         ReplacePages().run(
             str(encrypted_path), str(tmp_path / "out.pdf"), str(replacement_path), start_index=0, end_index=1
         )
+
+
+def test_reorder_rejects_incomplete_or_repeated_order(make_pdf, tmp_path):
+    # Uma ordem incompleta descartava páginas sem aviso.
+    pdf_path = make_pdf("doc.pdf", [(100, 100), (200, 200), (300, 300)])
+
+    with pytest.raises(ValueError, match="faltam: 1"):
+        ReorderPages().run(str(pdf_path), str(tmp_path / "out.pdf"), order=[2, 1])
+    with pytest.raises(ValueError, match="repetida"):
+        ReorderPages().run(str(pdf_path), str(tmp_path / "out.pdf"), order=[0, 0, 1, 2])
+
+
+def test_remove_and_rotate_reject_pages_that_do_not_exist(make_pdf, tmp_path):
+    # Antes, páginas inexistentes eram ignoradas e a operação dizia que deu certo.
+    pdf_path = make_pdf("doc.pdf", [(100, 100), (200, 200)])
+
+    with pytest.raises(ValueError, match="Página 5 não existe"):
+        RemovePages().run(str(pdf_path), str(tmp_path / "out.pdf"), pages=[4])
+    with pytest.raises(ValueError, match="Página 3 não existe"):
+        RotatePages().run(str(pdf_path), str(tmp_path / "out.pdf"), angle=90, pages=[2])
+
+
+def test_rotate_rejects_angles_that_are_not_multiples_of_90(make_pdf, tmp_path):
+    pdf_path = make_pdf("doc.pdf", [(100, 100)])
+
+    with pytest.raises(ValueError, match="múltiplo de 90"):
+        RotatePages().run(str(pdf_path), str(tmp_path / "out.pdf"), angle=45)

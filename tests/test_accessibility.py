@@ -11,7 +11,7 @@ from pypdf.generic import (
 )
 
 from core.accessibility import CheckAccessibility, FixBasicAccessibilityIssues
-from core.base import EncryptedPDFError
+from core.base import EncryptedPDFError, add_object
 
 
 def _make_plain_pdf(path) -> None:
@@ -32,12 +32,12 @@ def _make_tagged_pdf(path, figures_alt: list) -> None:
         figure[NameObject("/S")] = NameObject("/Figure")
         if alt is not None:
             figure[NameObject("/Alt")] = TextStringObject(alt)
-        kids.append(writer._add_object(figure))
+        kids.append(add_object(writer, figure))
 
     struct_root = DictionaryObject()
     struct_root[NameObject("/Type")] = NameObject("/StructTreeRoot")
     struct_root[NameObject("/K")] = kids
-    writer.root_object[NameObject("/StructTreeRoot")] = writer._add_object(struct_root)
+    writer.root_object[NameObject("/StructTreeRoot")] = add_object(writer, struct_root)
 
     mark_info = DictionaryObject()
     mark_info[NameObject("/Marked")] = BooleanObject(True)
@@ -45,6 +45,9 @@ def _make_tagged_pdf(path, figures_alt: list) -> None:
 
     writer.add_metadata({"/Title": "Documento de teste"})
     writer.root_object[NameObject("/Lang")] = TextStringObject("pt-BR")
+    writer.root_object[NameObject("/ViewerPreferences")] = DictionaryObject(
+        {NameObject("/DisplayDocTitle"): BooleanObject(True)}
+    )
 
     with open(path, "wb") as f:
         writer.write(f)
@@ -124,3 +127,53 @@ def test_fix_basic_accessibility_issues_rejects_encrypted_input(make_encrypted_p
         FixBasicAccessibilityIssues().run(
             str(encrypted_path), str(tmp_path / "out.pdf"), language="pt-BR", title="x"
         )
+
+
+def test_figures_inside_an_indirect_kids_array_are_checked(tmp_path):
+    pdf_path = tmp_path / "doc.pdf"
+    _make_tagged_pdf(pdf_path, figures_alt=[None])
+    writer = PdfWriter(clone_from=str(pdf_path))
+    root = writer.root_object["/StructTreeRoot"].get_object()
+    root[NameObject("/K")] = add_object(writer, ArrayObject(root["/K"]))  # /K indireto
+    writer.write(str(pdf_path))
+
+    report = CheckAccessibility().run(str(pdf_path))
+
+    assert any("1 figura" in issue for issue in report.issues)
+
+
+def test_custom_tags_mapped_to_figure_are_checked(tmp_path):
+    pdf_path = tmp_path / "doc.pdf"
+    _make_tagged_pdf(pdf_path, figures_alt=[None])
+    writer = PdfWriter(clone_from=str(pdf_path))
+    root = writer.root_object["/StructTreeRoot"].get_object()
+    root["/K"][0].get_object()[NameObject("/S")] = NameObject("/Imagem")
+    root[NameObject("/RoleMap")] = DictionaryObject({NameObject("/Imagem"): NameObject("/Figure")})
+    writer.write(str(pdf_path))
+
+    report = CheckAccessibility().run(str(pdf_path))
+
+    assert any("1 figura" in issue for issue in report.issues)
+
+
+def test_tab_order_display_title_and_field_labels_are_checked_and_fixed(tmp_path):
+    from core.form_fields import AddFormField
+
+    plain = tmp_path / "plain.pdf"
+    _make_tagged_pdf(plain, figures_alt=["ok"])
+    writer = PdfWriter(clone_from=str(plain))
+    del writer.root_object["/ViewerPreferences"]
+    writer.write(str(plain))
+    with_field = tmp_path / "campo.pdf"
+    AddFormField().run(str(plain), str(with_field), field_name="cpf", page_number=0, x=20, y=100, field_type="text")
+
+    report = CheckAccessibility().run(str(with_field))
+    assert any("DisplayDocTitle" in issue for issue in report.issues)
+    assert any("/Tabs" in issue for issue in report.issues)
+    assert any("/TU" in issue and "cpf" in issue for issue in report.issues)
+
+    fixed = tmp_path / "corrigido.pdf"
+    FixBasicAccessibilityIssues().run(str(with_field), str(fixed), language="pt-BR", title="Formulário")
+    remaining = CheckAccessibility().run(str(fixed)).issues
+    assert not any("DisplayDocTitle" in issue or "/Tabs" in issue for issue in remaining)
+    assert any("/TU" in issue for issue in remaining)  # a descrição do campo é com o autor

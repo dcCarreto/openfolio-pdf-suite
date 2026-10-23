@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from core.create import CreateBlankPDF
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.page_sizes import CUSTOM_SIZE_LABEL, PAGE_SIZES
 from ui.widgets.file_picker import FilePicker
 
@@ -75,18 +76,22 @@ class CreatePage(QWidget):
             QMessageBox.warning(self, tr("Criar PDF"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            CreateBlankPDF().run(
-                output_path,
-                page_count=self.page_count_spin.value(),
-                width=self.width_spin.value(),
-                height=self.height_spin.value(),
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Criar PDF"), tr("Falha ao criar PDF: {error}").format(error=exc)
-            )
-            return
+        task = call(
+            CreateBlankPDF().run,
+            output_path,
+            page_count=self.page_count_spin.value(),
+            width=self.width_spin.value(),
+            height=self.height_spin.value(),
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Criar PDF"), tr("PDF criado com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Criar PDF"), tr("PDF criado com sucesso."))
+
+        run_task(
+            self,
+            tr("Criar PDF"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao criar PDF: {error}"),
+        )

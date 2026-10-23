@@ -10,22 +10,27 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.pdfa import ConvertToPDFA, ValidatePDFA
-from ui.i18n import tr
+from core.pdfa import VALID_CONFORMANCE, ConvertToPDFA, ValidatePDFA
+from ui.i18n import tr, tr_message
+from ui.tasks import call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
-_PARTS = ["1", "2", "3"]
-_CONFORMANCE_LABELS = [
-    ("A (acessível)", "A"),
-    ("B (básica)", "B"),
-    ("U (Unicode)", "U"),
-]
+_PARTS = [1, 2, 3]
+_CONFORMANCE_LABELS = {
+    "A": "A (acessível)",
+    "B": "B (básica)",
+    "U": "U (Unicode)",
+}
+
+
+def _bullets(items) -> str:
+    return "\n".join("• " + tr_message(item) for item in items)
 
 
 class PDFAPage(QWidget):
-    """Permite converter um PDF para uma aproximação de PDF/A (arquivamento) ou verificar
-    se um PDF já atende a um subconjunto dos requisitos de PDF/A."""
+    """Permite converter um PDF para PDF/A (arquivamento) ou verificar se um PDF atende aos
+    requisitos de PDF/A que a ferramenta cobre."""
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
@@ -53,34 +58,34 @@ class PDFAPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        warning = QLabel(
+        note = QLabel(
             tr(
-                "Conversão aproximada: remove JavaScript, anexos embutidos e criptografia, e "
-                "declara conformidade PDF/A nos metadados — mas não embute perfil de cor "
-                "(/OutputIntent) nem verifica fontes. Para arquivamento legal, valide o "
-                "resultado com uma ferramenta dedicada (ex.: veraPDF) antes de considerar o "
-                "documento arquivável."
+                "Remove o que o PDF/A proíbe (JavaScript, ações automáticas, anexos não "
+                "permitidos), embute o perfil de cor sRGB e sincroniza os metadados. Depois "
+                "verifica fontes, transparência e estrutura: se algo impedir a conformidade, "
+                "nada é gravado e a lista do que falta é mostrada. PDFs protegidos por senha "
+                'precisam passar antes por "Remover senha".'
             )
         )
-        warning.setWordWrap(True)
+        note.setWordWrap(True)
 
         self.convert_output_picker = FilePicker(
             mode="save", suggested_source=self.session.path, suggested_suffix="pdfa"
         )
 
         self.convert_part_combo = QComboBox()
-        self.convert_part_combo.addItems(_PARTS)
+        for part in _PARTS:
+            self.convert_part_combo.addItem(f"PDF/A-{part}", part)
         self.convert_part_combo.setCurrentIndex(1)  # parte 2, o padrão mais comum
+        self.convert_part_combo.currentIndexChanged.connect(self._update_conformance_options)
 
         self.convert_conformance_combo = QComboBox()
-        for label, _value in _CONFORMANCE_LABELS:
-            self.convert_conformance_combo.addItem(tr(label))
-        self.convert_conformance_combo.setCurrentIndex(1)  # B, o nível mais permissivo
+        self._update_conformance_options()
 
         apply_button = QPushButton(tr("Converter"))
         apply_button.clicked.connect(self._apply_convert)
 
-        layout.addWidget(warning)
+        layout.addWidget(note)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.convert_output_picker)
         layout.addWidget(QLabel(tr("Parte (PDF/A-N):")))
@@ -90,6 +95,14 @@ class PDFAPage(QWidget):
         layout.addWidget(apply_button)
         return widget
 
+    def _update_conformance_options(self):
+        current = self.convert_conformance_combo.currentData() or "B"
+        self.convert_conformance_combo.clear()
+        for level in VALID_CONFORMANCE[self.convert_part_combo.currentData()]:
+            self.convert_conformance_combo.addItem(tr(_CONFORMANCE_LABELS[level]), level)
+        index = self.convert_conformance_combo.findData(current)
+        self.convert_conformance_combo.setCurrentIndex(index if index >= 0 else self.convert_conformance_combo.findData("B"))
+
     def _build_validate_panel(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -97,8 +110,9 @@ class PDFAPage(QWidget):
 
         note = QLabel(
             tr(
-                "Verifica só um subconjunto dos requisitos de PDF/A (criptografia, "
-                "JavaScript, anexos e metadados XMP) — não é validação ISO 19005 completa."
+                "Verifica os requisitos de PDF/A que o app cobre (declaração, perfil de cor, "
+                "fontes embutidas, transparência, ações e anexos proibidos, metadados) — não é "
+                "a validação ISO 19005 completa."
             )
         )
         note.setWordWrap(True)
@@ -124,17 +138,32 @@ class PDFAPage(QWidget):
             QMessageBox.warning(self, tr("PDF/A"), tr("Escolha o arquivo de saída."))
             return
 
-        part = int(_PARTS[self.convert_part_combo.currentIndex()])
-        conformance = _CONFORMANCE_LABELS[self.convert_conformance_combo.currentIndex()][1]
+        task = call_with_progress(
+            ConvertToPDFA().run,
+            input_path,
+            output_path,
+            part=self.convert_part_combo.currentData(),
+            conformance=self.convert_conformance_combo.currentData(),
+        )
 
-        try:
-            ConvertToPDFA().run(input_path, output_path, part=part, conformance=conformance)
-        except Exception as exc:
-            QMessageBox.critical(self, tr("PDF/A"), tr("Falha ao converter: {error}").format(error=exc))
-            return
+        def done(result):
+            if not result.written:
+                message = tr("O documento não pôde ser convertido, e nada foi gravado:") + "\n" + _bullets(result.issues)
+                QMessageBox.warning(self, tr("PDF/A"), message)
+                return
+            self.session.open(output_path)
+            message = tr("PDF convertido com sucesso.")
+            if result.fixed:
+                message += "\n\n" + tr("Ajustes feitos:") + "\n" + _bullets(result.fixed)
+            QMessageBox.information(self, tr("PDF/A"), message)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("PDF/A"), tr("PDF convertido com sucesso."))
+        run_task(
+            self,
+            tr("PDF/A"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao converter: {error}"),
+        )
 
     def _apply_validate(self):
         input_path = self.session.path()
@@ -142,20 +171,26 @@ class PDFAPage(QWidget):
             QMessageBox.warning(self, tr("PDF/A"), tr("Abra um PDF para começar."))
             return
 
-        try:
-            result = ValidatePDFA().run(input_path)
-        except Exception as exc:
-            QMessageBox.critical(self, tr("PDF/A"), tr("Falha ao validar: {error}").format(error=exc))
-            return
+        task = call_with_progress(ValidatePDFA().run, input_path)
 
-        if result.is_valid:
-            QMessageBox.information(
-                self, tr("PDF/A"), tr("Nenhum problema encontrado nas verificações realizadas.")
-            )
-        else:
-            issues_text = "\n".join(f"• {issue}" for issue in result.issues)
-            QMessageBox.warning(
-                self,
-                tr("PDF/A"),
-                tr("Problemas encontrados:\n{issues}").format(issues=issues_text),
-            )
+        def done(result):
+            if result.is_valid:
+                text = tr(
+                    "Nenhum problema encontrado nas verificações do app. Elas não cobrem a "
+                    "norma inteira: para arquivamento legal, confirme com o veraPDF."
+                )
+                QMessageBox.information(self, tr("PDF/A"), text)
+            else:
+                QMessageBox.warning(
+                    self,
+                    tr("PDF/A"),
+                    tr("Problemas encontrados:\n{issues}").format(issues=_bullets(result.issues)),
+                )
+
+        run_task(
+            self,
+            tr("PDF/A"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao validar: {error}"),
+        )

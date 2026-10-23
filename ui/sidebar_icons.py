@@ -7,9 +7,8 @@ garante o mesmo visual em qualquer sistema operacional.
 """
 
 from PySide6.QtCore import QPointF, QRectF
-from PySide6.QtGui import QColor, QIcon, QPolygonF
+from PySide6.QtGui import QIcon, QPolygonF
 
-from ui.icon_utils import DEFAULT_COLOR as _COLOR
 from ui.icon_utils import build_icon as _build
 
 
@@ -43,10 +42,45 @@ def build_split_icon() -> QIcon:
 def build_pages_icon() -> QIcon:
     def draw(p):
         p.drawArc(QRectF(5, 5, 12, 12), 20 * 16, 300 * 16)
-        p.setBrush(QColor(_COLOR))
+        p.setBrush(p.pen().color())
         p.drawPolygon(
             QPolygonF([QPointF(14.6, 6.0), QPointF(17.4, 6.8), QPointF(15.4, 9.2)])
         )
+
+    return _build(draw)
+
+
+def build_organize_icon() -> QIcon:
+    def draw(p):
+        for x, y in ((4, 4), (12, 4), (4, 12), (12, 12)):
+            p.drawRoundedRect(QRectF(x, y, 6, 6), 1, 1)
+
+    return _build(draw)
+
+
+def build_fill_sign_icon() -> QIcon:
+    def draw(p):
+        # rabisco de assinatura sobre a linha
+        p.drawPolyline(QPolygonF([QPointF(3, 14), QPointF(7, 7), QPointF(9, 14), QPointF(13, 8), QPointF(15, 13), QPointF(19, 10)]))
+        p.drawLine(QPointF(3, 18), QPointF(19, 18))
+
+    return _build(draw)
+
+
+def build_scan_cleanup_icon() -> QIcon:
+    def draw(p):
+        # página torta e a página endireitada sobre ela
+        p.drawPolygon(QPolygonF([QPointF(4, 6), QPointF(13, 3), QPointF(16, 15), QPointF(7, 18)]))
+        p.drawRect(QRectF(8, 7, 10, 13))
+
+    return _build(draw)
+
+
+def build_batch_icon() -> QIcon:
+    def draw(p):
+        # três páginas empilhadas
+        for offset in (0, 3, 6):
+            p.drawRect(QRectF(3 + offset, 9 - offset, 10, 12))
 
     return _build(draw)
 
@@ -97,7 +131,7 @@ def build_metadata_icon() -> QIcon:
     def draw(p):
         p.drawEllipse(QRectF(4, 4, 14, 14))
         p.drawLine(QPointF(11, 10), QPointF(11, 15))
-        p.setBrush(QColor(_COLOR))
+        p.setBrush(p.pen().color())
         p.drawEllipse(QPointF(11, 7.2), 1.1, 1.1)
 
     return _build(draw)
@@ -199,7 +233,7 @@ def build_redaction_icon() -> QIcon:
     def draw(p):
         p.drawRoundedRect(QRectF(4, 3, 14, 16), 1.5, 1.5)
         p.drawLine(QPointF(6.5, 7), QPointF(15.5, 7))
-        p.setBrush(QColor(_COLOR))
+        p.setBrush(p.pen().color())
         p.drawRect(QRectF(6.5, 10, 9, 3))
         p.drawLine(QPointF(6.5, 16), QPointF(12, 16))
 
@@ -235,7 +269,7 @@ def build_edit_icon() -> QIcon:
         p.translate(11, 11)
         p.rotate(45)
         p.drawRoundedRect(QRectF(-2, -9, 4, 14), 1, 1)
-        p.setBrush(QColor(_COLOR))
+        p.setBrush(p.pen().color())
         p.drawPolygon(QPolygonF([QPointF(-2, 5), QPointF(2, 5), QPointF(0, 9)]))
         p.restore()
 
@@ -272,7 +306,7 @@ def build_measure_icon() -> QIcon:
             x = 5 + (17 - 5) * t
             y = 17 + (5 - 17) * t
             p.drawLine(QPointF(x - 0.9, y - 0.9), QPointF(x + 0.9, y + 0.9))
-        p.setBrush(QColor(_COLOR))
+        p.setBrush(p.pen().color())
         p.drawEllipse(QPointF(5, 17), 1.3, 1.3)
         p.drawEllipse(QPointF(17, 5), 1.3, 1.3)
 

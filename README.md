@@ -29,6 +29,7 @@
 - [Requisitos](#requisitos)
 - [Como instalar a partir do código-fonte](#como-instalar-a-partir-do-código-fonte)
 - [Como rodar](#como-rodar)
+  - [Linha de comando](#linha-de-comando)
 - [Tecnologias utilizadas](#tecnologias-utilizadas)
 - [Estrutura do projeto](#estrutura-do-projeto)
 - [Testes](#testes)
@@ -42,16 +43,68 @@ operações de PDF mais comuns — mesclar, dividir, comprimir, proteger, conver
 anotar, redigir, assinar — sem depender de ferramentas online, sem enviar seus arquivos para
 servidor nenhum e sem paywall. Tudo roda localmente, na sua máquina.
 
+Não há número de versão: o OpenFolio PDF Suite é uma versão só, que recebe atualizações. O app só
+acessa a internet para ver se há atualização, e só quando você pede (**Ajuda > Verificar
+atualizações**) ou liga a verificação ao iniciar, que vem desligada; ele consulta a lista pública
+de releases do GitHub e não envia nada sobre você ou seus documentos. A outra exceção é opcional:
+ao assinar, se você informar um servidor de carimbo de tempo, o app pede o carimbo a ele, que
+recebe só o resumo criptográfico do documento. Um teste (`tests/test_network.py`) garante que
+nenhum outro código usa a rede. Antes de instalar qualquer
+coisa, ele mostra o que a atualização traz e pergunta; no Windows, se você aceitar, ele baixa,
+confere o arquivo e instala sozinho. Tudo o que mudou fica em [CHANGELOG.md](CHANGELOG.md).
+
 <p align="center">
   <img src="assets/screenshots/01-visao-geral.png" alt="Janela principal do OpenFolio PDF Suite: sidebar, visualizador central com um PDF aberto e a aba Anotações" width="900">
 </p>
 
 A navegação é feita por uma barra lateral com ícone e descrição de cada ferramenta. No centro
-fica o visualizador — sempre visível, com miniaturas, zoom, rolagem contínua ou página única e
-busca de texto — e é nele que você desenha as anotações e marca as áreas de redação
-diretamente sobre a página. Se o PDF estiver protegido por senha, o próprio visualizador pede
-a senha na hora de abrir. À direita, cada seção tem seus próprios campos de entrada/saída e
-botão de ação — o campo de saída já vem com um nome sugerido a partir do arquivo de entrada.
+fica o visualizador — sempre visível, com miniaturas, marcadores e anexos ao lado, zoom
+(também com Ctrl + roda do mouse), ajuste à largura ou à página, rotação da visualização,
+rolagem contínua, página única, página dupla ou livro (capa sozinha), busca que destaca todas
+as ocorrências e seleção de texto com Ctrl+C; **Exibir > Apresentação** (F5) mostra o
+documento em tela cheia, uma página por vez (setas, espaço ou clique passam; Esc sai). É nele que você desenha as anotações, marca as áreas de redação e posiciona o que
+as ferramentas pedem (a área de um texto novo, de um link, de um campo de formulário, do corte
+ou do selo da assinatura), arrastando sobre a página. Formulários são preenchidos ali mesmo, no
+modo página única: os campos aparecem realçados, e um clique abre o campo de texto, marca a
+caixa ou a opção, ou mostra a lista de opções; cada campo preenchido pode ser desfeito com
+Ctrl+Z. Um aviso no topo indica quando o PDF está protegido, assinado, tem formulário ou
+camadas. Se o PDF estiver protegido por senha, o próprio
+visualizador pede a senha na hora de abrir.
+
+O documento aberto é um documento de trabalho: as ferramentas aplicam o resultado nele, cada
+operação pode ser desfeita (Ctrl+Z) e refeita (Ctrl+Y), e nada vai para o arquivo original
+até você usar **Arquivo > Salvar** (ou Salvar como). O título da janela mostra um "*" enquanto
+houver alterações não salvas, e o app pergunta antes de fechar ou trocar de documento. Para
+gravar o resultado de uma ferramenta direto em outro arquivo, use "Procurar..." no campo de
+saída dela. Páginas selecionadas nas miniaturas (Ctrl ou Shift + clique) podem ser usadas como
+entrada da aba Páginas.
+
+Dá para abrir um PDF arrastando-o para a janela, pelo menu **Arquivo > Abrir recente**, pelo
+"Abrir com" do sistema ou com um duplo clique, se o OpenFolio for o seu programa padrão para PDF:
+
+- **Windows**: o instalador registra o OpenFolio como leitor de PDF e, ao final, oferece abrir
+  a tela de aplicativos padrão já nele; um clique o torna o padrão (o Windows não deixa um
+  instalador fazer essa escolha sozinho).
+- **Linux** (`.deb`): escolha-o nas configurações de aplicativos padrão do sistema, ou rode
+  `xdg-mime default openfolio-pdf-suite.desktop application/pdf`.
+- **macOS**: em **Obter Informações** de um PDF, escolha o OpenFolio em "Abrir com" e clique
+  em **Alterar Tudo**.
+
+O app lembra o idioma, a última pasta usada e os arquivos recentes. **Arquivo > Imprimir**
+(Ctrl+P) imprime o documento de trabalho inteiro, um intervalo, a página atual ou as páginas
+selecionadas nas miniaturas, com anotações e campos preenchidos, ajustando cada página ao
+papel; PDFs cujo autor proibiu a impressão não são impressos. **Arquivo > Propriedades do
+documento** (Ctrl+D) mostra versão do PDF, tamanho, produtor, datas, proteção e permissões, as
+fontes usadas (se estão embutidas e em que páginas) e os tamanhos de página. Ali mesmo dá
+para editar título, autor e os outros campos da descrição e o pacote XMP inteiro (numa versão
+nova do documento, que Ctrl+Z desfaz) e verificar o PDF/A e a acessibilidade.
+
+As operações rodam em segundo plano: a janela continua respondendo, a barra de status mostra
+o andamento e o botão "Cancelar" interrompe a operação sem deixar arquivo pela metade. Os
+divisores entre a barra lateral, o visualizador e o painel podem ser arrastados, e o app
+lembra o tamanho da janela. Erros inesperados ficam registrados em `openfolio.log`, na pasta
+de dados do app (no Windows, `%LOCALAPPDATA%\OpenFolio\OpenFolio PDF Suite\logs`), para
+anexar a uma issue.
 
 ## Por trás do projeto
 
@@ -77,31 +130,35 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | Seção | O que faz |
 | --- | --- |
 | 🆕 Criar PDF | Cria um novo PDF em branco, com uma ou mais páginas, no tamanho que você escolher |
-| 📄 Mesclar | Combina vários PDFs em um único arquivo, na ordem que você definir |
-| ✂️ Dividir | Separa um PDF em vários arquivos menores (uma ou N páginas por arquivo, ou um arquivo por marcador de nível superior do sumário) |
-| 🔃 Páginas | Rotaciona, reordena, remove, insere ou substitui páginas de um PDF (inserção/substituição usando páginas de outro PDF) |
-| 🗜️ Comprimir | Reduz o tamanho de um PDF recomprimindo conteúdo e removendo objetos duplicados |
-| 🖼️ Converter | Converte entre PDF e imagens, Word/Excel/PowerPoint e PDF, e XML e PDF |
-| 💧 Marca d'água | Adiciona um texto de marca d'água (opacidade, tamanho e rotação configuráveis) |
+| 📄 Mesclar | Combina vários PDFs em um único arquivo, na ordem que você definir, com as páginas escolhidas de cada um, um marcador por arquivo ou intercalando frentes e versos escaneados à parte |
+| ✂️ Dividir | Separa um PDF em vários arquivos menores: N páginas por arquivo, um arquivo por marcador de nível superior do sumário, por intervalos (ou as páginas selecionadas nas miniaturas), por tamanho máximo de arquivo ou a cada página em branco de um lote escaneado |
+| 🔃 Páginas | Rotaciona, reordena, remove, insere ou substitui páginas de um PDF (inserção/substituição usando páginas de outro PDF). As páginas são contadas a partir de 1, como no visualizador, e aceitam intervalos como `1-3, 5, 8-` |
+| 🔲 Organizar páginas | Grade de miniaturas do documento: arraste para reordenar, gire, duplique, exclua, insira páginas em branco ou extraia as selecionadas para outro arquivo. Antes de aplicar, Ctrl+Z desfaz cada mudança na grade; ao clicar em Aplicar, tudo entra no documento num passo só, que Ctrl+Z também desfaz |
+| 🗜️ Comprimir | Reduz o tamanho de um PDF em três níveis: leve (sem perda), médio e forte (imagens reamostradas para 150 ou 100 DPI, pelo tamanho com que aparecem na página, e regravadas em JPEG; imagens sem cor passam a escala de cinza). Não grava nada se o arquivo não ficar menor |
+| 🖼️ Converter | Converte entre PDF e imagens (PNG ou JPEG, uma por página, ou um TIFF multipágina, de todas as páginas ou só das escolhidas; no sentido contrário, com tamanho de página A4, Carta, Ofício ou o da imagem, margem, orientação da câmera e fundo branco em imagens transparentes), Word/Excel/PowerPoint (.docx, .xlsx, .pptx) e PDF, e XML e PDF (linhas longas quebradas com recuo). Também leva o texto de um PDF para Word (parágrafos reunidos), Excel (uma planilha por página, com as colunas no lugar e números como números) ou texto com layout, e gera PDF a partir de HTML, Markdown ou texto puro, com texto pesquisável |
+| 💧 Marca d'água | Adiciona um texto (com cor e tamanho) ou uma imagem, como um logotipo, com opacidade e rotação, no centro, num canto ou em mosaico, por cima ou atrás do conteúdo, em todas as páginas ou só nas escolhidas, com pré-visualização da página atual |
 | 🔒 Proteger | Protege um PDF com senha (AES-256), define permissões granulares (impressão, edição, cópia, formulários) com senha de proprietário separada, ou remove a senha de um PDF protegido |
-| 🏷️ Metadados | Lê e edita título, autor, assunto e palavras-chave de um PDF |
-| 🔢 Numeração | Adiciona números de página no rodapé (com página inicial configurável), numeração Bates (prefixo + sequência global, para uso jurídico), ou um texto livre de cabeçalho/rodapé (com placeholders `{page}`/`{pages}`) |
-| 📜 PDF/A | Converte um PDF para uma aproximação de PDF/A (remove JavaScript/anexos/criptografia e declara conformidade nos metadados XMP) ou valida um PDF existente contra esse subconjunto de requisitos |
+| 🏷️ Metadados | Lê e edita título, autor, assunto, palavras-chave e os aplicativos de origem de um PDF (também no XMP), e mostra as datas de criação e modificação |
+| 🔢 Numeração | Adiciona números de página (em algarismos arábicos ou romanos, ou os rótulos de página do documento, no cabeçalho ou no rodapé, com fonte e tamanho, pulando a capa ou só nas páginas escolhidas, a partir do número que você quiser), numeração Bates (prefixo + sequência global, para uso jurídico), ou um texto livre de cabeçalho/rodapé (com placeholders `{page}`/`{pages}`) |
+| 📜 PDF/A | Converte para PDF/A-1, 2 ou 3: remove o que a norma proíbe, embute o perfil de cor sRGB e sincroniza os metadados, e só declara a conformidade se fontes, transparência e estrutura passarem na verificação (senão, mostra o que falta e não grava nada). A validação cobre esses requisitos (não a norma inteira: para arquivamento legal, confirme com um validador completo, como o veraPDF) |
 | 📝 Extrair texto | Extrai todo o texto de um PDF para um arquivo `.txt` |
 | 📷 Extrair imagens | Extrai as imagens embutidas nas páginas de um PDF, em seus formatos originais |
 | 📐 Cortar/Redimensionar | Corta margens ou redimensiona as páginas de um PDF para um novo tamanho |
-| ✏️ Editar | Substitui uma imagem já embutida por outra (mantendo posição e tamanho), "edita" texto cobrindo a área e reescrevendo por cima (achatando a página, como na redação), e adiciona, lista ou remove links (URL externa ou página do documento) |
-| 🔖 Marcadores | Monta um sumário de navegação (outline) com título e página de destino |
-| 🗂️ Camadas | Lista as camadas (Optional Content Groups) de um PDF e alterna a visibilidade padrão de cada uma |
-| 📎 Anexos | Lista, adiciona, remove ou extrai os anexos embutidos de um PDF |
-| 🧾 Campos de formulário | Adiciona campos de formulário **interativos** (texto, data, caixa de seleção, lista suspensa, lista de seleção ou grupo de opções) — o PDF resultante é preenchível em qualquer leitor. Também lista campos já existentes, exporta/importa dados preenchidos (CSV ou FDF) e achata o formulário (Fill & Sign simplificado) |
-| 🖍️ Anotações | Realce, sublinhe, risque, adicione notas, desenhe à mão livre ou carimbe direto sobre a página, no próprio visualizador — com uma biblioteca de carimbos customizados (nome, texto e cor) salva localmente. Também exporta os comentários já existentes no PDF para CSV |
+| ✏️ Editar | Substitui uma imagem já embutida por outra (mantendo posição e tamanho, sem distorcer), "edita" texto cobrindo uma área marcada no visualizador e reescrevendo por cima com fonte, tamanho e cores à escolha, com quebra de linha (achatando a página, como na redação), e adiciona, lista ou remove links (URL externa ou página do documento) |
+| 🔖 Marcadores | Edita o sumário de navegação (outline): começa pelos marcadores do documento, que podem ser renomeados, reordenados e aninhados (arrastando ou pelos botões); também sugere um sumário a partir dos títulos (as linhas em fonte maior que a do texto). Um marcador apagado sai do arquivo de verdade |
+| 🗂️ Camadas | Lista as camadas (Optional Content Groups) de um PDF, inclusive as desligadas por padrão, e alterna a visibilidade padrão de cada uma |
+| 📎 Anexos | Lista, adiciona, remove ou extrai os anexos embutidos de um PDF (a extração nunca grava fora da pasta escolhida, mesmo que o nome do anexo tente) |
+| 🧾 Campos de formulário | Adiciona campos de formulário **interativos** (texto, data, caixa de seleção, lista suspensa, lista de seleção ou grupo de opções) — o PDF resultante é preenchível em qualquer leitor. O campo de data pode aceitar só datas (opcional, usa JavaScript). Os campos já existentes podem ser renomeados, ganhar dica, virar somente leitura ou obrigatórios, ser removidos e ter a ordem de tabulação mudada (arrastando, por linhas ou por colunas). Também exporta/importa dados preenchidos (CSV, Excel ou FDF) e achata o formulário (Fill & Sign simplificado) |
+| 🖍️ Anotações | Realce, sublinhe, risque, adicione notas, desenhe à mão livre, retângulos, círculos e setas (com a espessura que quiser) ou carimbe direto sobre a página, no próprio visualizador — com uma biblioteca de carimbos customizados (nome, texto e cor) salva localmente. Cada anotação leva autor (o nome escolhido, guardado para as próximas) e data. Lista os comentários já existentes no PDF (escolher um mostra onde ele está), edita texto e autor, troca a cor, move e redimensiona arrastando no visualizador e remove com popups e respostas; exporta para CSV, Excel ou XFDF e importa XFDF de outros leitores, sem duplicar ao reimportar |
 | 📏 Medição | Mede a distância entre dois pontos de um PDF, arrastando no visualizador central (mm, cm, polegadas ou pontos PDF) |
-| 🔍 OCR | Reconhece o texto de páginas escaneadas (via Tesseract) e gera um PDF pesquisável, com o texto invisível posicionado exatamente sobre a imagem original |
-| ⬛ Redigir/Sanitizar | Apaga áreas de um PDF de forma irreversível (rasterizando a página inteira), com detecção automática de padrões sensíveis (CPF, CNPJ, e-mail, telefone, cartão de crédito ou regex personalizada), e remove metadados, JavaScript e anexos embutidos |
-| ✒️ Assinatura digital | Assina um PDF com selo visível e assinatura criptográfica de verdade (CMS/PKCS#7), usando um certificado .pfx real ou um certificado de teste gerado na hora |
-| ♿ Acessibilidade | Verifica um subconjunto de PDF/UA (idioma, título, árvore de estrutura, texto alternativo em figuras) e corrige idioma/título — não tagueia automaticamente, pelo risco de gerar uma estrutura malformada |
-| 🆚 Comparar | Compara duas versões de um PDF: diff de texto por página, ou diff visual (imagem por página destacando em vermelho o que mudou) |
+| 🔍 OCR | Reconhece o texto de páginas escaneadas (via Tesseract, que já vem no instalador, com português, inglês e detecção de orientação) e gera um PDF pesquisável, com o texto invisível ajustado à largura de cada palavra reconhecida (inclusive em páginas giradas). Aceita vários idiomas ao mesmo tempo, DPI configurável, corrige páginas digitalizadas de lado e também reconhece escaneados que têm um carimbo de texto. Pode refazer um OCR anterior (tira o texto invisível dele antes, sem duplicar) e endireitar as páginas tortas ou de lado no próprio documento |
+| 🧹 Limpar escaneados | Remove páginas em branco, endireita páginas tortas (até 5°, girando o conteúdo sem perder qualidade) e corta as margens brancas do documento aberto, numa versão nova que Ctrl+Z desfaz; ao final, diz quais páginas mudaram |
+| ⬛ Redigir/Sanitizar | Apaga áreas de um PDF de forma irreversível: a página marcada vira imagem, com as áreas pintadas de preto nos próprios pixels, e o resultado é conferido antes de ser salvo (funciona também em páginas giradas ou com área de corte). Procura um ou mais textos (sem diferenciar maiúsculas nem acentos, também quando o trecho quebra de linha) e detecta padrões sensíveis (CPF, CNPJ, e-mail, telefone, cartão de crédito ou regex personalizada), marcando todas as ocorrências para revisão antes de aplicar. A sanitização remove metadados, JavaScript (inclusive em ações de páginas, campos e links), ações que abrem arquivos ou programas ou enviam dados, e arquivos embutidos — e mostra o que foi removido |
+| 🖋️ Preencher e assinar | Coloca texto, data, assinatura e iniciais na página, sem certificado: escolha o item e arraste no visualizador para marcar onde ele vai. A assinatura e as iniciais podem ser desenhadas com o mouse ou a caneta, ou vir de uma imagem PNG/JPEG, e ficam guardadas para as próximas vezes. Tudo entra no conteúdo da página num passo só, que Ctrl+Z desfaz |
+| ✒️ Assinatura digital | Assina um PDF com selo visível e assinatura criptográfica de verdade (CMS/PKCS#7), usando um certificado .pfx real (com os dados dele à vista antes de assinar) ou um certificado de teste gerado na hora. O selo leva o nome do certificado e, se quiser, a imagem da sua assinatura, o motivo e o local; a assinatura pode ir em PAdES e com carimbo de tempo de um servidor TSA. A verificação mostra se o conteúdo assinado está íntegro, se algo foi alterado depois da assinatura e se o certificado é confiável |
+| ♿ Acessibilidade | Verifica um subconjunto de PDF/UA (idioma, título, árvore de estrutura, texto alternativo em figuras, ordem de tabulação, descrição dos campos) e corrige idioma, título e ordem de tabulação — não tagueia automaticamente, pelo risco de gerar uma estrutura malformada |
+| 🆚 Comparar | Compara duas versões de um PDF: lado a lado, com as diferenças de texto destacadas nas duas, lista de diferenças e rolagem sincronizada (o texto do documento inteiro é comparado, então o que só passou para outra página não conta); diff de texto por página; ou diff visual (imagem por página destacando em vermelho o que mudou) |
+| 🗂️ Processar em lote | Aplica a mesma operação (comprimir, OCR, marca d'água, numerar páginas, proteger com senha ou converter para PDF/A-2b) a todos os PDFs de uma pasta. Os resultados vão para outra pasta, com o sufixo da operação no nome e sem sobrescrever nada; um arquivo que falha não interrompe os outros, e ao final a tabela e um relatório em CSV mostram o resultado de cada arquivo |
 
 ## Demonstração
 
@@ -115,7 +172,7 @@ Três relatórios mensais são adicionados à lista, na ordem em que devem apare
 um arquivo de saída é escolhido:
 
 <p align="center">
-  <img src="assets/screenshots/02-mesclar-arquivos.png" alt="Aba Mesclar com três PDFs carregados e arquivo de saída definido" width="720">
+  <img src="assets/screenshots/02-mesclar-arquivos.png" alt="Aba Mesclar com três relatórios mensais na lista, um marcador por arquivo e o arquivo de saída definido" width="900">
 </p>
 
 Ao clicar em **Mesclar**, os três arquivos são combinados em um único PDF de verdade:
@@ -126,25 +183,30 @@ Ao clicar em **Mesclar**, os três arquivos são combinados em um único PDF de 
 
 ### Comprimindo um PDF
 
-Um contrato de 25 páginas é escolhido como entrada:
+Um contrato de 25 páginas, com uma foto na primeira, está aberto no visualizador:
 
 <p align="center">
-  <img src="assets/screenshots/04-comprimir-config.png" alt="Aba Comprimir com arquivo de entrada e saída definidos" width="720">
+  <img src="assets/screenshots/04-comprimir-config.png" alt="Aba Comprimir com o contrato de 25 páginas aberto e o nível médio escolhido" width="900">
 </p>
 
-O resultado mostra o tamanho real antes e depois da compressão:
+O resultado mostra o tamanho real antes e depois da compressão (a foto é recomprimida a
+150 DPI) e fica no documento aberto, com Ctrl+Z para desfazer:
 
 <p align="center">
-  <img src="assets/screenshots/05-comprimir-sucesso.png" alt="Mensagem de sucesso mostrando reducao de 22.5 KB para 18.8 KB">
+  <img src="assets/screenshots/05-comprimir-sucesso.png" alt="Mensagem de sucesso mostrando a redução de 2646 KB para 64 KB, com uma imagem recomprimida">
 </p>
 
 ### Marca d'água
 
-Texto, opacidade, tamanho de fonte e rotação são configuráveis antes de aplicar sobre todas as
-páginas do PDF:
+A marca é um texto (com tamanho de fonte e cor) ou uma imagem, como um logotipo com fundo
+transparente (com a largura em porcentagem da página). Opacidade, rotação e posição (centro,
+um dos cantos ou mosaico, repetida pela página) valem para os dois. "Atrás do conteúdo" a põe
+por baixo do texto da página, como um papel timbrado; ela some em páginas escaneadas, que são
+uma imagem cobrindo a página toda. O campo Páginas limita a marca às páginas escolhidas, e
+Pré-visualizar mostra a página atual com a marca, sem gravar nada:
 
 <p align="center">
-  <img src="assets/screenshots/06-marca-dagua.png" alt="Aba Marca d'água configurada com o texto CONFIDENCIAL" width="720">
+  <img src="assets/screenshots/06-marca-dagua.png" alt="Aba Marca d'água com o texto CONFIDENCIAL em vermelho e a pré-visualização da página" width="900">
 </p>
 
 ### Campos de formulário
@@ -154,7 +216,7 @@ verdade: o PDF resultante pode ser aberto em qualquer leitor (Adobe Reader, nave
 campo pode ser clicado e preenchido normalmente.
 
 <p align="center">
-  <img src="assets/screenshots/07-campos-formulario.png" alt="Aba Campos de formulário configurada para adicionar um campo de texto" width="720">
+  <img src="assets/screenshots/07-campos-formulario.png" alt="Aba Campos de formulário com um campo de texto marcado ao lado de Nome completo" width="900">
 </p>
 
 ### Anotações sobre o visualizador
@@ -169,18 +231,18 @@ separado:
 
 ### OCR (texto pesquisável)
 
-Um contrato gerado a partir de texto puro (sem camada pesquisável) é reconhecido pelo
-Tesseract, que já foi detectado automaticamente com o idioma instalado:
+Um contrato escaneado (só a imagem das páginas, sem texto pesquisável) vai ser reconhecido pelo
+Tesseract, que vem junto com o app, com os idiomas inglês e português:
 
 <p align="center">
-  <img src="assets/screenshots/09-ocr.png" alt="Aba OCR com o Tesseract detectado e idioma disponível" width="900">
+  <img src="assets/screenshots/09-ocr.png" alt="Aba OCR com um contrato escaneado aberto e os idiomas inglês e português marcados" width="900">
 </p>
 
 ### Redigir e sanitizar
 
-Uma linha inteira contendo o CPF do contratante é marcada no visualizador; ao aplicar a
-redação, a página inteira é rasterizada — não sobra texto nem vetor recuperável por baixo do
-retângulo preto:
+A linha com o CPF do responsável é marcada no visualizador; ao aplicar a
+redação, a página vira uma imagem com a área pintada de preto nos próprios pixels — não sobra
+texto, vetor nem pixel original recuperável, e o resultado é conferido antes de ser salvo:
 
 <p align="center">
   <img src="assets/screenshots/10-redigir-sanitizar.png" alt="Aba Redigir/Sanitizar com uma área do contrato marcada para redação" width="900">
@@ -189,8 +251,13 @@ retângulo preto:
 ### Assinatura digital
 
 Um termo de aceite foi assinado com um certificado de teste gerado na hora: o selo visível
-aparece no canto inferior direito da página, e a verificação confirma a identidade do
-signatário, a data da assinatura e que o documento continua íntegro:
+aparece no canto inferior direito da página. A verificação mostra quem assinou segundo o
+certificado, a data, se o conteúdo assinado continua íntegro, se algo foi alterado depois da
+assinatura e se o certificado é confiável (o de teste, por ser autoassinado, aparece como
+"válida, com ressalvas"). Motivo, local, contato, o formato PAdES e o carimbo de tempo, quando
+houver, também aparecem. Para assinar, o app mostra antes de quem é o certificado .pfx, quem o
+emitiu e até quando vale, e recusa um certificado vencido. O carimbo de tempo é opcional: o
+servidor TSA informado recebe só o resumo criptográfico do documento:
 
 <p align="center">
   <img src="assets/screenshots/11-assinatura-digital.png" alt="Aba Assinatura digital mostrando o selo visível no documento e o resultado da verificação" width="900">
@@ -205,32 +272,35 @@ repositório:
 
 | Sistema | Arquivo |
 | --- | --- |
-| Windows | `OpenFolioPDFSuite-Setup-<versão>.exe` — instalador com atalho no menu Iniciar e desinstalador |
-| Linux | `OpenFolioPDFSuite-<versão>-x86_64.AppImage` (roda em qualquer distro, sem instalar nada) ou `openfolio-pdf-suite_<versão>_amd64.deb` (Debian/Ubuntu) |
-| macOS | `OpenFolioPDFSuite-<versão>.dmg` |
+| Windows | `OpenFolioPDFSuite-Setup.exe` — instalador com atalho no menu Iniciar e desinstalador |
+| Linux | `OpenFolioPDFSuite-x86_64.AppImage` (roda em qualquer distro, sem instalar nada; na primeira vez, oferece aparecer no menu de aplicativos e na escolha do programa para PDF, o que se muda depois em Ajuda > Mostrar no menu de aplicativos) ou `openfolio-pdf-suite_amd64.deb` (Debian/Ubuntu) |
+| macOS | `OpenFolioPDFSuite.dmg` |
 
 Nenhum dos três é assinado digitalmente (isso exige certificados pagos que este projeto
 não tem). O Windows pode avisar via SmartScreen e o macOS via Gatekeeper no primeiro
-uso — isso é esperado numa release beta open source, veja como prosseguir em
+uso — isso é esperado num projeto open source sem certificado, veja como prosseguir em
 [RELEASING.md](RELEASING.md#sobre-a-assinatura-de-código).
 
 ## Requisitos
 
 - Python 3.10 ou superior
 - Windows, Linux ou macOS (interface gráfica via PySide6/Qt)
-- [LibreOffice](https://www.libreoffice.org/) (opcional) — se instalado, a conversão de
-  Word/Excel/PowerPoint para PDF preserva a formatação original. Sem ele, a conversão ainda
-  funciona, mas com uma formatação básica (só texto e estrutura, via Python puro).
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (opcional, necessário só para a
-  ferramenta de OCR) — a aplicação detecta a instalação automaticamente e lista os idiomas de
-  reconhecimento disponíveis.
+O app não depende de nenhum outro programa instalado. Os instaladores trazem tudo, inclusive o
+[Tesseract OCR](https://github.com/tesseract-ocr/tesseract) com os idiomas português e inglês e a
+detecção de orientação. A conversão de Word/Excel/PowerPoint é feita pelo próprio app (texto,
+títulos, listas e tabelas de .docx, .xlsx e .pptx; o app avisa o que ficou de fora).
+
+Rodando a partir do código-fonte, a única coisa a instalar à parte é o Tesseract, e só para a
+ferramenta de OCR: no Windows, pelo [instalador](https://github.com/UB-Mannheim/tesseract/wiki)
+(marque o idioma Portuguese e "Orientation and script detection"); no Linux, `sudo apt install
+tesseract-ocr tesseract-ocr-por`; no macOS, `brew install tesseract tesseract-lang`.
 
 ## Como instalar a partir do código-fonte
 
 ```bash
 git clone https://github.com/dcCarreto/openfolio-pdf-suite.git
 cd openfolio-pdf-suite
-pip install -e .
+pip install -c requirements-lock.txt -e .
 ```
 
 Isso instala o pacote em modo editável junto com todas as dependências (`pypdf`, `PySide6`,
@@ -244,7 +314,42 @@ python main.py
 ```
 
 A janela principal abre em modo escuro, com a aba **Criar PDF** selecionada por padrão. Basta
-escolher a ferramenta desejada na barra lateral.
+escolher a ferramenta desejada na barra lateral. **Exibir > Tema** troca para o tema claro ou
+segue o do sistema (inclusive quando ele muda com o app aberto); a escolha é lembrada.
+
+**Ctrl+K** (Exibir > Paleta de comandos) abre uma busca por todas as ferramentas e comandos dos
+menus: digite parte do nome ou do que a ferramenta faz ("senha", "lote"), sem se preocupar com
+acentos, e Enter abre. Em **Editar > Atalhos de teclado** cada comando e cada ferramenta pode
+ganhar outro atalho (ou nenhum); atalhos repetidos são recusados e "Restaurar padrões" volta os
+de fábrica.
+
+### Linha de comando
+
+O comando `openfolio` faz as mesmas operações sem abrir a janela (útil em scripts e automação).
+Ele vem com a instalação pelo código-fonte e com os instaladores:
+
+- **Windows**: `openfolio.exe`, na pasta do app; a tarefa "Adicionar o comando openfolio ao
+  PATH" do instalador (desmarcada por padrão) o deixa disponível em qualquer terminal.
+- **Linux**: o `.deb` instala `/usr/bin/openfolio`; no AppImage, é o `--cli` no início
+  (`./OpenFolioPDFSuite-x86_64.AppImage --cli merge a.pdf b.pdf -o c.pdf`).
+- **macOS**: fica dentro do app; para usá-lo como `openfolio`, crie o link
+  `ln -s /Applications/OpenFolioPDFSuite.app/Contents/MacOS/openfolio /usr/local/bin/openfolio`.
+
+```bash
+openfolio merge capa.pdf contrato.pdf anexos.pdf -o completo.pdf
+openfolio merge frentes.pdf versos.pdf -o lote.pdf --intercalar --versos-invertidos
+openfolio split lote.pdf -o partes --intervalos "1-3; 4-10; 11-"
+openfolio extract completo.pdf -o resumo.pdf --paginas "1, 4-6"
+openfolio compress completo.pdf -o menor.pdf --nivel strong
+openfolio protect menor.pdf -o protegido.pdf        # pergunta a senha
+openfolio info protegido.pdf --senha minhasenha --json
+```
+
+Comandos: `merge`, `split`, `rotate`, `remove`, `extract`, `compress`, `protect`, `unlock`,
+`watermark`, `number`, `ocr`, `pdfa`, `text`, `images` e `info` (`openfolio COMANDO -h`
+mostra as opções). Como na janela, páginas contam a partir de 1, nada é sobrescrito sem
+`--force` e um erro ou Ctrl+C nunca deixa um arquivo pela metade. O código de saída é 0 quando
+deu certo, 1 em erro, 2 em uso errado e 130 quando interrompido.
 
 ## Tecnologias utilizadas
 
@@ -261,29 +366,59 @@ escolher a ferramenta desejada na barra lateral.
 | [python-pptx](https://python-pptx.readthedocs.io/) | Leitura de apresentações PowerPoint (.pptx) no fallback de conversão para PDF |
 | [pytesseract](https://github.com/madmaze/pytesseract) | Integração Python com o Tesseract OCR |
 | [pyhanko](https://github.com/MatthiasValvekens/pyHanko) | Assinatura digital de PDF (CMS/PKCS#7) e verificação de integridade |
-| [LibreOffice](https://www.libreoffice.org/) (opcional, externo) | Conversão de Word/Excel/PowerPoint para PDF com formatação fiel ao original |
-| [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (opcional, externo) | Motor de reconhecimento de texto usado pela ferramenta de OCR |
+| [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (vai no instalador, Apache 2.0) | Motor de reconhecimento de texto usado pela ferramenta de OCR, com os idiomas do projeto [tessdata](https://github.com/tesseract-ocr/tessdata_fast) |
+| [Fontes DejaVu](https://dejavu-fonts.github.io/) (incluídas) | Fonte embutida em todo texto que o app desenha nos PDFs (marca d'água, numeração, carimbos, edição de texto, OCR, XML, Office), com acentos, grego, cirílico e símbolos |
+| [Compact ICC Profiles](https://github.com/saucecontrol/Compact-ICC-Profiles) (incluído, CC0) | Perfil de cor sRGB embutido nos arquivos PDF/A |
 
 ## Estrutura do projeto
 
 ```text
 core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
-  base.py          Classe base PDFOperation e validações compartilhadas (PDF protegido por
-                   senha, índice de página fora do intervalo)
+  base.py          Abertura de PDFs protegidos ou com restrições, gravação atômica,
+                   validações compartilhadas e o acesso à API privada do pypdf
+  document.py      Montagem de documentos a partir de páginas sem perder metadados, anexos,
+                   camadas e rótulos de página
   merge.py, split.py, pages.py, compress.py, convert.py, ...
+  geometry.py      Conversão entre o espaço do PDF e o que aparece na tela (/Rotate, CropBox)
+  overlay.py       Desenho sobre a página na orientação da tela (marca d'água, numeração, OCR)
+  progress.py      Andamento e cancelamento das operações longas; trava de acesso ao pdfium
+  messages.py      Mensagens para o usuário que a interface traduz (modelo + valores)
+  fonts.py         Fontes TrueType embutidas no texto desenhado (data/fonts, DejaVu)
+  tabular.py       Exportação para CSV ou Excel protegida contra fórmulas
+  pdfa.py          Conversão e verificação de PDF/A (perfil de cor em data/icc)
+  rasterize.py     Achatamento de página em imagem, com áreas pintadas nos próprios pixels
   annotations.py   Anotações reais (Highlight/Underline/StrikeOut/Ink/Stamp) via pypdf
+  xfdf.py          Exportação e importação de comentários em XFDF
+  properties.py    Propriedades do documento: proteção, fontes, tamanhos de página
+  cli.py           Linha de comando (openfolio merge/split/compress/...), sem Qt
+  version.py       Identificador interno da atualização (a data, do pyproject.toml)
+  updates.py       Escolha da atualização mais nova na lista do GitHub e conferência do instalador
   ocr.py           Reconhecimento de texto (Tesseract) com camada de texto invisível
-  redaction.py     Redação real (rasterização) e sanitização de PDFs
-  signature.py     Assinatura digital (pyhanko) e verificação de integridade
+  redaction.py     Redação real (rasterização + verificação) e sanitização de PDFs
+  signature.py     Assinatura digital (pyhanko) e verificação completa das assinaturas
 
 ui/              Interface gráfica (PySide6)
-  main_window.py       Janela principal: monta a sidebar e as 26 seções
-  theme.py             Tema escuro único, inspirado no macOS
+  main_window.py       Janela principal: sidebar, visualizador e as 26 seções (cada aba é
+                       construída na primeira vez em que é aberta)
+  theme.py             Temas escuro e claro (ou o do sistema), inspirados no macOS
   icon.py              Ícone da aplicação (renderizado a partir de assets/logo.svg)
-  document_session.py  Sessão compartilhada do PDF aberto no visualizador
+  document_session.py  Documento de trabalho: arquivo do usuário, versões, desfazer/refazer
+  area_pick_state.py   Marcação de áreas no visualizador para as ferramentas
+  preferences.py       Arquivos recentes, última pasta, idioma, tema, atualização e atalhos
+  shortcuts.py         Paleta de comandos (Ctrl+K) e tela de atalhos de teclado
+  app_events.py        Arquivos vindos da linha de comando, do "Abrir com" e de arrastar
+  errors.py            Mensagens de erro para o usuário, com detalhes técnicos à parte
+  printing.py          Impressão do documento (render do pdfium enviado à impressora)
   annotation_state.py  Estado compartilhado da ferramenta de anotações
   redaction_state.py   Estado compartilhado da ferramenta de redação
-  viewer/              Visualizador central: renderização, miniaturas, busca, zoom
+  page_ranges.py       Leitura de listas de páginas digitadas ("1-3, 5, 8-")
+  tasks.py             Execução das operações numa thread de trabalho, uma por vez
+  diagnostics.py       Log em arquivo e tratamento global de exceções
+  about_dialog.py      Ajuda > Sobre: arquivo de log, o que mudou e licenças de terceiros
+  update_dialog.py     Aviso de atualização: o que mudou e o consentimento do usuário
+  widget_state.py      Preserva o que foi preenchido nas abas ao trocar de idioma
+  viewer/              Visualizador central: renderização, painel lateral (miniaturas,
+                       marcadores, anexos), busca, zoom, seleção de texto
   pages/               Uma classe de página por ferramenta (MergePage, CompressPage, ...)
   widgets/             Widgets reutilizáveis (FilePicker, FileListEditor, PageContainer)
 
@@ -310,13 +445,16 @@ MergePDF().run(
 ## Testes
 
 ```bash
-pip install -e ".[test]"
+pip install -c requirements-lock.txt -e ".[test]"
 pytest
 ```
 
 Todos os módulos de `core/` têm testes cobrindo o comportamento esperado, e há um teste de
-fumaça que garante que a janela principal monta todas as seções sem erros. A suíte também
-roda automaticamente a cada push em `main` e a cada pull request, em Windows, Linux e macOS
+fumaça que garante que a janela principal monta todas as seções sem erros. Um teste de
+preservação passa cada operação por um PDF com sumário, metadados, anexo, formulário, rótulos
+de página e camadas, e confere que nada disso se perde no caminho. Um teste de traduções
+confere que todo texto da interface e toda mensagem do `core` têm versão em inglês. A suíte também
+roda automaticamente a cada push em `main` e em `desenvolvimento` e a cada pull request, em Windows, Linux e macOS
 (veja [.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
 ## Contribuição
@@ -325,4 +463,11 @@ Contribuições são bem-vindas. Veja [CONTRIBUTING.md](CONTRIBUTING.md) para ma
 
 ## Licença
 
-Distribuído sob a licença [MIT](LICENSE).
+Distribuído sob a licença [MIT](LICENSE). As fontes DejaVu incluídas em `core/data/fonts`
+têm licença própria, livre ([LICENSE-DejaVu.txt](core/data/fonts/LICENSE-DejaVu.txt)), e o
+perfil de cor em `core/data/icc` é de domínio público (CC0). Os instaladores levam o Python, o Qt,
+o Tesseract e as bibliotecas dele, cada um com a sua licença: os textos ficam em Ajuda > Sobre >
+Licenças das bibliotecas, e o código-fonte das que são GPL ou LGPL vai junto em cada
+[release](https://github.com/dcCarreto/openfolio-pdf-suite/releases)
+(`OpenFolioPDFSuite-codigo-fonte-<plataforma>.tar`); o do Qt, grande demais para anexar, fica
+indicado no texto da licença dele.

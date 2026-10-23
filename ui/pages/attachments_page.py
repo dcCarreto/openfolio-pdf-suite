@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from core.attachments import AddAttachment, ExtractAttachments, ListAttachments, RemoveAttachment
 from ui.i18n import tr
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -132,19 +133,22 @@ class AttachmentsPage(QWidget):
             QMessageBox.warning(self, tr("Anexos"), tr("Abra um PDF para começar."))
             return
 
-        try:
-            attachments = ListAttachments().run(input_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Anexos"), tr("Falha ao listar anexos: {error}").format(error=exc)
-            )
-            return
+        task = call(ListAttachments().run, input_path)
 
-        if not attachments:
-            self.attachments_list.addItem(tr("Nenhum anexo embutido encontrado."))
-            return
-        for attachment in attachments:
-            self.attachments_list.addItem(f"{attachment.name} — {_format_size(attachment.size)}")
+        def done(attachments):
+            if not attachments:
+                self.attachments_list.addItem(tr("Nenhum anexo embutido encontrado."))
+                return
+            for attachment in attachments:
+                self.attachments_list.addItem(f"{attachment.name} — {_format_size(attachment.size)}")
+
+        run_task(
+            self,
+            tr("Anexos"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao listar anexos: {error}"),
+        )
 
     def _add_attachment(self):
         input_path = self.session.path()
@@ -161,16 +165,21 @@ class AttachmentsPage(QWidget):
             QMessageBox.warning(self, tr("Anexos"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            AddAttachment().run(input_path, output_path, attachment_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Anexos"), tr("Falha ao adicionar anexo: {error}").format(error=exc)
-            )
-            return
+        task = call(AddAttachment().run, input_path, output_path, attachment_path)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Anexos"), tr("Anexo adicionado com sucesso."))
+        def done(name):
+            self.session.open(output_path)
+            QMessageBox.information(
+                self, tr("Anexos"), tr('Anexo "{name}" adicionado com sucesso.').format(name=name)
+            )
+
+        run_task(
+            self,
+            tr("Anexos"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao adicionar anexo: {error}"),
+        )
 
     def _remove_attachment(self):
         input_path = self.session.path()
@@ -187,16 +196,19 @@ class AttachmentsPage(QWidget):
             QMessageBox.warning(self, tr("Anexos"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            RemoveAttachment().run(input_path, output_path, name=name)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Anexos"), tr("Falha ao remover anexo: {error}").format(error=exc)
-            )
-            return
+        task = call(RemoveAttachment().run, input_path, output_path, name=name)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Anexos"), tr("Anexo removido com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Anexos"), tr("Anexo removido com sucesso."))
+
+        run_task(
+            self,
+            tr("Anexos"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao remover anexo: {error}"),
+        )
 
     def _extract_attachments(self):
         input_path = self.session.path()
@@ -209,16 +221,19 @@ class AttachmentsPage(QWidget):
             QMessageBox.warning(self, tr("Anexos"), tr("Escolha a pasta de saída."))
             return
 
-        try:
-            output_paths = ExtractAttachments().run(input_path, output_dir)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Anexos"), tr("Falha ao extrair anexos: {error}").format(error=exc)
-            )
-            return
+        task = call(ExtractAttachments().run, input_path, output_dir)
 
-        QMessageBox.information(
+        def done(output_paths):
+            QMessageBox.information(
+                self,
+                tr("Anexos"),
+                tr("{count} anexo(s) extraído(s) com sucesso.").format(count=len(output_paths)),
+            )
+
+        run_task(
             self,
             tr("Anexos"),
-            tr("{count} anexo(s) extraído(s) com sucesso.").format(count=len(output_paths)),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao extrair anexos: {error}"),
         )

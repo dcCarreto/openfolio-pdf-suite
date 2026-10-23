@@ -1,16 +1,37 @@
 name: Release
 
 # Builda o instalador de Windows, Linux (AppImage + .deb) e macOS (.dmg) e publica
-# tudo numa GitHub Release, disparado por uma tag de versao (ex.: v0.2.0-beta.1).
+# tudo numa GitHub Release, disparado por uma tag de atualizacao (ex.: v2026.10.21).
+#
+# O usuario nao ve numero de versao: ha uma so, que recebe atualizacoes, identificadas por
+# dentro pela data (a versao do pyproject.toml). Os arquivos nao levam o identificador no
+# nome; o texto da release vem do CHANGELOG.md (packaging/release_notes.py) e e o que o app
+# mostra ao usuario antes de ele aceitar a atualizacao.
 #
 # Cada plataforma builda na sua propria VM nativa (windows-latest/ubuntu-latest/
 # macos-latest) porque PyInstaller empacota para o mesmo SO em que roda - nao ha
 # cross-compilation aqui.
+#
+# O app nao depende de nenhum programa instalado: o Tesseract (OCR) vai dentro dele. Cada
+# build instala o Tesseract pelo gerenciador de pacotes da VM, baixa os idiomas
+# (packaging/fetch_tessdata.py) e o PyInstaller leva o binario com as bibliotecas dele. Um
+# teste de fumaca roda o Tesseract de dentro do build antes de empacotar. O app leva as
+# licencas dessas bibliotecas, e o codigo-fonte das GPL e LGPL vai junto na release
+# (OpenFolioPDFSuite-codigo-fonte-<plataforma>.tar, packaging/fetch_sources.sh).
+#
+# A release so e publicada se o CI inteiro (ci.yml: lint, testes nos tres SOs e testes com o
+# Tesseract) passar no commit da tag: o app instala as atualizacoes, entao um build quebrado
+# chegaria direto a quem aceitou. Os builds rodam em paralelo com os testes.
+
+#
+# Ensaio: Actions > Release > Run workflow roda tudo (CI, builds, licencas e codigo-fonte) e
+# deixa os arquivos como artefatos do run, sem publicar nada nem exigir tag.
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,8 +42,23 @@ jobs:
     outputs:
       version: ${{ steps.extract.outputs.version }}
     steps:
+      - uses: actions/checkout@v4
       - id: extract
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")" >> "$GITHUB_OUTPUT"
+      - name: Conferir a tag com o pyproject.toml e o CHANGELOG.md
+        # O app compara o identificador do pyproject (core/version.py) com a tag da release
+        # para saber se ha atualizacao; e nenhuma atualizacao sai sem dizer o que mudou.
+        if: github.event_name == 'push'
+        run: |
+          expected="${{ steps.extract.outputs.version }}"
+          if [ "$expected" != "${GITHUB_REF_NAME#v}" ]; then
+            echo "A tag $GITHUB_REF_NAME nao bate com a versao do pyproject.toml ($expected)."
+            exit 1
+          fi
+          python3 packaging/release_notes.py "$expected" > /dev/null
+
+  tests:
+    uses: ./.github/workflows/ci.yml
 
   build-windows:
     needs: version
@@ -34,19 +70,53 @@ jobs:
           python-version: "3.11"
       - name: Instalar dependencias
         run: |
-          pip install -e ".[build]"
+          pip install -c requirements-lock.txt -e ".[build]"
+      # Do MSYS2, e nao do instalador do Chocolatey: o pacman diz a licenca, os textos e o
+      # codigo-fonte de cada biblioteca que vai junto (packaging/pyinstaller/third_party.py).
+      - name: Tesseract (vai dentro do app)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          release: false  # o MSYS2 da VM, em C:\msys64, onde core/ocr.py procura o Tesseract
+          update: true
+          install: mingw-w64-ucrt-x86_64-tesseract-ocr
+      - name: Idiomas do Tesseract
+        run: python packaging/fetch_tessdata.py
       - name: Build PyInstaller
-        run: pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
+        shell: pwsh
+        run: |
+          # So o Windows no PATH: o PyInstaller acha as DLLs do Tesseract na pasta dele e nao
+          # leva nenhuma de outro programa da VM (JDK, Git...), sem pacote nem licenca conhecidos.
+          $python = (Get-Command python).Source
+          $env:PATH = "C:\Windows\System32;C:\Windows"
+          & $python -m PyInstaller packaging/pyinstaller/openfolio.spec --noconfirm
+          if ($LASTEXITCODE) { exit 1 }
+      - name: Testar o Tesseract embutido
+        shell: pwsh
+        run: |
+          $internal = "dist\OpenFolioPDFSuite\_internal"
+          $env:PATH = "C:\Windows\System32"  # sem o Tesseract instalado no caminho
+          $env:TESSDATA_PREFIX = "$internal\tessdata"
+          $langs = & "$internal\tesseract.exe" --list-langs
+          if ($LASTEXITCODE -or -not ($langs -match "^por$")) { $langs; exit 1 }
+      - name: Testar o comando openfolio
+        shell: bash
+        run: bash packaging/smoke_cli.sh dist/OpenFolioPDFSuite/openfolio.exe
       - name: Instalar Inno Setup
         run: choco install innosetup -y
       - name: Compilar instalador
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=${{ needs.version.outputs.version }} packaging\windows\installer.iss
+      - name: Codigo-fonte das bibliotecas GPL e LGPL
+        shell: bash
+        run: bash packaging/fetch_sources.sh windows
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: dist/installer/*.exe
+          path: |
+            dist/installer/*.exe
+            dist/installer/*.tar
 
   build-linux:
     needs: version
@@ -60,21 +130,34 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libopengl0 libxkbcommon0 libxcb-cursor0 libgl1
+          sudo apt-get install -y --no-install-recommends tesseract-ocr
       - name: Instalar dependencias Python
         run: |
-          pip install -e ".[build]"
+          pip install -c requirements-lock.txt -e ".[build]"
+          python packaging/fetch_tessdata.py
       - name: Build PyInstaller
         run: pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
+      - name: Testar o Tesseract embutido
+        run: |
+          internal=dist/OpenFolioPDFSuite/_internal
+          # Como o app empacotado roda: o bootloader do PyInstaller poe _internal no
+          # LD_LIBRARY_PATH, e o processo do Tesseract herda.
+          LD_LIBRARY_PATH="$internal" TESSDATA_PREFIX="$internal/tessdata" "$internal/tesseract" --list-langs | grep -x por
+      - name: Testar o comando openfolio
+        run: bash packaging/smoke_cli.sh dist/OpenFolioPDFSuite/openfolio
       - name: Build AppImage
-        run: bash packaging/linux/build_appimage.sh "${{ needs.version.outputs.version }}"
+        run: bash packaging/linux/build_appimage.sh
       - name: Build .deb
         run: bash packaging/linux/build_deb.sh "${{ needs.version.outputs.version }}"
+      - name: Codigo-fonte das bibliotecas GPL e LGPL
+        run: bash packaging/fetch_sources.sh linux
       - uses: actions/upload-artifact@v4
         with:
           name: linux-packages
           path: |
             dist/installer/*.AppImage
             dist/installer/*.deb
+            dist/installer/*.tar
 
   build-macos:
     needs: version
@@ -86,31 +169,48 @@ jobs:
           python-version: "3.11"
       - name: Instalar dependencias
         run: |
-          pip install -e ".[build]"
+          brew install tesseract
+          pip install -c requirements-lock.txt -e ".[build]"
+          python packaging/fetch_tessdata.py
       - name: Build PyInstaller
         run: pyinstaller packaging/pyinstaller/openfolio.spec --noconfirm
+      - name: Testar o Tesseract embutido
+        run: |
+          frameworks=dist/OpenFolioPDFSuite.app/Contents/Frameworks
+          otool -L "$frameworks/tesseract"
+          TESSDATA_PREFIX="$frameworks/tessdata" "$frameworks/tesseract" --list-langs | grep -x por
+      - name: Testar o comando openfolio
+        run: bash packaging/smoke_cli.sh dist/OpenFolioPDFSuite.app/Contents/MacOS/openfolio
       - name: Build dmg
-        run: bash packaging/macos/build_dmg.sh "${{ needs.version.outputs.version }}"
+        run: bash packaging/macos/build_dmg.sh
+      - name: Codigo-fonte das bibliotecas GPL e LGPL
+        run: bash packaging/fetch_sources.sh macos
       - uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
-          path: dist/installer/*.dmg
+          path: |
+            dist/installer/*.dmg
+            dist/installer/*.tar
 
   release:
-    needs: [version, build-windows, build-linux, build-macos]
+    needs: [version, tests, build-windows, build-linux, build-macos]
+    if: github.event_name == 'push'  # o ensaio (workflow_dispatch) nao publica
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+      - name: O que mudou (do CHANGELOG.md)
+        run: python3 packaging/release_notes.py "${{ needs.version.outputs.version }}" > notes.md
       - name: Publicar release
         uses: softprops/action-gh-release@v2
         with:
-          name: "OpenFolio PDF Suite ${{ needs.version.outputs.version }}"
-          prerelease: ${{ contains(needs.version.outputs.version, 'beta') }}
-          generate_release_notes: true
+          name: "OpenFolio PDF Suite: atualização ${{ needs.version.outputs.version }}"
+          body_path: notes.md
           files: |
             artifacts/windows-installer/*.exe
             artifacts/linux-packages/*.AppImage
             artifacts/linux-packages/*.deb
             artifacts/macos-dmg/*.dmg
+            artifacts/*/*.tar

@@ -1,21 +1,41 @@
 name: CI
 
-# Roda a suite de testes (pytest) a cada push em main e a cada pull request, para pegar
-# regressao antes do merge. Ate agora so existia CI para builds de release (release.yml),
-# disparado por tag de versao, sem nenhuma execucao de teste automatizada no caminho normal
-# de desenvolvimento.
+# Roda a suite de testes (pytest) a cada push em main e em desenvolvimento (onde o trabalho
+# e integrado, ver CONTRIBUTING.md) e a cada pull request, para pegar regressao antes do
+# merge. O job lint roda o ruff e o mypy (configurados no pyproject.toml). O release.yml
+# tambem o chama (workflow_call): nenhuma atualizacao e publicada com o CI reprovado.
+#
+# As dependencias vem do requirements-lock.txt (versoes exatas, as mesmas dos builds de
+# release): uma versao nova de biblioteca so entra quando o lock e atualizado, e o CI testa
+# do Python 3.10 (o minimo do pyproject.toml) ao 3.14.
 
 on:
   push:
-    branches: [main]
+    branches: [main, desenvolvimento]
   pull_request:
+  workflow_call:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependencias Python
+        run: pip install -c requirements-lock.txt -e ".[lint]"
+      - name: Ruff (bugs comuns)
+        run: ruff check .
+      - name: Mypy (tipos)
+        run: mypy
+
   test:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     runs-on: ${{ matrix.os }}
     env:
       QT_QPA_PLATFORM: offscreen
@@ -23,13 +43,45 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
       - name: Instalar dependencias do sistema (necessarias so pra importar o PySide6)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libopengl0 libxkbcommon0 libxcb-cursor0 libgl1
       - name: Instalar dependencias Python
-        run: pip install -e ".[test]"
+        run: pip install -c requirements-lock.txt -e ".[test]"
       - name: Rodar testes
         run: pytest
+
+  programs-and-coverage:
+    # Roda a suite com o Tesseract instalado de verdade (o app leva uma copia dele nos
+    # instaladores; rodando do codigo-fonte, usa o do sistema): nos outros jobs, e na maquina
+    # de quem nao o tem, esses testes sao pulados ou usam o programa simulado.
+    # OPENFOLIO_REQUIRE_PROGRAMS faz a falta dele reprovar o teste em vez de pula-lo.
+    # Tambem mede a cobertura.
+    # Python 3.14: o coverage usa o sys.monitoring, que tambem acompanha o codigo rodado nas
+    # threads do Qt (QThreadPool); no 3.11 o corpo das tarefas apareceria como sem teste.
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      OPENFOLIO_REQUIRE_PROGRAMS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Instalar dependencias do sistema (PySide6) e o Tesseract
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0 libxkbcommon0 libxcb-cursor0 libgl1
+          sudo apt-get install -y --no-install-recommends tesseract-ocr
+          tesseract --version
+          tesseract --list-langs
+      - name: Instalar dependencias Python
+        run: pip install -c requirements-lock.txt -e ".[test]"
+      - name: Rodar testes com cobertura
+        run: pytest --cov
+      - name: Resumo da cobertura
+        if: always()
+        run: coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"

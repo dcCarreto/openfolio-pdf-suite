@@ -12,7 +12,8 @@ from PySide6.QtWidgets import (
 )
 
 from core.accessibility import CheckAccessibility, FixBasicAccessibilityIssues
-from ui.i18n import tr
+from ui.i18n import tr, tr_message
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -108,23 +109,26 @@ class AccessibilityPage(QWidget):
             QMessageBox.warning(self, tr("Acessibilidade"), tr("Abra um PDF para começar."))
             return
 
-        try:
-            report = CheckAccessibility().run(input_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Acessibilidade"), tr("Falha ao verificar: {error}").format(error=exc)
-            )
-            return
+        task = call(CheckAccessibility().run, input_path)
 
-        if report.is_compliant:
-            QMessageBox.information(
-                self, tr("Acessibilidade"), tr("Nenhum problema encontrado nas verificações realizadas.")
-            )
-        else:
-            issues_text = "\n".join(f"• {issue}" for issue in report.issues)
-            QMessageBox.warning(
-                self, tr("Acessibilidade"), tr("Problemas encontrados:\n{issues}").format(issues=issues_text)
-            )
+        def done(report):
+            if report.is_compliant:
+                QMessageBox.information(
+                    self, tr("Acessibilidade"), tr("Nenhum problema encontrado nas verificações realizadas.")
+                )
+            else:
+                issues_text = "\n".join("• " + tr_message(issue) for issue in report.issues)
+                QMessageBox.warning(
+                    self, tr("Acessibilidade"), tr("Problemas encontrados:\n{issues}").format(issues=issues_text)
+                )
+
+        run_task(
+            self,
+            tr("Acessibilidade"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao verificar: {error}"),
+        )
 
     def _fix(self):
         input_path = self.session.path()
@@ -142,13 +146,16 @@ class AccessibilityPage(QWidget):
             QMessageBox.warning(self, tr("Acessibilidade"), tr("Informe o idioma e o título."))
             return
 
-        try:
-            FixBasicAccessibilityIssues().run(input_path, output_path, language=language, title=title)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Acessibilidade"), tr("Falha ao corrigir: {error}").format(error=exc)
-            )
-            return
+        task = call(FixBasicAccessibilityIssues().run, input_path, output_path, language=language, title=title)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Acessibilidade"), tr("Idioma e título corrigidos com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Acessibilidade"), tr("Idioma e título corrigidos com sucesso."))
+
+        run_task(
+            self,
+            tr("Acessibilidade"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao corrigir: {error}"),
+        )

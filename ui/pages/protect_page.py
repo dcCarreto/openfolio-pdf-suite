@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
 
 from core.protect import PDFPermissions, ProtectPDF, UnlockPDF
 from ui.i18n import tr
+from ui.tasks import call, run_task
+from ui.widget_state import clear_passwords
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -53,7 +55,7 @@ class ProtectPage(QWidget):
 
         suffix = "protegido" if kind == "Proteger" else "sem_senha"
         output_picker = FilePicker(
-            mode="save", suggested_source=self.session.path, suggested_suffix=suffix
+            mode="save", suggested_source=self.session.path, suggested_suffix=suffix, working_copy=False
         )
         password_edit = QLineEdit()
         password_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -66,6 +68,15 @@ class ProtectPage(QWidget):
         layout.addWidget(output_picker)
         layout.addWidget(QLabel(tr("Senha:")))
         layout.addWidget(password_edit)
+        if kind != "Proteger":
+            hint = QLabel(
+                tr(
+                    "Use a senha de abertura ou, num PDF com restrições (que abre sem senha), "
+                    "a senha de permissões."
+                )
+            )
+            hint.setWordWrap(True)
+            layout.addWidget(hint)
 
         if kind == "Proteger":
             confirm_password_edit = QLineEdit()
@@ -103,7 +114,7 @@ class ProtectPage(QWidget):
         instructions.setWordWrap(True)
 
         self.perm_output_picker = FilePicker(
-            mode="save", suggested_source=self.session.path, suggested_suffix="restrito"
+            mode="save", suggested_source=self.session.path, suggested_suffix="restrito", working_copy=False
         )
         self.perm_user_password_edit = QLineEdit()
         self.perm_user_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -177,16 +188,20 @@ class ProtectPage(QWidget):
             QMessageBox.warning(self, tr("Proteger"), tr("As senhas não coincidem."))
             return
 
-        try:
-            ProtectPDF().run(input_path, output_path, password=password)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Proteger"), tr("Falha ao proteger o PDF: {error}").format(error=exc)
-            )
-            return
+        task = call(ProtectPDF().run, input_path, output_path, password=password)
+        clear_passwords(self)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Proteger"), tr("PDF protegido com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Proteger"), tr("PDF protegido com sucesso."))
+
+        run_task(
+            self,
+            tr("Proteger"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao proteger o PDF: {error}"),
+        )
 
     def _apply_permissions(self):
         input_path = self.session.path()
@@ -218,25 +233,28 @@ class ProtectPage(QWidget):
             allow_fill_forms=self.perm_fill_forms_checkbox.isChecked(),
         )
 
-        try:
-            ProtectPDF().run(
-                input_path,
-                output_path,
-                password=self.perm_user_password_edit.text(),
-                owner_password=owner_password,
-                permissions=permissions,
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Permissões avançadas"),
-                tr("Falha ao aplicar permissões: {error}").format(error=exc),
-            )
-            return
+        task = call(
+            ProtectPDF().run,
+            input_path,
+            output_path,
+            password=self.perm_user_password_edit.text(),
+            owner_password=owner_password,
+            permissions=permissions,
+        )
+        clear_passwords(self)
 
-        self.session.open(output_path)
-        QMessageBox.information(
-            self, tr("Permissões avançadas"), tr("Permissões aplicadas com sucesso.")
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(
+                self, tr("Permissões avançadas"), tr("Permissões aplicadas com sucesso.")
+            )
+
+        run_task(
+            self,
+            tr("Permissões avançadas"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao aplicar permissões: {error}"),
         )
 
     def _unlock(self):
@@ -254,13 +272,17 @@ class ProtectPage(QWidget):
             QMessageBox.warning(self, tr("Remover senha"), tr("Digite a senha atual do PDF."))
             return
 
-        try:
-            UnlockPDF().run(input_path, output_path, password=password)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, tr("Remover senha"), tr("Falha ao remover a senha: {error}").format(error=exc)
-            )
-            return
+        task = call(UnlockPDF().run, input_path, output_path, password=password)
+        clear_passwords(self)
 
-        self.session.open(output_path)
-        QMessageBox.information(self, tr("Remover senha"), tr("Senha removida com sucesso."))
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(self, tr("Remover senha"), tr("Senha removida com sucesso."))
+
+        run_task(
+            self,
+            tr("Remover senha"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao remover a senha: {error}"),
+        )

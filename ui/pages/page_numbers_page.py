@@ -1,7 +1,10 @@
 """Aba de numeração de páginas de PDFs."""
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
+    QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -12,8 +15,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.base import READ, open_reader
+from core.fonts import MONO, SANS, SANS_BOLD
 from core.page_numbers import AddBatesNumbers, AddHeaderFooter, AddPageNumbers
 from ui.i18n import tr
+from ui.page_ranges import format_page_ranges, parse_page_ranges
+from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -32,6 +39,15 @@ _HF_POSITION_LABELS = [
     ("Rodapé ao centro", "footer-center"),
     ("Rodapé à direita", "footer-right"),
 ]
+
+
+_NUMBER_STYLES = [
+    ("Arábicos (1, 2, 3)", "arabic"),
+    ("Romanos minúsculos (i, ii, iii)", "roman"),
+    ("Romanos maiúsculos (I, II, III)", "ROMAN"),
+]
+
+_FONTS = [("Sem serifa", SANS), ("Sem serifa, negrito", SANS_BOLD), ("Monoespaçada", MONO)]
 
 
 class PageNumbersPage(QWidget):
@@ -75,15 +91,67 @@ class PageNumbersPage(QWidget):
         self.start_at_spin.setRange(0, 9999)
         self.start_at_spin.setValue(1)
 
+        self.number_style_combo = QComboBox()
+        for label, value in _NUMBER_STYLES:
+            self.number_style_combo.addItem(tr(label), value)
+        self.page_labels_check = QCheckBox(tr("Usar os rótulos de página do documento"))
+        self.page_labels_check.setToolTip(
+            tr("Escreve o número que o visualizador mostra para cada página (como iii ou A-1), em vez de contar.")
+        )
+        self.page_labels_check.toggled.connect(self._update_number_state)
+
+        self.number_position_combo = QComboBox()
+        for label, value in _HF_POSITION_LABELS:
+            self.number_position_combo.addItem(tr(label), value)
+        self.number_position_combo.setCurrentIndex(self.number_position_combo.findData("footer-center"))
+
+        self.skip_first_spin = QSpinBox()
+        self.skip_first_spin.setRange(0, 9999)
+        self.skip_first_spin.setToolTip(tr("A capa e as páginas de abertura ficam sem número; a contagem começa depois delas."))
+
+        self.number_pages_edit = QLineEdit()
+        self.number_pages_edit.setPlaceholderText(tr("Páginas (vazio = todas), ex: 1, 3-5"))
+        self.number_selection_button = QPushButton(tr("Usar seleção"))
+        self.number_selection_button.setToolTip(
+            tr("Preenche com as páginas selecionadas nas miniaturas (Ctrl ou Shift + clique).")
+        )
+        self.number_selection_button.clicked.connect(
+            lambda: self.number_pages_edit.setText(format_page_ranges(self.session.selected_pages()))
+        )
+        pages_row = QHBoxLayout()
+        pages_row.addWidget(self.number_pages_edit, 1)
+        pages_row.addWidget(self.number_selection_button)
+
+        self.number_font_combo = QComboBox()
+        for label, value in _FONTS:
+            self.number_font_combo.addItem(tr(label), value)
+        self.number_font_size_spin = QSpinBox()
+        self.number_font_size_spin.setRange(6, 72)
+        self.number_font_size_spin.setValue(10)
+
+        options = QFormLayout()
+        options.addRow(tr("Começar em:"), self.start_at_spin)
+        options.addRow(tr("Algarismos:"), self.number_style_combo)
+        options.addRow("", self.page_labels_check)
+        options.addRow(tr("Posição:"), self.number_position_combo)
+        options.addRow(tr("Pular as primeiras:"), self.skip_first_spin)
+        options.addRow(tr("Páginas:"), pages_row)
+        options.addRow(tr("Fonte:"), self.number_font_combo)
+        options.addRow(tr("Tamanho da fonte:"), self.number_font_size_spin)
+
         apply_button = QPushButton(tr("Adicionar numeração"))
         apply_button.clicked.connect(self._apply)
 
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
-        layout.addWidget(QLabel(tr("Começar em:")))
-        layout.addWidget(self.start_at_spin)
+        layout.addLayout(options)
         layout.addWidget(apply_button)
         return widget
+
+    def _update_number_state(self):
+        counting = not self.page_labels_check.isChecked()
+        self.start_at_spin.setEnabled(counting)
+        self.number_style_combo.setEnabled(counting)
 
     def _build_bates_panel(self) -> QWidget:
         widget = QWidget()
@@ -171,19 +239,35 @@ class PageNumbersPage(QWidget):
             QMessageBox.warning(self, tr("Numeração de páginas"), tr("Escolha o arquivo de saída."))
             return
 
-        try:
-            AddPageNumbers().run(input_path, output_path, start_at=self.start_at_spin.value())
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Numeração de páginas"),
-                tr("Falha ao numerar páginas: {error}").format(error=exc),
-            )
-            return
+        text = self.number_pages_edit.text()
+        options = {
+            "start_at": self.start_at_spin.value(),
+            "font_size": self.number_font_size_spin.value(),
+            "position": self.number_position_combo.currentData(),
+            "style": self.number_style_combo.currentData(),
+            "skip_first": self.skip_first_spin.value(),
+            "use_page_labels": self.page_labels_check.isChecked(),
+            "font": self.number_font_combo.currentData(),
+        }
 
-        self.session.open(output_path)
-        QMessageBox.information(
-            self, tr("Numeração de páginas"), tr("Numeração adicionada com sucesso.")
+        def task(_progress):
+            pages = None
+            if text.strip():
+                pages = sorted(set(parse_page_ranges(text, len(open_reader(input_path, purpose=READ).pages))))
+            AddPageNumbers().run(input_path, output_path, pages=pages, **options)
+
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(
+                self, tr("Numeração de páginas"), tr("Numeração adicionada com sucesso.")
+            )
+
+        run_task(
+            self,
+            tr("Numeração de páginas"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao numerar páginas: {error}"),
         )
 
     def _apply_bates(self):
@@ -199,26 +283,28 @@ class PageNumbersPage(QWidget):
 
         position = _BATES_POSITION_LABELS[self.bates_position_combo.currentIndex()][1]
 
-        try:
-            AddBatesNumbers().run(
-                input_path,
-                output_path,
-                prefix=self.bates_prefix_edit.text(),
-                start_at=self.bates_start_at_spin.value(),
-                digits=self.bates_digits_spin.value(),
-                position=position,
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Numeração Bates"),
-                tr("Falha ao adicionar numeração Bates: {error}").format(error=exc),
-            )
-            return
+        task = call(
+            AddBatesNumbers().run,
+            input_path,
+            output_path,
+            prefix=self.bates_prefix_edit.text(),
+            start_at=self.bates_start_at_spin.value(),
+            digits=self.bates_digits_spin.value(),
+            position=position,
+        )
 
-        self.session.open(output_path)
-        QMessageBox.information(
-            self, tr("Numeração Bates"), tr("Numeração Bates adicionada com sucesso.")
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(
+                self, tr("Numeração Bates"), tr("Numeração Bates adicionada com sucesso.")
+            )
+
+        run_task(
+            self,
+            tr("Numeração Bates"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao adicionar numeração Bates: {error}"),
         )
 
     def _apply_header_footer(self):
@@ -238,17 +324,18 @@ class PageNumbersPage(QWidget):
 
         position = _HF_POSITION_LABELS[self.hf_position_combo.currentIndex()][1]
 
-        try:
-            AddHeaderFooter().run(input_path, output_path, text=text, position=position)
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                tr("Cabeçalho/Rodapé"),
-                tr("Falha ao adicionar cabeçalho/rodapé: {error}").format(error=exc),
-            )
-            return
+        task = call(AddHeaderFooter().run, input_path, output_path, text=text, position=position)
 
-        self.session.open(output_path)
-        QMessageBox.information(
-            self, tr("Cabeçalho/Rodapé"), tr("Cabeçalho/rodapé adicionado com sucesso.")
+        def done(_result):
+            self.session.open(output_path)
+            QMessageBox.information(
+                self, tr("Cabeçalho/Rodapé"), tr("Cabeçalho/rodapé adicionado com sucesso.")
+            )
+
+        run_task(
+            self,
+            tr("Cabeçalho/Rodapé"),
+            task,
+            on_success=done,
+            error_message=tr("Falha ao adicionar cabeçalho/rodapé: {error}"),
         )

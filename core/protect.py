@@ -1,11 +1,12 @@
 """Proteção por senha e permissões de arquivos PDF."""
 
 from dataclasses import dataclass
+from typing import Any
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.constants import UserAccessPermissions as _Perm
 
-from .base import PDFOperation, open_reader
+from .base import open_reader, write_pdf
 
 
 @dataclass
@@ -44,7 +45,7 @@ class PDFPermissions:
         return flag
 
 
-class ProtectPDF(PDFOperation):
+class ProtectPDF:
     """Protege um PDF com senha e, opcionalmente, restringe o que pode ser feito com ele.
 
     `owner_password` é a "senha de permissões" do PDF: quem só tem `password` (a senha de
@@ -63,23 +64,21 @@ class ProtectPDF(PDFOperation):
         permissions: PDFPermissions | None = None,
     ) -> None:
         reader = open_reader(input_path)
-        writer = PdfWriter()
-        for page in reader.pages:
-            writer.add_page(page)
+        writer = PdfWriter(clone_from=reader)
 
-        encrypt_kwargs = {"user_password": password, "algorithm": "AES-256"}
+        encrypt_kwargs: dict[str, Any] = {"user_password": password, "algorithm": "AES-256"}
         if owner_password:
             encrypt_kwargs["owner_password"] = owner_password
         if permissions is not None:
             encrypt_kwargs["permissions_flag"] = permissions.as_flag()
         writer.encrypt(**encrypt_kwargs)
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        write_pdf(writer, output_path)
 
 
-class UnlockPDF(PDFOperation):
-    """Remove a senha de um PDF protegido."""
+class UnlockPDF:
+    """Remove a senha de um PDF protegido — tanto a de abertura quanto as restrições de
+    uso: num PDF que abre sem senha mas restringe alterações, informe a senha de
+    permissões (proprietário)."""
 
     def run(self, input_path: str, output_path: str, password: str) -> None:
         reader = PdfReader(input_path)
@@ -87,9 +86,5 @@ class UnlockPDF(PDFOperation):
             if not reader.decrypt(password):
                 raise ValueError("Senha incorreta.")
 
-        writer = PdfWriter()
-        for page in reader.pages:
-            writer.add_page(page)
-
-        with open(output_path, "wb") as f:
-            writer.write(f)
+        writer = PdfWriter(clone_from=reader)
+        write_pdf(writer, output_path)

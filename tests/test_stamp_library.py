@@ -88,3 +88,29 @@ def test_library_persists_across_instances_sharing_the_same_settings_file(tmp_pa
 
     assert len(stamps) == 1
     assert stamps[0].name == "Persistente"
+
+
+def test_stamp_name_with_slash_is_listed(library):
+    library.add_stamp("Aprovado/RH", "APROVADO PELO RH")
+    library.add_stamp(r"C:\pasta", "OUTRO")
+
+    names = [stamp.name for stamp in library.list_stamps()]
+
+    assert names == ["Aprovado/RH", r"C:\pasta"]
+    library.remove_stamp("Aprovado/RH")
+    assert [stamp.name for stamp in library.list_stamps()] == [r"C:\pasta"]
+
+
+def test_stamps_saved_in_the_old_format_are_kept(tmp_path):
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    settings.beginGroup("custom_stamps")
+    settings.setValue("Revisado/2024/text", "REVISADO")  # gravado pela versão antiga
+    settings.setValue("Revisado/2024/color", "2196f3")
+    settings.setValue("Simples/text", "SIMPLES")
+    settings.endGroup()
+    settings.sync()
+    library = StampLibrary(settings)
+
+    assert [(s.name, s.text) for s in library.list_stamps()] == [("Revisado/2024", "REVISADO"), ("Simples", "SIMPLES")]
+    library.add_stamp("Novo", "NOVO")  # passa tudo para o formato novo
+    assert [s.name for s in StampLibrary(settings).list_stamps()] == ["Novo", "Revisado/2024", "Simples"]

@@ -1,14 +1,25 @@
 """Extração de texto de arquivos PDF."""
 
-from .base import PDFOperation, open_reader
+from .base import EXTRACT, atomic_output, open_reader
 
 
-class ExtractText(PDFOperation):
-    """Extrai todo o texto de um PDF para um arquivo .txt."""
+def page_text(page, layout: bool = False) -> str:
+    """O texto da página; com `layout`, na posição em que aparece (colunas alinhadas)."""
+    if not layout:
+        return page.extract_text()
+    if "/Contents" not in page:  # o modo layout do pypdf quebra em página sem conteúdo
+        return ""
+    return page.extract_text(extraction_mode="layout")
 
-    def run(self, input_path: str, output_path: str) -> None:
-        reader = open_reader(input_path)
-        text = "\n\n".join(page.extract_text() for page in reader.pages)
 
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(text)
+class ExtractText:
+    """Extrai todo o texto de um PDF para um arquivo .txt; com `layout`, cada linha mantém
+    a posição do texto na página (colunas e tabelas continuam alinhadas)."""
+
+    def run(self, input_path: str, output_path: str, layout: bool = False) -> None:
+        reader = open_reader(input_path, purpose=EXTRACT)
+        text = "\n\n".join(page_text(page, layout) for page in reader.pages)
+
+        with atomic_output(output_path) as temp_path:
+            with open(temp_path, "w", encoding="utf-8") as f:
+                f.write(text)
