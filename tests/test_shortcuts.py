@@ -57,7 +57,8 @@ def test_palette_hides_disabled_commands_and_shows_shortcuts(make_window):
     window = make_window()
     texts = [palette_text for palette_text in _visible(CommandPalette(window.commands(), window))]
     assert not any("Salvar" in text for text in texts)  # sem documento aberto
-    assert any(text.startswith("Arquivo › Abrir PDF...") and "Ctrl+O" in text for text in texts)
+    shown = QKeySequence("Ctrl+O").toString(QKeySequence.SequenceFormat.NativeText)  # "⌘O" no macOS
+    assert any(text.startswith("Arquivo › Abrir PDF...") and shown in text for text in texts)
 
 
 def test_palette_runs_the_chosen_command(make_window, monkeypatch):

@@ -1,6 +1,7 @@
 """Testes de ponta a ponta de core/cli.py (A13)."""
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -170,8 +171,10 @@ def test_runs_as_a_module_without_loading_qt(make_pdf):
         "import sys; from core.cli import main; code = main(['info', sys.argv[1]]); "
         "assert 'PySide6' not in sys.modules, 'a CLI carregou o Qt'; sys.exit(code)"
     )
+    # Redirecionada, a saída usa a página de código local (cp1252 no Windows); aqui, UTF-8.
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     result = subprocess.run(
-        [sys.executable, "-c", script, str(source)], cwd=ROOT, capture_output=True, text=True, encoding="utf-8"
+        [sys.executable, "-c", script, str(source)], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", env=env
     )
     assert result.returncode == 0, result.stderr
     assert "Páginas: 1" in result.stdout
