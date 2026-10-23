@@ -31,7 +31,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
-from core.base import atomic_output, known_password, remember_password
+from core.base import atomic_output, forget_password, known_password, remember_password
 
 
 @dataclass
@@ -225,6 +225,10 @@ class DocumentSession(QObject):
         return bool(self._confirm_discard())
 
     def _reset(self) -> None:
+        # A senha digitada para abrir o documento sai da memória junto com ele (M32).
+        for path in [self._source, *(version.path for version in self._versions)]:
+            if path is not None:
+                forget_password(path)
         self._remove_work_dir()
         self._source = None
         self._versions = []

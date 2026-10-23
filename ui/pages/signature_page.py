@@ -424,6 +424,7 @@ class SignaturePage(QWidget):
         task = call(SignDocument().run, input_path, output_path, **kwargs)
 
         def done(_result):
+            self.pfx_password_edit.clear()  # depois de assinar; "Ver o certificado" ainda usa
             self.session.open(output_path)
             QMessageBox.information(self, tr("Assinar"), tr("PDF assinado com sucesso."))
 

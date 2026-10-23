@@ -106,7 +106,10 @@ def _capture_one(widget: QWidget) -> Any:
     if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
         return widget.value()
     if isinstance(widget, QLineEdit):
-        return None if widget.isReadOnly() else widget.text()
+        # Senha não é copiada: na troca de idioma ela seria só mais uma cópia na memória.
+        if widget.isReadOnly() or widget.echoMode() == QLineEdit.EchoMode.Password:
+            return None
+        return widget.text()
     if isinstance(widget, (QPlainTextEdit, QTextEdit)):
         return None if widget.isReadOnly() else widget.toPlainText()
     if isinstance(widget, QTableWidget):
@@ -179,6 +182,14 @@ def _same_items(widget: QListWidget, state: list[dict[str, Any]]) -> bool:
         if value is None or widget.item(row).data(Qt.ItemDataRole.UserRole) != value:
             return False
     return True
+
+
+def clear_passwords(root: QWidget) -> None:
+    """Esvazia os campos de senha de `root` (M32): depois de lida para a operação, a senha
+    não fica à vista nem na memória do campo esperando o próximo uso."""
+    for edit in root.findChildren(QLineEdit):
+        if edit.echoMode() == QLineEdit.EchoMode.Password:
+            edit.clear()
 
 
 def capture_state(root: QWidget) -> list[tuple[type, Any]]:

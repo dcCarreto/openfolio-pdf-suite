@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from core.protect import PDFPermissions, ProtectPDF, UnlockPDF
 from ui.i18n import tr
 from ui.tasks import call, run_task
+from ui.widget_state import clear_passwords
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 
@@ -188,6 +189,7 @@ class ProtectPage(QWidget):
             return
 
         task = call(ProtectPDF().run, input_path, output_path, password=password)
+        clear_passwords(self)
 
         def done(_result):
             self.session.open(output_path)
@@ -239,6 +241,7 @@ class ProtectPage(QWidget):
             owner_password=owner_password,
             permissions=permissions,
         )
+        clear_passwords(self)
 
         def done(_result):
             self.session.open(output_path)
@@ -270,6 +273,7 @@ class ProtectPage(QWidget):
             return
 
         task = call(UnlockPDF().run, input_path, output_path, password=password)
+        clear_passwords(self)
 
         def done(_result):
             self.session.open(output_path)

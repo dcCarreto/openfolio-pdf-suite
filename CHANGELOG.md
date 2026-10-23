@@ -19,6 +19,8 @@ Ainda não publicada.
 - Um PDF com páginas gigantes ou um arquivo do Office que descompacta para gigabytes não
   derruba mais o app: a página é renderizada com menos resolução e o arquivo é recusado.
 - A chave do certificado de teste da assinatura fica só na memória, sem passar pelo disco.
+- Os campos de senha ficam vazios depois de usados, e a senha digitada para abrir um PDF
+  sai da memória quando o documento é fechado.
 - Mesclar, dividir e reorganizar páginas mantêm marcadores, metadados, anexos, camadas e
   rótulos de página; toda gravação é feita por inteiro ou não é feita.
 

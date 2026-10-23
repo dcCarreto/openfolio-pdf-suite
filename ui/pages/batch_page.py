@@ -34,6 +34,7 @@ from ui.i18n import error_text, tr
 from ui.pages.compress_page import _LEVELS
 from ui.pages.ocr_page import _LANGUAGE_NAMES
 from ui.tasks import run_task
+from ui.widget_state import clear_passwords
 from ui.widgets.file_picker import FilePicker
 
 # (rótulo, sufixo do arquivo de saída)
@@ -189,6 +190,7 @@ class BatchPage(QWidget):
             return
         output_dir = self.output_picker.path() or os.path.join(folder, "processados")
         operation, suffix = self._operation(), _OPERATIONS[index][1]
+        clear_passwords(self)
         self.results_table.setRowCount(0)
         self.status_label.clear()
         run_task(
