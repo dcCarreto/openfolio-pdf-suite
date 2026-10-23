@@ -340,6 +340,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "The certificate expired on {date}: the signature would not be valid. Use a current certificate."
     ),
     "Não foi possível obter o carimbo de tempo de {url}: {error}": "Could not get the timestamp from {url}: {error}",
+    "O servidor de carimbo de tempo {url} não respondeu.": "The timestamp server {url} did not respond.",
     # OCR (M22)
     "Refazer o OCR (tira o texto reconhecido antes)": "Redo the OCR (removes the text recognized before)",
     "Endireitar as páginas no documento": "Straighten the pages in the document",

@@ -489,8 +489,26 @@ def test_an_unreachable_tsa_is_reported_without_writing(tmp_path, monkeypatch):
     path_in = tmp_path / "doc.pdf"
     _make_pdf(path_in, "Contrato")
 
-    with pytest.raises(ValueError, match="carimbo de tempo de http://127.0.0.1:9/"):
+    with pytest.raises(ValueError, match="carimbo de tempo (de )?http://127.0.0.1:9/"):
         SignDocument().run(str(path_in), str(tmp_path / "out.pdf"), test_common_name="Fulano", timestamp_url="http://127.0.0.1:9/")
+
+
+def test_a_tsa_that_times_out_is_reported_without_writing(tmp_path, monkeypatch):
+    import asyncio
+
+    from pyhanko.sign.timestamps import HTTPTimeStamper
+
+    class _Silent(HTTPTimeStamper):  # como o aiohttp no Python 3.10: o tempo acaba e o asyncio cancela
+        async def async_request_tsa_response(self, *_args, **_kwargs):
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr("core.signature._timestamper", lambda url: _Silent(url))
+    path_in, path_out = tmp_path / "doc.pdf", tmp_path / "out.pdf"
+    _make_pdf(path_in, "Contrato")
+
+    with pytest.raises(ValueError, match="não respondeu"):
+        SignDocument().run(str(path_in), str(path_out), test_common_name="Fulano", timestamp_url="http://tsa.example/")
+    assert not path_out.exists()
     assert not (tmp_path / "out.pdf").exists()
 
 

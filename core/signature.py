@@ -23,6 +23,7 @@ Dois jeitos de obter o certificado usado para assinar:
   para testar o fluxo ou uso pessoal/interno.
 """
 
+import asyncio
 import contextlib
 import datetime
 import logging
@@ -327,6 +328,12 @@ class SignDocument:
                             url=timestamp_url.strip(),
                             error=str(error),
                         )
+                    ) from error
+                except (asyncio.CancelledError, asyncio.TimeoutError) as error:
+                    # O tempo do servidor acabou: no Python 3.10 o aiohttp deixa escapar o
+                    # cancelamento do asyncio (BaseException), sem texto, em vez do erro acima.
+                    raise ValueError(
+                        Message("O servidor de carimbo de tempo {url} não respondeu.", url=timestamp_url.strip())
                     ) from error
 
 
