@@ -46,7 +46,10 @@ servidor nenhum e sem paywall. Tudo roda localmente, na sua máquina.
 Não há número de versão: o OpenFolio PDF Suite é uma versão só, que recebe atualizações. O app só
 acessa a internet para ver se há atualização, e só quando você pede (**Ajuda > Verificar
 atualizações**) ou liga a verificação ao iniciar, que vem desligada; ele consulta a lista pública
-de releases do GitHub e não envia nada sobre você ou seus documentos. Antes de instalar qualquer
+de releases do GitHub e não envia nada sobre você ou seus documentos. A outra exceção é opcional:
+ao assinar, se você informar um servidor de carimbo de tempo, o app pede o carimbo a ele, que
+recebe só o resumo criptográfico do documento. Um teste (`tests/test_network.py`) garante que
+nenhum outro código usa a rede. Antes de instalar qualquer
 coisa, ele mostra o que a atualização traz e pergunta; no Windows, se você aceitar, ele baixa,
 confere o arquivo e instala sozinho. Tudo o que mudou fica em [CHANGELOG.md](CHANGELOG.md).
 
