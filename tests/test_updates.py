@@ -214,6 +214,22 @@ def test_manual_check_reports_up_to_date_and_errors(window, monkeypatch, tmp_pat
     assert [name for name, _text in shown] == ["warning"]
 
 
+def test_the_check_on_start_waits_a_day_after_an_answer(tmp_path):
+    preferences = Preferences(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    assert preferences.update_check_due(now=1_000_000)  # nunca consultou
+    preferences.set_last_update_check(1_000_000)
+    assert not preferences.update_check_due(now=1_000_000 + 23 * 3600)
+    assert preferences.update_check_due(now=1_000_000 + 24 * 3600)
+    assert preferences.update_check_due(now=1_000_000 - 60)  # relógio voltou atrás
+
+
+def test_only_an_answer_from_github_counts_as_a_check(window, monkeypatch, tmp_path):
+    _check(window, monkeypatch, tmp_path, "<html>erro</html>", manual=False)
+    assert window._preferences.update_check_due()  # erro: tenta de novo na próxima abertura
+    _check(window, monkeypatch, tmp_path, json.dumps([]), manual=False)
+    assert not window._preferences.update_check_due()
+
+
 def test_help_menu_toggle_is_remembered(window):
     assert not window._update_on_start_action.isChecked()
     window._update_on_start_action.trigger()

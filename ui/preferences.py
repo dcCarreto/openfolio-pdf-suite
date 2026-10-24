@@ -6,6 +6,7 @@ vivem só na memória do processo.
 """
 
 import os
+import time
 from pathlib import Path
 
 _MAX_RECENT = 10
@@ -92,6 +93,19 @@ class Preferences:
 
     def set_check_updates_on_start(self, enabled: bool) -> None:
         self._set("updates/check_on_start", "true" if enabled else "false")
+
+    def update_check_due(self, now: float | None = None) -> bool:
+        """Se a verificação ao iniciar deve consultar o GitHub: no máximo uma vez por dia (a
+        API aceita 60 consultas por hora por IP, e uma atualização não sai a cada abertura)."""
+        try:
+            last = float(self._get("updates/last_check"))
+        except (TypeError, ValueError):
+            return True
+        elapsed = (time.time() if now is None else now) - last
+        return not 0 <= elapsed < 24 * 60 * 60  # relógio voltou atrás: consulta
+
+    def set_last_update_check(self, when: float | None = None) -> None:
+        self._set("updates/last_check", str(time.time() if when is None else when))
 
     # -- anotações (M27) ----------------------------------------------------------
 
