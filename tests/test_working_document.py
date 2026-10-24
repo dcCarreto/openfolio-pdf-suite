@@ -33,8 +33,7 @@ def _three_pages(path):
 
 def _apply_watermark(window, text="CONFIDENCIAL"):
     row = window._row_of["WatermarkPage"]
-    window.sidebar.setCurrentRow(row)
-    page = window._ensure_page(row)
+    page = window.open_tool(row)
     page.text_edit.setText(text)
     page._apply()
     assert wait_for_tasks()

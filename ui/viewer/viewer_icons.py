@@ -131,3 +131,35 @@ def build_rotate_icon() -> QIcon:
         p.drawLine(QPointF(11, 4), QPointF(14, 7))
 
     return _build(draw)
+
+
+def build_save_icon() -> QIcon:
+    """Salvar: um disquete."""
+
+    def draw(p):
+        p.drawPolygon(QPolygonF([QPointF(4, 4), QPointF(15, 4), QPointF(18, 7), QPointF(18, 18), QPointF(4, 18)]))
+        p.drawRect(QRectF(7, 4, 7, 4))
+        p.drawRect(QRectF(7, 12, 8, 6))
+
+    return _build(draw)
+
+
+def build_print_icon() -> QIcon:
+    """Imprimir: a impressora com a folha saindo."""
+
+    def draw(p):
+        p.drawRect(QRectF(7, 3, 8, 5))
+        p.drawRoundedRect(QRectF(3, 8, 16, 7), 2, 2)
+        p.drawRect(QRectF(7, 13, 8, 6))
+
+    return _build(draw)
+
+
+def build_close_icon() -> QIcon:
+    """Fechar a aba: um x fino."""
+
+    def draw(p):
+        p.drawLine(QPointF(7, 7), QPointF(15, 15))
+        p.drawLine(QPointF(15, 7), QPointF(7, 15))
+
+    return _build(draw)

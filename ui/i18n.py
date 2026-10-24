@@ -1875,4 +1875,24 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "Checks the PDF/A requirements the app covers (declaration, color profile, embedded fonts, transparency, "
         "forbidden actions and attachments, metadata) — not the full ISO 19005 validation."
     ),
+    # -- janela com abas de documento ----------------------------------------------------
+    "Início": "Home",
+    "Todas as ferramentas": "All tools",
+    "Sem documento": "No document",
+    "Fechar documento": "Close document",
+    "Miniaturas das páginas": "Page thumbnails",
+    "Criar e editar": "Create and edit",
+    "Revisar e comentar": "Review and comment",
+    "Formulários e assinatura": "Forms and signature",
+    "Converter e otimizar": "Convert and optimize",
+    "Documento": "Document",
+    "Automatizar": "Automate",
+    "Bem-vindo ao OpenFolio PDF Suite": "Welcome to OpenFolio PDF Suite",
+    "Abra um PDF para ler e trabalhar nele, ou comece por uma ferramenta.": (
+        "Open a PDF to read and work on it, or start with a tool."
+    ),
+    "Recentes": "Recent",
+    "Os PDFs abertos aparecem aqui.": "The PDFs you open show up here.",
+    "Salvar (Ctrl+S)": "Save (Ctrl+S)",
+    "Imprimir... (Ctrl+P)": "Print... (Ctrl+P)",
 }

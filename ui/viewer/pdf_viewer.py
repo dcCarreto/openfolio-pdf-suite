@@ -112,6 +112,8 @@ class PdfViewer(QWidget):
         self.redaction_state = redaction_state
         self.measure_state = measure_state or MeasureState()
         self.area_pick_state = area_pick_state or AreaPickState()
+        # "Abrir PDF..." da barra: sozinho, troca o documento; numa aba de documento, abre outra aba.
+        self.open_path = session.open
         self._document: pdfium.PdfDocument | None = None
         self._geometries: dict[int, PageGeometry] = {}  # geometria do arquivo, sem a rotação da tela
         self._view_rotation = 0  # "girar a visualização": só na tela, o arquivo não muda
@@ -203,7 +205,9 @@ class PdfViewer(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        layout.addWidget(self._build_toolbar())
+        # A aba de documento (ui/document_tab.py) leva a barra para o topo dela, acima dos painéis.
+        self.toolbar = self._build_toolbar()
+        layout.addWidget(self.toolbar)
 
         self.search_bar = SearchBar()
         self.search_bar.hide()
@@ -406,7 +410,7 @@ class PdfViewer(QWidget):
     def _browse_open(self):
         path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), "", "PDF (*.pdf)")
         if path:
-            self.session.open(path)
+            self.open_path(path)
 
     def close_document(self):
         """Fecha o documento no pdfium (ao fechar a janela): no Windows, um arquivo aberto
@@ -1160,6 +1164,11 @@ class PdfViewer(QWidget):
     def _toggle_thumbnails(self, checked: bool):
         self._show_thumbnails = checked
         self.side_panel.setVisible(checked and self._document is not None)
+
+    def show_side_panel(self, visible: bool) -> None:
+        """Mostra ou esconde o painel de miniaturas, marcadores e anexos (e lembra a escolha)."""
+        self.thumbnails_button.setChecked(visible)
+        self._toggle_thumbnails(visible)
 
     def _on_thumbnail_selected(self, index: int):
         if self._continuous:

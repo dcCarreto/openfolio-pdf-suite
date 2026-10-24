@@ -10,7 +10,7 @@ import getpass
 import json
 import sys
 
-from PySide6.QtCore import QObject, QPoint
+from PySide6.QtCore import QObject
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 from ui.app_events import pdf_paths_from_arguments
@@ -91,8 +91,8 @@ class InstanceServer(QObject):
 
 
 class AppWindows:
-    """As janelas abertas do app: cada PDF que chega de fora abre numa janela nova, a não
-    ser que haja uma sem documento (a que acabou de abrir, por exemplo)."""
+    """As janelas abertas do app: cada PDF que chega de fora abre numa aba nova da janela
+    aberta (ver `MainWindow.open_document`); sem janela, abre uma."""
 
     def __init__(self, make_window):
         self._make_window = make_window
@@ -102,23 +102,18 @@ class AppWindows:
         return list(self._windows)
 
     def open(self, paths: list[str]) -> None:
-        """Abre cada PDF numa janela; sem nenhum (o app aberto de novo), uma janela vazia."""
-        targets: list[str | None] = [*paths] or [None]
-        for path in targets:
-            window = self._window_for()
-            if path is not None:
-                window.session.open(path)
-            window.show()
-            window.raise_()
-            window.activateWindow()
+        """Abre cada PDF numa aba; sem nenhum (o app aberto de novo), só traz a janela."""
+        window = self._window()
+        for path in paths:
+            window.open_document(path)
+        window.show()
+        window.raise_()
+        window.activateWindow()
 
-    def _window_for(self):
-        empty = next((w for w in reversed(self._windows) if w.session.path() is None), None)
-        if empty is not None:
-            return empty
+    def _window(self):
+        if self._windows:
+            return self._windows[-1]
         window = self._make_window()
-        if self._windows:  # a nova não fica exatamente em cima da anterior
-            window.move(self._windows[-1].pos() + QPoint(30, 30))
         self._windows.append(window)
         window.destroyed.connect(lambda _obj=None, w=window: self._windows.remove(w))
         return window

@@ -6,11 +6,12 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 class PageContainer(QWidget):
     """Envolve o conteúdo de uma seção com um cabeçalho consistente (título + subtítulo)."""
 
-    def __init__(self, title: str, subtitle: str, content: QWidget, parent=None):
+    def __init__(self, title: str, subtitle: str, content: QWidget, parent=None, show_title: bool = True):
         super().__init__(parent)
 
         title_label = QLabel(title)
         title_label.setObjectName("pageTitle")
+        title_label.setVisible(show_title)  # numa aba de documento, a faixa do topo já mostra o nome
         subtitle_label = QLabel(subtitle)
         subtitle_label.setObjectName("pageSubtitle")
         subtitle_label.setWordWrap(True)

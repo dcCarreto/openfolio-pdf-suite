@@ -359,3 +359,14 @@ def build_annotations_icon() -> QIcon:
         p.drawLine(QPointF(4, 19), QPointF(16, 19))
 
     return _build(draw)
+
+
+def build_all_tools_icon() -> QIcon:
+    """Todas as ferramentas (aba Ferramentas): grade 3x3, como um lançador de apps."""
+
+    def draw(p):
+        for x in (5, 10, 15):
+            for y in (5, 10, 15):
+                p.drawEllipse(QRectF(x - 1.5, y - 1.5, 3, 3))
+
+    return _build(draw)

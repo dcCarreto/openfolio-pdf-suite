@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 class DocumentSidePanel(QTabWidget):
     page_requested = Signal(int)
+    tabs_changed = Signal()  # uma aba apareceu ou sumiu (o documento tem marcadores, anexos?)
 
     def __init__(self, thumbnail_list, parent=None):
         super().__init__(parent)
@@ -34,6 +35,7 @@ class DocumentSidePanel(QTabWidget):
         self.setTabPosition(QTabWidget.TabPosition.West)
         self.setFixedWidth(178)
         self._path: str | None = None
+        self._external_rail = False
 
         self.thumbnail_list = thumbnail_list
         self.outline_tree = QTreeWidget()
@@ -96,13 +98,19 @@ class DocumentSidePanel(QTabWidget):
         self.attachments_list.clear()
         self._update_tabs()
 
+    def use_external_rail(self) -> None:
+        """A coluna de ícones da aba de documento escolhe o conteúdo: as abas daqui somem."""
+        self._external_rail = True
+        self.tabBar().hide()
+
     def _update_tabs(self):
         self.setTabVisible(1, self.outline_tree.topLevelItemCount() > 0)
         self.setTabVisible(2, self.attachments_list.count() > 0)
         visible = sum(self.isTabVisible(index) for index in range(self.count()))
-        self.tabBar().setVisible(visible > 1)
+        self.tabBar().setVisible(visible > 1 and not self._external_rail)
         if not self.isTabVisible(self.currentIndex()):
             self.setCurrentIndex(0)
+        self.tabs_changed.emit()
 
     def _on_outline_clicked(self, item: QTreeWidgetItem, _column: int):
         page = item.data(0, Qt.ItemDataRole.UserRole)
