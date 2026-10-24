@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.annotations import AnnotationSpec, arrow_head, spec_rect
+from core.annotations import STAMP_FONT_SIZE, AnnotationSpec, arrow_head, spec_rect, stamp_box
 from core.base import known_password, remember_password
 from core.document_info import document_notices
 from core.form_fields import FillFormFields, FormWidget, ListFormWidgets
@@ -129,7 +129,8 @@ class PdfViewer(QWidget):
         self._page_tops: list[int] = []
         self._rendered_pages: set[int] = set()
         self._document_dependent_widgets: list[QWidget] = []
-        self._drag_start_pdf: tuple[float, float] | None = None
+        self._drag_start_pdf: tuple[float, float] | None = None  # realce/sublinhado/riscado e carimbo
+        self._drag_preview_base: QPixmap | None = None
         self._ink_points_pdf: list[tuple[float, float]] = []
         self._ink_preview_base: QPixmap | None = None
         self._shape_start_pdf: tuple[float, float] | None = None
@@ -767,7 +768,12 @@ class PdfViewer(QWidget):
             painter.setBrush(QColor("#ffffff"))
             painter.drawRect(rect)
             painter.setPen(color)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, spec.text)
+            font = painter.font()
+            font.setBold(True)
+            font.setPixelSize(max(1, round(STAMP_FONT_SIZE * spec.scale * self._scale)))  # cresce com a caixa
+            painter.setFont(font)
+            margin = 8 * spec.scale * self._scale  # como na aparência gravada (core/annotations.py)
+            painter.drawText(rect.adjusted(margin, 0, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, spec.text)
 
     def _with_pending_redactions(self, pixmap: QPixmap, page_index: int) -> QPixmap:
         rects = [r for r in self.redaction_state.pending() if r.page_index == page_index]
@@ -1377,14 +1383,14 @@ class PdfViewer(QWidget):
             # re-renderizar a página inteira via pdfium a cada evento.
             self._ink_preview_base = QPixmap(self._page_labels[0].pixmap())
             return
-        if tool in ("highlight", "underline", "strikeout"):
+        if tool in ("highlight", "underline", "strikeout", "stamp"):
             self._drag_start_pdf = pdf_point
+            self._drag_preview_base = QPixmap(self._page_labels[0].pixmap())
+            if tool == "stamp":  # o carimbo aparece já no clique; arrastar muda o tamanho
+                self._show_drag_preview(self._stamp_spec(pdf_point))
             return
         if tool == "note":
             self._prompt_note(page_index, pdf_point)
-            return
-        if tool == "stamp":
-            self._place_stamp(page_index, pdf_point)
             return
 
     def _on_canvas_moved(self, x: float, y: float):
@@ -1436,6 +1442,13 @@ class PdfViewer(QWidget):
             self._paint_shape(painter, self._current_page, spec, QColor(f"#{spec.color}"))
             painter.end()
             self._page_labels[0].setPixmap(preview)
+            return
+        if self._drag_start_pdf is not None and self._drag_preview_base is not None:
+            end_pdf = self._widget_point_to_pdf(self._current_page, x, y)
+            if self.annotation_state.active_tool() == "stamp":
+                self._show_drag_preview(self._stamp_spec(end_pdf))
+            else:
+                self._show_drag_preview(self._markup_spec(self._drag_start_pdf, end_pdf))
             return
         if self.annotation_state.active_tool() != "ink" or not self._ink_points_pdf:
             return
@@ -1518,9 +1531,45 @@ class PdfViewer(QWidget):
             self._ink_preview_base = None
             return
 
-        if tool in ("highlight", "underline", "strikeout") and self._drag_start_pdf is not None:
-            self._finish_text_markup(page_index, self._drag_start_pdf, pdf_point, tool)
+        if self._drag_start_pdf is not None:
+            marked = self._stamp_spec(pdf_point) if tool == "stamp" else self._markup_spec(self._drag_start_pdf, pdf_point)
             self._drag_start_pdf = None
+            self._drag_preview_base = None
+            if marked is not None:
+                self.annotation_state.add_pending(marked)
+            else:
+                self._refresh_current_render()  # tira a prévia
+
+    def _show_drag_preview(self, spec: AnnotationSpec | None) -> None:
+        """A página como estava no clique, com a marcação do arrasto por cima."""
+        assert self._drag_preview_base is not None
+        preview = QPixmap(self._drag_preview_base)
+        if spec is not None:
+            painter = QPainter(preview)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            self._paint_pending_spec(painter, self._current_page, spec)
+            painter.end()
+        self._page_labels[0].setPixmap(preview)
+
+    def _stamp_spec(self, end_pdf) -> AnnotationSpec:
+        """O carimbo do clique em `_drag_start_pdf`: no tamanho padrão, ou do tamanho do
+        arrasto até `end_pdf`, sem distorcer."""
+        assert self._drag_start_pdf is not None
+        rotation = self._page_geometry(self._current_page).rotation
+        (x0, y0), (x1, y1) = self._drag_start_pdf, end_pdf
+        if max(abs(x1 - x0), abs(y1 - y0)) < 3:  # um clique sem arrastar: tamanho padrão
+            position, scale = self._drag_start_pdf, 1.0
+        else:
+            position, scale = stamp_box(self._drag_start_pdf, end_pdf, rotation)
+        return AnnotationSpec(
+            page_index=self._current_page,
+            kind="stamp",
+            color=self.annotation_state.active_color(),
+            position=position,
+            text=self.annotation_state.stamp_text(),
+            rotation=rotation,
+            scale=scale,
+        )
 
     def _shape_spec(self, end_pdf) -> AnnotationSpec:
         assert self._shape_start_pdf is not None
@@ -1627,19 +1676,17 @@ class PdfViewer(QWidget):
         if text:
             QApplication.clipboard().setText(text)
 
-    def _finish_text_markup(self, page_index: int, start_pdf, end_pdf, tool: str):
+    def _markup_spec(self, start_pdf, end_pdf) -> AnnotationSpec | None:
+        """Realce, sublinhado ou riscado do texto entre os dois pontos (None se não pegou texto)."""
         with PDFIUM_LOCK:
-            quads = self._text_quads(page_index, start_pdf, end_pdf)
-
+            quads = self._text_quads(self._current_page, start_pdf, end_pdf)
         if not quads:
-            return
-        self.annotation_state.add_pending(
-            AnnotationSpec(
-                page_index=page_index,
-                kind=tool,
-                color=self.annotation_state.active_color(),
-                quads=quads,
-            )
+            return None
+        return AnnotationSpec(
+            page_index=self._current_page,
+            kind=self.annotation_state.active_tool() or "highlight",
+            color=self.annotation_state.active_color(),
+            quads=quads,
         )
 
     def _text_quads(self, page_index: int, start_pdf, end_pdf) -> list:
@@ -1683,18 +1730,6 @@ class PdfViewer(QWidget):
                     rotation=self._page_geometry(page_index).rotation,
                 )
             )
-
-    def _place_stamp(self, page_index: int, pdf_point):
-        self.annotation_state.add_pending(
-            AnnotationSpec(
-                page_index=page_index,
-                kind="stamp",
-                color=self.annotation_state.active_color(),
-                position=pdf_point,
-                text=self.annotation_state.stamp_text(),
-                rotation=self._page_geometry(page_index).rotation,
-            )
-        )
 
     def _erase_pending_at(self, page_index: int, pdf_point):
         x, y = pdf_point

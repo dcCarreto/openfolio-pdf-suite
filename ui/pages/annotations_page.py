@@ -4,7 +4,7 @@ XFDF)."""
 
 import re
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -39,6 +39,7 @@ from ui.annotation_state import AnnotationState, DEFAULT_COLOR
 from ui.document_session import DocumentSession
 from ui.errors import show_error
 from ui.i18n import tr
+from ui.pending_history import PendingHistory
 from ui.preferences import preferences, remember_folder_of, start_folder
 from ui.tasks import call, run_task
 from ui.stamp_library import StampLibrary
@@ -115,10 +116,16 @@ class AnnotationsPage(QWidget):
     """Permite marcar o PDF aberto (realce, sublinhado, riscado, notas, caneta, carimbo)
     diretamente sobre o visualizador central, e gravar o resultado em um novo arquivo."""
 
+    edits_changed = Signal()  # as pendentes mudaram: desfazer/refazer delas podem ter mudado
+    edit_label = "anotação"  # o "Desfazer anotação" do menu
+
     def __init__(self, session: DocumentSession, annotation_state: AnnotationState, parent=None):
         super().__init__(parent)
         self.session = session
         self.annotation_state = annotation_state
+        self._history = PendingHistory(annotation_state, annotation_state.set_pending)
+        # Ligado depois do visualizador, que limpa as pendentes ao trocar de arquivo.
+        session.path_changed.connect(self._on_document_changed)
 
         self.source_bar = DocumentSourceBar(session)
 
@@ -208,7 +215,7 @@ class AnnotationsPage(QWidget):
         self.pending_label = QLabel()
         clear_button = QPushButton(tr("Limpar pendentes"))
         clear_button.clicked.connect(self.annotation_state.clear_pending)
-        annotation_state.pending_changed.connect(self._update_pending_label)
+        annotation_state.pending_changed.connect(self._on_pending_changed)
         self._update_pending_label()
 
         self.output_picker = FilePicker(
@@ -515,6 +522,29 @@ class AnnotationsPage(QWidget):
     def _update_pending_label(self):
         count = len(self.annotation_state.pending())
         self.pending_label.setText(tr("{count} anotação(ões) pendente(s)").format(count=count))
+
+    def _on_pending_changed(self):
+        self._history.changed()
+        self._update_pending_label()
+        self.edits_changed.emit()
+
+    def _on_document_changed(self):
+        self._history.reset()
+        self.edits_changed.emit()
+
+    # Ctrl+Z / Ctrl+Y da janela: as anotações pendentes vêm antes das versões do documento.
+
+    def can_undo_edit(self) -> bool:
+        return self._history.can_undo()
+
+    def can_redo_edit(self) -> bool:
+        return self._history.can_redo()
+
+    def undo_edit(self) -> None:
+        self._history.undo()
+
+    def redo_edit(self) -> None:
+        self._history.redo()
 
     def _save(self):
         input_path = self.session.path()

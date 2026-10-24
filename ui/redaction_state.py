@@ -75,6 +75,14 @@ class RedactionState(QObject):
             self.selection_changed.emit()
         self.pending_changed.emit()
 
+    def set_pending(self, rects: list[RedactionRect]) -> None:
+        """Troca a lista inteira (desfazer/refazer)."""
+        self._pending = list(rects)
+        if self._selected is not None and self._selected not in self._pending:
+            self._selected = None
+            self.selection_changed.emit()
+        self.pending_changed.emit()
+
     def selected(self) -> RedactionRect | None:
         return self._selected
 
