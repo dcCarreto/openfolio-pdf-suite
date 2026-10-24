@@ -11,6 +11,9 @@ depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no avi
 - Ctrl+Z desfaz as anotações e as áreas de redação ainda não gravadas, uma a uma, e Ctrl+Y as
   refaz; vale também para o que foi apagado e para "Limpar pendentes". Antes, o Ctrl+Z não fazia
   nada com elas.
+- Realce, sublinhado e riscado aparecem sobre o texto enquanto você arrasta, antes de soltar.
+- O carimbo aparece já no clique; arrastando, ele cresce a partir do clique no tamanho que você
+  quiser, sempre na proporção certa, sem distorcer o texto, e é gravado desse tamanho.
 
 ## 2026-10-24
 

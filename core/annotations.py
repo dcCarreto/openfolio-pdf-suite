@@ -38,7 +38,8 @@ from .tabular import write_table
 _NOTE_SIZE = 24
 _STAMP_SIZE = (160, 40)
 _INK_STROKE_WIDTH = 2.5
-_STAMP_FONT_SIZE = 14
+STAMP_FONT_SIZE = 14
+_MIN_STAMP_SCALE = 0.3  # menor que isso a letra fica ilegível
 
 
 @dataclass
@@ -56,6 +57,24 @@ class AnnotationSpec:
     # partir de `position`, e o texto do carimbo fica de pé também em páginas giradas.
     rotation: int = 0
     width: float = _INK_STROKE_WIDTH  # espessura do traço: caneta e formas
+    scale: float = 1.0  # tamanho do carimbo: caixa e letra crescem juntas, sem distorcer
+
+
+def stamp_size(spec: AnnotationSpec) -> tuple[float, float]:
+    return _STAMP_SIZE[0] * spec.scale, _STAMP_SIZE[1] * spec.scale
+
+
+def stamp_box(start: tuple[float, float], end: tuple[float, float], rotation: int) -> tuple[tuple[float, float], float]:
+    """(position, scale) do carimbo arrastado de `start` até `end`: a caixa cresce a partir de
+    `start` na direção do arrasto, sempre na proporção do carimbo (o lado mais puxado manda),
+    em pé na tela da página com esse /Rotate."""
+    (ux, uy), (vx, vy) = _VISUAL_AXES.get(rotation % 360, _VISUAL_AXES[0])
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    across, up = dx * ux + dy * uy, dx * vx + dy * vy  # o arrasto nos eixos da tela
+    scale = max(_MIN_STAMP_SCALE, abs(across) / _STAMP_SIZE[0], abs(up) / _STAMP_SIZE[1])
+    shift_x = -_STAMP_SIZE[0] * scale if across < 0 else 0.0
+    shift_y = -_STAMP_SIZE[1] * scale if up < 0 else 0.0
+    return (start[0] + shift_x * ux + shift_y * vx, start[1] + shift_x * uy + shift_y * vy), scale
 
 
 def _hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
@@ -161,8 +180,7 @@ def spec_rect(spec: AnnotationSpec) -> tuple[float, float, float, float]:
     if spec.kind == "stamp":
         assert spec.position is not None
         x, y = spec.position
-        width, height = _STAMP_SIZE
-        return _visual_box(x, y, width, height, spec.rotation)
+        return _visual_box(x, y, *stamp_size(spec), spec.rotation)
     raise ValueError(f"Tipo de anotação desconhecido: {spec.kind}")
 
 
@@ -240,17 +258,18 @@ def _border(width: float) -> DictionaryObject:
     return DictionaryObject({NameObject("/W"): FloatObject(width), NameObject("/S"): NameObject("/S")})
 
 
-def _stamp_appearance(writer: PdfWriter, width: float, height: float, text: str, color: str):
+def _stamp_appearance(writer: PdfWriter, width: float, height: float, text: str, color: str, scale: float = 1.0):
     """Conteúdo e recursos da aparência do carimbo, desenhados pelo reportlab com a fonte
     embutida (`core/fonts.py`): antes a aparência usava a Helvetica base14, e acentos fora
     do Latin-1, grego ou cirílico viravam "?". Um texto longo encolhe para caber na caixa."""
     register_fonts()
     r, g, b = _hex_to_rgb01(color)
-    available = width - 16
-    size: float = _STAMP_FONT_SIZE
+    margin = 8 * scale
+    available = width - 2 * margin
+    size: float = STAMP_FONT_SIZE * scale
     natural = text_width(text, SANS_BOLD, size)
     if natural > available > 0:
-        size = max(6.0, size * available / natural)
+        size = max(6.0 * scale, size * available / natural)
 
     def draw(canvas):
         canvas.setFillColorRGB(1, 1, 1)
@@ -260,7 +279,7 @@ def _stamp_appearance(writer: PdfWriter, width: float, height: float, text: str,
         canvas.rect(1, 1, width - 2, height - 2, stroke=1, fill=0)
         canvas.setFillColorRGB(r, g, b)
         canvas.setFont(SANS_BOLD, size)
-        canvas.drawString(8, height / 2 - size / 3, text)
+        canvas.drawString(margin, height / 2 - size / 3, text)
 
     return canvas_appearance(writer, width, height, draw)
 
@@ -351,7 +370,7 @@ def _build_annotation(writer: PdfWriter, spec: AnnotationSpec):
         return annotation
     if spec.kind == "stamp":
         rect = spec_rect(spec)
-        width, height = _STAMP_SIZE
+        width, height = stamp_size(spec)
         rotation = spec.rotation % 360
         (ux, uy), (vx, vy) = _VISUAL_AXES.get(rotation, _VISUAL_AXES[0])
         annotation = FreeText(
@@ -359,14 +378,14 @@ def _build_annotation(writer: PdfWriter, spec: AnnotationSpec):
             rect=rect,
             font="Helvetica-Bold",
             bold=True,
-            font_size=f"{_STAMP_FONT_SIZE}pt",
+            font_size=f"{STAMP_FONT_SIZE * spec.scale:g}pt",
             font_color=spec.color,
             border_color=spec.color,
             background_color="ffffff",
         )
         # A aparência é desenhada "de pé" num quadro local (0, 0, largura, altura); a
         # /Matrix gira esse quadro junto com os eixos da tela, e o leitor o encaixa no /Rect.
-        content, resources = _stamp_appearance(writer, width, height, spec.text, spec.color)
+        content, resources = _stamp_appearance(writer, width, height, spec.text, spec.color, spec.scale)
         appearance_ref = _make_appearance_stream(
             writer,
             (0, 0, width, height),

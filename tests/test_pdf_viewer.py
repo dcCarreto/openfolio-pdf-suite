@@ -12,7 +12,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox
 from reportlab.pdfgen import canvas as rl_canvas
 
-from core.annotations import AddAnnotations, AnnotationSpec
+from core.annotations import AddAnnotations, AnnotationSpec, spec_rect
 from core.protect import ProtectPDF
 from core.redaction import RedactionRect
 from tests.conftest import HARD_PAGE_LAYOUTS
@@ -481,3 +481,58 @@ def test_selecting_an_existing_comment_shows_its_page_outlined(three_page_pdf):
 
     assert viewer._current_page == 2
     assert viewer._with_pending_annotations(before, 2) is not before
+
+
+def _word_drag(viewer, path, word):
+    """Os pontos do widget do início e do fim da palavra (o inverso de _widget_point_to_pdf)."""
+    document = pdfium.PdfDocument(str(path))
+    match = DocumentSearch(document).find_all(word)[0]
+    page_height = document[0].get_size()[1]
+    scale = viewer._scale
+    return (match.left * scale, (page_height - match.top) * scale), (match.right * scale, (page_height - match.bottom) * scale)
+
+
+@pytest.mark.parametrize("tool", ["highlight", "underline", "strikeout"])
+def test_text_markup_is_previewed_while_dragging(tmp_path, tool):
+    _app()
+    path = tmp_path / "doc.pdf"
+    _make_pdf_with_text(path, ["uma palavra especial chave aqui"])
+    session, annotation_state = DocumentSession(), AnnotationState()
+    viewer = PdfViewer(session, annotation_state, RedactionState())
+    session.open(str(path))
+    annotation_state.set_page_active(True)
+    annotation_state.set_tool(tool)
+    start, end = _word_drag(viewer, path, "chave")
+
+    before = viewer._page_labels[0].pixmap().toImage()
+    viewer._on_canvas_pressed(*start)
+    viewer._on_canvas_moved(*end)
+    assert viewer._page_labels[0].pixmap().toImage() != before  # aparece antes de soltar
+    assert annotation_state.pending() == []
+    viewer._on_canvas_released(*end)
+    assert [spec.kind for spec in annotation_state.pending()] == [tool]
+
+
+def test_stamp_is_previewed_and_sized_by_the_drag(tmp_path):
+    _app()
+    path = tmp_path / "doc.pdf"
+    _make_pdf_with_text(path, ["texto"])
+    session, annotation_state = DocumentSession(), AnnotationState()
+    viewer = PdfViewer(session, annotation_state, RedactionState())
+    session.open(str(path))
+    annotation_state.set_page_active(True)
+    annotation_state.set_tool("stamp")
+    scale = viewer._scale
+
+    before = viewer._page_labels[0].pixmap().toImage()
+    viewer._on_canvas_pressed(20 * scale, 200 * scale)
+    assert viewer._page_labels[0].pixmap().toImage() != before  # o carimbo já aparece no clique
+    viewer._on_canvas_moved(260 * scale, 210 * scale)
+    viewer._on_canvas_released(260 * scale, 210 * scale)
+    (spec,) = annotation_state.pending()
+    assert spec.scale == pytest.approx(1.5)  # 240 pt de arrasto num carimbo de 160 pt
+    assert spec_rect(spec) == pytest.approx((20, 40, 260, 100))  # cresce do clique para baixo e à direita
+
+    viewer._on_canvas_pressed(20 * scale, 200 * scale)  # clique sem arrastar: tamanho padrão
+    viewer._on_canvas_released(20 * scale, 200 * scale)
+    assert annotation_state.pending()[-1].scale == 1.0
