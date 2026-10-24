@@ -4,6 +4,16 @@ O OpenFolio PDF Suite não tem número de versão: há uma só, que recebe atual
 atualização é identificada pela data em que foi publicada e só é instalada se você aceitar,
 depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no aviso do app).
 
+## Próxima atualização
+
+Ainda não publicada.
+
+### Uso
+
+- O modo de exibição das páginas (página única, rolagem contínua, página dupla ou livro)
+  escolhido no visualizador ou em Exibir > Páginas fica guardado para a próxima vez que o app
+  abrir.
+
 ## 2026-10-23
 
 Primeira atualização depois da beta 0.2.0-beta.1. O app ainda não tem assinatura de código: no

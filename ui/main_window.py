@@ -199,6 +199,11 @@ class MainWindow(QMainWindow):
         self._default_shortcuts: dict[str, list[QKeySequence]] = {}  # chave do comando -> de fábrica
 
         self._build_ui()
+        if self._preferences.page_layout() in viewer_layouts.LAYOUTS:
+            self.viewer.set_layout(self._preferences.page_layout())  # antes do menu, que o marca
+        # Só a escolha do usuário fica guardada: uma ferramenta de desenho força a página única.
+        for button in (self.viewer.single_page_button, self.viewer.continuous_button, self.viewer.double_page_button):
+            button.clicked.connect(self._remember_page_layout)
         self._build_menu_bar()
         self._restore_layout()
         apply_titlebar(self)
@@ -364,6 +369,7 @@ class MainWindow(QMainWindow):
             action.setCheckable(True)
             action.setChecked(key == self.viewer.page_layout())
             action.triggered.connect(lambda _checked=False, k=key: self.viewer.set_layout(k))
+            action.triggered.connect(self._remember_page_layout)
             layout_group.addAction(action)
             self._layout_actions[key] = action
         view_menu.addSeparator()
@@ -754,6 +760,11 @@ class MainWindow(QMainWindow):
         page = self._ensure_page(row)
         page.mode_combo.setCurrentIndex(1)
         page._apply_verify()
+
+    def _remember_page_layout(self) -> None:
+        """O modo de exibição escolhido (barra do visualizador ou Exibir > Páginas) vale para as
+        próximas sessões."""
+        self._preferences.set_page_layout(self.viewer.page_layout())
 
     def set_theme(self, key: str) -> None:
         """Exibir > Tema: aplica e guarda para as próximas sessões."""

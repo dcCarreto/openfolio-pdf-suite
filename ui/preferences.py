@@ -74,6 +74,16 @@ class Preferences:
     def set_theme(self, theme: str) -> None:
         self._set("ui/theme", theme)
 
+    # -- visualizador ---------------------------------------------------------------
+
+    def page_layout(self) -> str | None:
+        """O modo de exibição que o usuário escolheu por último (ver `ui/viewer/pdf_viewer.py`)."""
+        value = self._get("viewer/layout")
+        return None if value is None else str(value)
+
+    def set_page_layout(self, layout: str) -> None:
+        self._set("viewer/layout", layout)
+
     # -- verificação de atualização (A17) -----------------------------------------
 
     def check_updates_on_start(self) -> bool:

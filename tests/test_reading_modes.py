@@ -116,6 +116,27 @@ def test_view_menu_follows_the_toolbar(tmp_path):
     window.session.clear()
 
 
+def test_the_chosen_layout_is_remembered_but_not_the_one_a_drawing_tool_forces(tmp_path):
+    from ui.main_window import MainWindow
+
+    QApplication.instance() or QApplication([])
+    settings = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
+    window = MainWindow(settings=settings)
+    window._layout_actions[BOOK].trigger()  # pelo menu
+    window.annotation_state.set_page_active(True)
+    window.annotation_state.set_tool("highlight")  # força a página única: não conta
+    assert window.viewer.page_layout() == SINGLE
+    window.close()
+
+    reopened = MainWindow(settings=settings)
+    assert reopened.viewer.page_layout() == BOOK and reopened._layout_actions[BOOK].isChecked()
+    reopened.session.open(_pdf(tmp_path / "doc.pdf"))  # sem documento, a barra fica desligada
+    reopened.viewer.continuous_button.click()  # pela barra do visualizador
+    reopened.session.clear()
+    reopened.close()
+    assert MainWindow(settings=settings).viewer.page_layout() == CONTINUOUS
+
+
 def test_presentation_shows_one_page_fitted_and_returns_where_it_stopped(viewer):
     window = viewer.start_presentation()
     window.resize(800, 600)
