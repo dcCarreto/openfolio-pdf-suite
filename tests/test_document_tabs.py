@@ -47,6 +47,8 @@ def test_each_pdf_gets_a_tab_and_the_menus_follow_the_tab_in_front(window, tmp_p
     page._apply()
     assert wait_for_tasks()
     assert window.tabs.tabText(3) == "dois.pdf *" and window._undo_action.isEnabled()
+    assert second.save_button.isEnabled() and not first.save_button.isEnabled()  # a barra segue cada documento
+    assert first.print_button.isEnabled() and second.print_button.isEnabled()
 
     window.tabs.setCurrentWidget(first)
     assert window.windowTitle() == "um.pdf — OpenFolio PDF Suite"

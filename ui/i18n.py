@@ -1893,4 +1893,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     "Recentes": "Recent",
     "Os PDFs abertos aparecem aqui.": "The PDFs you open show up here.",
+    "Salvar (Ctrl+S)": "Save (Ctrl+S)",
+    "Imprimir... (Ctrl+P)": "Print... (Ctrl+P)",
 }

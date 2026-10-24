@@ -35,7 +35,7 @@ from ui.redaction_state import RedactionState
 from ui.tasks import TaskManager
 from ui.tools import AREA_PICK_PAGES, QUICK_TOOLS, ROW_OF, SECTIONS
 from ui.viewer.pdf_viewer import PdfViewer
-from ui.viewer.viewer_icons import build_thumbnails_icon
+from ui.viewer.viewer_icons import build_print_icon, build_save_icon, build_thumbnails_icon
 from ui.widget_state import capture_state, restore_state
 from ui.widgets.page_container import PageContainer
 from ui.widgets.task_status import TaskStatus
@@ -105,6 +105,12 @@ class DocumentTab(QWidget):
         self.viewer.setMinimumWidth(VIEWER_MIN_WIDTH)
         self.viewer.verify_signatures_requested.connect(self._verify_signatures)
         self.viewer.thumbnails_button.hide()  # a coluna de ícones da esquerda faz o papel dele
+        # Salvar e Imprimir logo depois de "Abrir"; a janela liga os cliques.
+        self.save_button = self._toolbar_button(build_save_icon(), "Salvar (Ctrl+S)")
+        self.print_button = self._toolbar_button(build_print_icon(), "Imprimir... (Ctrl+P)")
+        toolbar_layout = self.viewer.toolbar.layout()
+        toolbar_layout.insertWidget(1, self.save_button)
+        toolbar_layout.insertWidget(2, self.print_button)
 
         self.tool_header = QWidget()
         self.tool_header.setObjectName("toolHeader")
@@ -194,6 +200,17 @@ class DocumentTab(QWidget):
         layout.addWidget(self.tool_header)
         layout.addWidget(body, 1)
         self._update_left_rail()
+
+    def _toolbar_button(self, icon, tooltip: str) -> QPushButton:
+        button = QPushButton()
+        button.setObjectName("viewerToolButton")
+        button.setIcon(icon)
+        button.setIconSize(QSize(18, 18))
+        button.setFixedSize(30, 30)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setToolTip(tr(tooltip))
+        button.setEnabled(False)
+        return button
 
     # -- painel lateral ----------------------------------------------------------
 
@@ -349,6 +366,8 @@ class DocumentTab(QWidget):
         for row, button in self._quick_buttons.items():
             button.setToolTip(tr(SECTIONS[row][1]))
         self.all_tools_button.setToolTip(tr("Todas as ferramentas"))
+        self.save_button.setToolTip(tr("Salvar (Ctrl+S)"))
+        self.print_button.setToolTip(tr("Imprimir... (Ctrl+P)"))
         self._update_tool_header()
 
     def is_empty(self) -> bool:

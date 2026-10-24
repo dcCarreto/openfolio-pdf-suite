@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTabBar,
     QTabWidget,
+    QToolButton,
     QWidget,
 )
 
@@ -53,6 +54,7 @@ from ui.tools import ROW_OF, SECTIONS
 from ui.tools_center import ToolsCenter
 from ui.update_dialog import UpdateDialog
 from ui.viewer import pdf_viewer as viewer_layouts
+from ui.viewer.viewer_icons import build_close_icon
 
 logger = logging.getLogger(__name__)
 
@@ -168,9 +170,21 @@ class MainWindow(QMainWindow):
         for button in (doc.viewer.single_page_button, doc.viewer.continuous_button, doc.viewer.double_page_button):
             button.clicked.connect(lambda _checked=False, d=doc: self._remember_page_layout(d))
         doc.tasks.finished.connect(lambda outcome, d=doc: self._on_task_finished(d, outcome))
+        doc.save_button.clicked.connect(self.save_document)
+        doc.print_button.clicked.connect(self.print_document)
         doc.task_status.hide()
         self.statusBar().addPermanentWidget(doc.task_status)
-        self.tabs.addTab(doc, sidebar_icons.build_create_icon(), doc.title())
+        index = self.tabs.addTab(doc, build_app_icon(), doc.title())
+        # O "x" nas cores do tema, no lugar do botão nativo (vermelho no Windows).
+        close_button = QToolButton()
+        close_button.setObjectName("tabCloseButton")
+        close_button.setIcon(build_close_icon())
+        close_button.setIconSize(QSize(14, 14))
+        close_button.setFixedSize(20, 20)
+        close_button.setAutoRaise(True)
+        close_button.setToolTip(tr("Fechar documento"))
+        close_button.clicked.connect(lambda _checked=False, d=doc: self.close_document(d))
+        self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.RightSide, close_button)
         self._apply_splitter_state(doc)
         self.tabs.setCurrentWidget(doc)
         return doc
@@ -622,6 +636,11 @@ class MainWindow(QMainWindow):
         self._properties_action.setEnabled(has_document and not busy)
         self._presentation_action.setEnabled(has_document)
         self._close_tab_action.setEnabled(doc is not None)
+        for each in self.documents():  # os botões da barra de cada documento seguem o menu
+            each_session = each.session
+            each_busy = each.tasks.is_busy()
+            each.save_button.setEnabled(each_session.path() is not None and each_session.is_modified() and not each_busy)
+            each.print_button.setEnabled(each_session.path() is not None and not each_busy)
         if hasattr(self, "_language_switcher"):
             self._language_switcher.setEnabled(not self._any_busy())
 

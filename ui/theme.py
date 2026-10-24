@@ -346,6 +346,16 @@ QTabWidget#documentTabs > QTabBar::tab:selected {{
     border-bottom: 2px solid {_ACCENT};
 }}
 
+QToolButton#tabCloseButton {{
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+}}
+
+QToolButton#tabCloseButton:hover {{
+    background-color: rgba({_OVERLAY}, 30);
+}}
+
 QWidget#viewerToolbar {{
     background-color: {_PANEL};
     border-bottom: 1px solid {_BORDER};
