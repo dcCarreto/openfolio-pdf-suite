@@ -10,7 +10,7 @@ import time
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtWidgets import QApplication, QListWidget, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from core.progress import OperationCancelled, Progress
 from core.redaction import RedactDocument, RedactionRect
@@ -160,7 +160,11 @@ def test_window_fits_a_1280x720_screen():
         window.show()
         QApplication.processEvents()
         assert window.width() <= 1280
-        assert all(size > 0 for size in window.splitter.sizes())
+        window.open_tool(window._row_of["CompressPage"])  # documento e painel da ferramenta lado a lado
+        QApplication.processEvents()
+        splitter = window.splitter
+        visible = [splitter.sizes()[i] for i in range(splitter.count()) if splitter.widget(i).isVisible()]
+        assert len(visible) == 2 and all(size > 0 for size in visible)  # sem documento, o painel lateral some
     finally:
         window.close()
 
@@ -172,7 +176,7 @@ def test_tool_panel_is_locked_while_a_task_runs():
     window = MainWindow()
     release = threading.Event()
     try:
-        run_task(window, "Lenta", lambda progress: release.wait(5))
+        run_task(window.current_document(), "Lenta", lambda progress: release.wait(5))
         QApplication.processEvents()
         assert not window.stack.isEnabled()
         assert window.task_status.isVisibleTo(window)
@@ -193,8 +197,7 @@ def test_language_change_keeps_what_the_user_typed(tmp_path):
     try:
         watermark_row = window._row_of["WatermarkPage"]
         merge_row = window._row_of["MergePage"]
-        window.sidebar.setCurrentRow(watermark_row)
-        watermark = window.page(watermark_row)
+        watermark = window.open_tool(watermark_row)
         watermark.text_edit.setText("CONFIDENCIAL")
         watermark.font_size_spin.setValue(72)
         watermark.output_picker.restore((str(tmp_path / "saida.pdf"), None))
@@ -210,9 +213,8 @@ def test_language_change_keeps_what_the_user_typed(tmp_path):
         assert new_watermark.font_size_spin.value() == 72
         assert new_watermark.output_picker.path() == str(tmp_path / "saida.pdf")
         assert window.page(merge_row).file_list_editor.paths() == ["a.pdf", "b.pdf"]
-        assert window.sidebar.currentRow() == watermark_row
-        sidebar = window.findChild(QListWidget, "sidebar")
-        assert sidebar.item(merge_row).text() == "Merge"
+        assert window.document.current_tool() == watermark_row
+        assert window.tools_center.cards[merge_row].text() == "Merge"
     finally:
         window.close()
 

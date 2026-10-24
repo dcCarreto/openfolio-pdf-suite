@@ -99,26 +99,28 @@ def test_a_message_that_is_not_a_list_of_paths_is_ignored(app, make_pdf):
     assert received == [[os.path.abspath(pdf)]]  # só a mensagem válida, que veio depois
 
 
-def test_each_pdf_opens_in_a_new_window_unless_one_is_empty(app, make_pdf, tmp_path):
+def test_each_pdf_opens_in_a_tab_of_the_open_window(app, make_pdf, tmp_path):
     from ui.main_window import MainWindow
 
     settings = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
     windows = AppWindows(lambda: MainWindow(settings=settings))
     first, second = (str(make_pdf(f"{n}.pdf", [(200, 200)])) for n in ("um", "dois"))
     try:
-        windows.open([])  # o app abrindo sem arquivo
-        windows.open([first])  # vai para a janela vazia
+        windows.open([])  # o app abrindo sem arquivo: a janela, na aba Início
+        windows.open([first])
         windows.open([second])
+        windows.open([first])  # já aberto: só volta para a frente
 
-        opened = windows.windows()
-        assert [w.session.path() for w in opened] == [first, second]
-        assert opened[1].pos() != opened[0].pos()
+        (window,) = windows.windows()
+        documents = window.documents()
+        assert [d.session.path() for d in documents] == [first, second]
+        assert window.document is documents[0]
 
-        # Uma operação numa janela não trava a outra.
+        # Uma operação num documento não trava o outro.
         release = threading.Event()
-        assert run_task(opened[0].sidebar, "Lenta", lambda _progress: release.wait(5))
-        assert task_manager(opened[0].sidebar).is_busy()
-        assert not task_manager(opened[1].sidebar).is_busy()
+        assert run_task(documents[0].stack, "Lenta", lambda _progress: release.wait(5))
+        assert task_manager(documents[0].stack).is_busy()
+        assert not task_manager(documents[1].stack).is_busy()
         release.set()
         assert wait_for_tasks()
     finally:
