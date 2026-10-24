@@ -75,6 +75,13 @@ class Preferences:
     def set_theme(self, theme: str) -> None:
         self._set("ui/theme", theme)
 
+    def animations(self) -> bool:
+        """Exibir > Animações da interface: ligadas até o usuário desligar."""
+        return str(self._get("ui/animations", "true")).lower() != "false"
+
+    def set_animations(self, enabled: bool) -> None:
+        self._set("ui/animations", "true" if enabled else "false")
+
     # -- visualizador ---------------------------------------------------------------
 
     def page_layout(self) -> str | None:

@@ -1795,6 +1795,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Escuro": "Dark",
     "Claro": "Light",
     "Seguir o sistema": "Follow the system",
+    "Animações da interface": "Interface animations",
     # A15 — apresentação e página dupla
     "Apresentação": "Presentation",
     "Página dupla": "Two pages",

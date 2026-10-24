@@ -384,6 +384,10 @@ class MainWindow(QMainWindow):
             action.triggered.connect(lambda _checked=False, k=key: self.set_theme(k))
             theme_group.addAction(action)
             self._theme_actions[key] = action
+        self._animations_action = command(view_menu, "view.animations", tr("Animações da interface"))
+        self._animations_action.setCheckable(True)
+        self._animations_action.setChecked(self._preferences.animations())
+        self._animations_action.toggled.connect(self._preferences.set_animations)
 
         help_menu = menu_bar.addMenu(tr("Ajuda"))
         update_action = command(help_menu, "help.check_updates", tr("Verificar atualizações..."))

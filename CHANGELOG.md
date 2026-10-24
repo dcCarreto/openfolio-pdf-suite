@@ -6,6 +6,13 @@ depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no avi
 
 ## Próxima atualização
 
+### Visual
+
+- Cores novas nos temas escuro e claro, com contraste conferido para leitura, e a fonte Inter
+  embutida no app (licença livre OFL), igual em todos os sistemas.
+- O foco do teclado aparece em botões, campos, caixas de marcar e abas.
+- Exibir > Animações da interface liga ou desliga as transições da interface.
+
 ### Anotações e redação
 
 - Ctrl+Z desfaz as anotações e as áreas de redação ainda não gravadas, uma a uma, e Ctrl+Y as

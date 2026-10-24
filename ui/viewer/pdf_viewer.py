@@ -250,6 +250,7 @@ class PdfViewer(QWidget):
         self.content_stack.addWidget(self._build_empty_state())
 
         self.scroll_area = QScrollArea()
+        self.scroll_area.setObjectName("ViewerCanvas")
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.verticalScrollBar().valueChanged.connect(self._update_visible_pages)
         self.scroll_area.verticalScrollBar().rangeChanged.connect(self._apply_pending_scroll)

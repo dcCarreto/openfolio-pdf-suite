@@ -5,12 +5,14 @@ corretamente - suporte inconsistente entre plataformas (o bug das bandeiras
 veio exatamente disso). Desenhar cada ícone como um glifo vetorial simples
 garante o mesmo visual em qualquer sistema operacional.
 
-O traço usa a cor do texto do tema na hora de pintar (A14): trocar entre o tema
-escuro e o claro não exige recriar os ícones já postos em botões e listas.
+O traço usa a cor do tema e do estado na hora de pintar (`ui.theme.icon_color`): trocar
+entre o tema escuro e o claro não exige recriar os ícones já postos em botões e listas.
 """
 
 from PySide6.QtCore import QRect, QSize, Qt
-from PySide6.QtGui import QColor, QGuiApplication, QIcon, QIconEngine, QPainter, QPalette, QPen, QPixmap
+from PySide6.QtGui import QIcon, QIconEngine, QPainter, QPen, QPixmap
+
+from ui.theme import icon_color
 
 DEFAULT_SIZE = 22
 
@@ -21,16 +23,12 @@ class _ThemedIconEngine(QIconEngine):
         self._draw = draw
         self._size = size
 
-    def _color(self, mode: QIcon.Mode) -> QColor:
-        group = QPalette.ColorGroup.Disabled if mode == QIcon.Mode.Disabled else QPalette.ColorGroup.Normal
-        return QGuiApplication.palette().color(group, QPalette.ColorRole.WindowText)
-
     def paint(self, painter: QPainter, rect: QRect, mode: QIcon.Mode, state: QIcon.State) -> None:
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.translate(rect.topLeft())
         painter.scale(rect.width() / self._size, rect.height() / self._size)
-        pen = QPen(self._color(mode))
+        pen = QPen(icon_color(mode, state))
         pen.setWidthF(1.6)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
