@@ -4,7 +4,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -16,6 +15,7 @@ from ui.i18n import tr, tr_message
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 
 class AccessibilityPage(QWidget):
@@ -25,6 +25,7 @@ class AccessibilityPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -59,6 +60,7 @@ class AccessibilityPage(QWidget):
         note.setWordWrap(True)
 
         check_button = QPushButton(tr("Verificar"))
+        self.action_buttons.append(check_button)
         check_button.clicked.connect(self._check)
 
         layout.addWidget(note)
@@ -88,6 +90,7 @@ class AccessibilityPage(QWidget):
         self.fix_title_edit.setPlaceholderText(tr("Título do documento"))
 
         fix_button = QPushButton(tr("Corrigir"))
+        self.action_buttons.append(fix_button)
         fix_button.clicked.connect(self._fix)
 
         layout.addWidget(note)
@@ -106,19 +109,19 @@ class AccessibilityPage(QWidget):
     def _check(self):
         input_path = self.session.path()
         if not input_path:
-            QMessageBox.warning(self, tr("Acessibilidade"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Acessibilidade"), tr("Abra um PDF para começar."))
             return
 
         task = call(CheckAccessibility().run, input_path)
 
         def done(report):
             if report.is_compliant:
-                QMessageBox.information(
+                notify_success(
                     self, tr("Acessibilidade"), tr("Nenhum problema encontrado nas verificações realizadas.")
                 )
             else:
                 issues_text = "\n".join("• " + tr_message(issue) for issue in report.issues)
-                QMessageBox.warning(
+                notify_error(
                     self, tr("Acessibilidade"), tr("Problemas encontrados:\n{issues}").format(issues=issues_text)
                 )
 
@@ -137,20 +140,20 @@ class AccessibilityPage(QWidget):
         title = self.fix_title_edit.text().strip()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Acessibilidade"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Acessibilidade"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Acessibilidade"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Acessibilidade"), tr("Escolha o arquivo de saída."))
             return
         if not language or not title:
-            QMessageBox.warning(self, tr("Acessibilidade"), tr("Informe o idioma e o título."))
+            notify_error(self, tr("Acessibilidade"), tr("Informe o idioma e o título."))
             return
 
         task = call(FixBasicAccessibilityIssues().run, input_path, output_path, language=language, title=title)
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Acessibilidade"), tr("Idioma e título corrigidos com sucesso."))
+            notify_success(self, tr("Acessibilidade"), tr("Idioma e título corrigidos com sucesso."))
 
         run_task(
             self,

@@ -5,7 +5,8 @@
     ┃      ┃                              ┃                         ┃                              ┃tas       ┃
 
 Sem espaço para o documento, as miniaturas se recolhem sozinhas enquanto uma ferramenta está
-aberta e voltam quando ela fecha (`_apply_width_rules`).
+aberta e voltam quando ela fecha; numa janela estreita, o painel da ferramenta vira uma gaveta
+sobre o documento (`_apply_width_rules`). Cada ferramenta fica num `ToolPanel` (ui/tool_panel.py).
 
 Cada aba tem a própria sessão (desfazer, salvar), os próprios estados de marcação e a própria
 fila de operações: uma operação longa num documento não trava os outros. As ferramentas são
@@ -14,13 +15,13 @@ construídas na primeira vez em que são abertas na aba.
 
 import importlib
 from pathlib import Path
+from typing import cast
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QSize, Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QScrollArea,
     QSplitter,
     QStackedWidget,
     QToolButton,
@@ -28,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui import sidebar_icons
+from ui import sidebar_icons, theme
 from ui.annotation_state import AnnotationState
 from ui.area_pick_state import AreaPickState
 from ui.document_session import DocumentSession
@@ -36,12 +37,12 @@ from ui.i18n import tr
 from ui.measure_state import MeasureState
 from ui.redaction_state import RedactionState
 from ui.tasks import TaskManager
+from ui.tool_panel import ToolPanel
 from ui.top_bar import BusySpinner, TabCloseButton
 from ui.tools import AREA_PICK_PAGES, QUICK_TOOLS, ROW_OF, SECTIONS
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.viewer.viewer_icons import build_print_icon, build_save_icon, build_thumbnails_icon
 from ui.widget_state import capture_state, restore_state
-from ui.widgets.page_container import PageContainer
 from ui.widgets.task_status import TaskStatus
 
 PANEL_WIDTH = 344
@@ -55,7 +56,8 @@ RIGHT_RAIL_WIDTH = 52
 VIEWER_MIN_WIDTH = 320
 CENTER_MIN_WIDTH = 640  # menos que isso com uma ferramenta aberta: as miniaturas se recolhem
 CROWDED_WIDTH = 1280  # abaixo disso, ferramenta aberta sempre recolhe as miniaturas
-NARROW_WIDTH = 1180  # abaixo disso, a barra do visualizador guarda parte dos botões no "..."
+NARROW_WIDTH = 1180  # abaixo disso, parte da barra do visualizador vai para o "..." e o painel vira gaveta
+DRAWER_WIDTH = 340
 
 # Os botões da coluna da esquerda, na ordem das abas do painel lateral do visualizador.
 _LEFT_RAIL = [
@@ -97,6 +99,9 @@ class DocumentTab(QWidget):
         self._tool = -1
         self._crowded = False  # ferramenta aberta sem espaço para as miniaturas
         self._side_auto_hidden = False  # as miniaturas se recolheram sozinhas (voltam depois)
+        self._drawer = False  # janela estreita: o painel flutua sobre o documento
+        self._drawer_hidden = False  # gaveta fechada com Esc ou clique na página (a ferramenta segue aberta)
+        self._busy_panel: ToolPanel | None = None
 
         self._build_ui()
         self.task_status = TaskStatus(self.tasks)  # vai para a barra de status da janela
@@ -107,6 +112,7 @@ class DocumentTab(QWidget):
 
         self.tasks.started.connect(self.session.note_operation)
         self.tasks.started.connect(self._on_task_started)
+        self.tasks.progress_changed.connect(self._on_task_progress)
         self.tasks.finished.connect(self._on_task_finished)
         self.session.history_changed.connect(self.changed)
         self.session.path_changed.connect(self.changed)
@@ -134,42 +140,16 @@ class DocumentTab(QWidget):
         toolbar_layout.insertWidget(1, self.save_button)
         toolbar_layout.insertWidget(2, self.print_button)
 
-        self.tool_header = QWidget()
-        self.tool_header.setObjectName("toolHeader")
-        self.tool_header.setFixedHeight(56)
-        header_layout = QHBoxLayout(self.tool_header)
-        header_layout.setContentsMargins(12, 6, 12, 6)
-        self._tool_icon = QLabel()
-        self._tool_title = QLabel()
-        self._tool_title.setObjectName("toolHeaderTitle")
-        self.close_tool_button = QPushButton(tr("Fechar"))
-        self.close_tool_button.setObjectName("closeToolButton")
-        self.close_tool_button.setProperty("ofVariant", "ghost")
-        self.close_tool_button.clicked.connect(self.close_tool)
-        header_layout.addWidget(self._tool_icon)
-        header_layout.addWidget(self._tool_title)
-        header_layout.addStretch()
-        header_layout.addWidget(self.close_tool_button)
-
+        # Um painel por ferramenta, construído na primeira vez em que ela é aberta.
         self.stack = QStackedWidget()
         self.stack.setObjectName("ToolStack")
+        self.stack.setMinimumWidth(PANEL_MIN_WIDTH)
+        self.stack.setMaximumWidth(PANEL_MAX_WIDTH)
         for _section in SECTIONS:
-            scroll_area = QScrollArea()
-            scroll_area.setObjectName("toolPanelScroll")
-            scroll_area.setWidgetResizable(True)
-            self.stack.addWidget(scroll_area)
-
-        # O painel da ferramenta: o nome dela no topo e o formulário embaixo.
-        self.tool_panel = QWidget()
-        self.tool_panel.setObjectName("ToolPanel")
-        self.tool_panel.setMinimumWidth(PANEL_MIN_WIDTH)
-        self.tool_panel.setMaximumWidth(PANEL_MAX_WIDTH)
-        panel_layout = QVBoxLayout(self.tool_panel)
-        panel_layout.setContentsMargins(0, 0, 0, 0)
-        panel_layout.setSpacing(0)
-        panel_layout.addWidget(self.tool_header)
-        panel_layout.addWidget(self.stack, 1)
-        self.tool_panel.hide()
+            self.stack.addWidget(QWidget())
+        self.stack.hide()
+        self.tool_panel = self.stack
+        self.viewer.scroll_area.viewport().installEventFilter(self)  # clique na página fecha a gaveta
 
         side_panel = self.viewer.side_panel
         side_panel.use_external_rail()
@@ -263,6 +243,8 @@ class DocumentTab(QWidget):
     def _update_left_rail(self, *_args):
         side_panel = self.viewer.side_panel
         has_document = self.session.path() is not None
+        for button in self._quick_buttons.values():  # sem documento, os trilhos esperam um PDF
+            button.setEnabled(has_document)
         for index, button in enumerate(self._left_buttons):
             button.setVisible(side_panel.isTabVisible(index))
             button.setEnabled(has_document)
@@ -294,12 +276,32 @@ class DocumentTab(QWidget):
         page = self._pages.get(row)
         if page is None:
             page = self._page_content(row)
-            _icon, title, subtitle, _module, _class = SECTIONS[row]
-            self.stack.widget(row).setWidget(PageContainer(tr(title), tr(subtitle), page, show_title=False))
+            icon, title, subtitle, _module, _class = SECTIONS[row]
+            panel = ToolPanel(getattr(sidebar_icons, icon)(), tr(title), tr(subtitle), page, self.session, self.tasks)
+            panel.close_requested.connect(self.close_tool)
+            old = self.stack.widget(row)
+            self.stack.removeWidget(old)
+            self.stack.insertWidget(row, panel)
+            old.deleteLater()
+            if row == self._tool:
+                self.stack.setCurrentIndex(row)
             self._pages[row] = page
             if hasattr(page, "edits_changed"):
                 page.edits_changed.connect(self.changed)
         return page
+
+    def panel(self, row: int) -> ToolPanel:
+        """O painel (cabeçalho, seções e rodapé) da ferramenta da linha `row`."""
+        self.page(row)
+        return cast(ToolPanel, self.stack.widget(row))
+
+    def current_panel(self) -> ToolPanel | None:
+        return self.panel(self._tool) if self._tool >= 0 else None
+
+    def run_current_tool(self) -> bool:
+        """Ctrl+Enter: a ação principal da ferramenta aberta."""
+        panel = self.current_panel()
+        return panel is not None and panel.run()
 
     def pages(self) -> dict[int, QWidget]:
         return self._pages
@@ -307,18 +309,22 @@ class DocumentTab(QWidget):
     def open_tool(self, row: int) -> QWidget:
         """Abre a ferramenta no painel da direita, com a faixa do nome dela no topo."""
         page = self.page(row)
-        first_time = not self.tool_panel.isVisibleTo(self)
-        self.stack.setCurrentIndex(row)
-        self.tool_panel.show()
-        # Provisório: o formulário que não cabe nos 344 px alarga o painel (até 480); some quando
-        # todas as ferramentas seguirem o padrão de painel novo, que cabe na largura padrão.
-        wanted = max(PANEL_WIDTH, min(PANEL_MAX_WIDTH, self.stack.widget(row).widget().minimumSizeHint().width() + 14))
-        sizes = self.splitter.sizes()
-        if (first_time and sizes[2] < PANEL_MIN_WIDTH) or sizes[2] < wanted:
-            total = sum(sizes)
-            self.splitter.setSizes([sizes[0], max(VIEWER_MIN_WIDTH, total - sizes[0] - wanted), wanted])
+        first_time = self._tool < 0
         self._tool = row
-        self._update_tool_header()
+        self.stack.setCurrentIndex(row)
+        self._drawer_hidden = False
+        self.stack.show()
+        if self._drawer:
+            self.stack.raise_()
+        else:
+            # Formulário mais largo que os 344 px (uma lista, uma tabela): o painel alarga até 480.
+            body = self.panel(row).body.minimumSizeHint().width()
+            wanted = max(PANEL_WIDTH, min(PANEL_MAX_WIDTH, body))
+            sizes = self.splitter.sizes()
+            if (first_time and sizes[2] < PANEL_MIN_WIDTH) or sizes[2] < wanted:
+                total = sum(sizes)
+                self.splitter.setSizes([sizes[0], max(VIEWER_MIN_WIDTH, total - sizes[0] - wanted), wanted])
+        self._update_quick_buttons()
         self._activate_marking(row)
         self._apply_width_rules()
         self.tool_changed.emit()
@@ -327,8 +333,8 @@ class DocumentTab(QWidget):
     def close_tool(self) -> None:
         """"Fechar" da faixa: o painel some e o documento ganha a largura."""
         self._tool = -1
-        self.tool_panel.hide()
-        self._update_tool_header()
+        self.stack.hide()
+        self._update_quick_buttons()
         self._activate_marking(-1)
         self._apply_width_rules()
         self.tool_changed.emit()
@@ -346,8 +352,9 @@ class DocumentTab(QWidget):
         espaço de novo."""
         width = self.width()
         self.viewer.set_compact(width < NARROW_WIDTH)
+        self._set_drawer(width < NARROW_WIDTH)
         # Pelas larguras padrão dos painéis: o divisor já espreme os dois quando falta espaço.
-        tool_open = self.tool_panel.isVisibleTo(self)
+        tool_open = self._tool >= 0
         center = width - LEFT_RAIL_WIDTH - RIGHT_RAIL_WIDTH - SIDE_WIDTH - PANEL_WIDTH
         # O centro precisa caber a barra do visualizador inteira (uns 700 px), não só 640.
         needed = max(CENTER_MIN_WIDTH, self.viewer.toolbar.minimumSizeHint().width())
@@ -364,8 +371,68 @@ class DocumentTab(QWidget):
             self.viewer.show_side_panel(True)
         self._update_left_rail()
 
+    # -- gaveta (janela estreita) -------------------------------------------------------
+
+    def _set_drawer(self, on: bool) -> None:
+        """Abaixo de 1180 px o painel sai do divisor e flutua sobre o documento, junto do
+        trilho da direita; acima disso, volta para o lugar."""
+        if on == self._drawer:
+            if on:
+                self._place_drawer()
+            return
+        self._drawer = on
+        self.stack.setProperty("drawer", on)
+        if on:
+            self.stack.setParent(self)
+            shadow = QGraphicsDropShadowEffect(self.stack)
+            shadow.setBlurRadius(24)
+            shadow.setOffset(0, 8)
+            shadow.setColor(QColor(0, 0, 0, 128) if theme.current_theme() == theme.DARK else QColor(27, 28, 41, 46))
+            self.stack.setGraphicsEffect(shadow)
+            self._place_drawer()
+        else:
+            self.stack.setGraphicsEffect(None)  # type: ignore[arg-type]
+            self.splitter.insertWidget(2, self.stack)
+        self.stack.style().unpolish(self.stack)
+        self.stack.style().polish(self.stack)
+        self.stack.setVisible(self._tool >= 0 and not (on and self._drawer_hidden))
+        if on:
+            self.stack.raise_()
+
+    def _place_drawer(self) -> None:
+        top = self.viewer.toolbar.height()
+        self.stack.setGeometry(self.width() - RIGHT_RAIL_WIDTH - DRAWER_WIDTH, top, DRAWER_WIDTH, self.height() - top)
+
+    def is_drawer_open(self) -> bool:
+        return self._drawer and self.stack.isVisibleTo(self)
+
+    def hide_drawer(self) -> None:
+        """Esc ou clique na página: a gaveta some, a ferramenta continua aberta (o botão dela
+        no trilho a traz de volta)."""
+        if self.is_drawer_open():
+            self._drawer_hidden = True
+            self.stack.hide()
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.MouseButtonPress and self.is_drawer_open():
+            self.hide_drawer()
+        return False
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape and (self.is_drawer_open() or self._tool >= 0):
+            if self.is_drawer_open():
+                self.hide_drawer()
+            else:
+                self.close_tool()
+            return
+        super().keyPressEvent(event)
+
     def _on_quick_tool(self, row: int):
-        if self._tool == row:
+        if self._tool == row and self._drawer and self._drawer_hidden:
+            self._drawer_hidden = False  # a gaveta estava fechada: volta
+            self.stack.show()
+            self.stack.raise_()
+        elif self._tool == row:
             self.close_tool()  # clicar na ferramenta aberta a fecha
         else:
             self.open_tool(row)
@@ -380,16 +447,9 @@ class DocumentTab(QWidget):
         self.measure_state.set_page_active(class_name == "MeasurePage")
         self.area_pick_state.set_active_page(self._pages.get(row))
 
-    def _update_tool_header(self):
+    def _update_quick_buttons(self):
         for row, button in self._quick_buttons.items():
             button.setChecked(row == self._tool)
-        if self._tool < 0:
-            self.tool_header.hide()
-            return
-        icon, title = SECTIONS[self._tool][0], SECTIONS[self._tool][1]
-        self._tool_icon.setPixmap(getattr(sidebar_icons, icon)().pixmap(20, 20))
-        self._tool_title.setText(tr(title))
-        self.tool_header.show()
 
     def page_with_edits(self):
         """A ferramenta aberta, se ela tem mudanças próprias a desfazer antes das do documento
@@ -406,14 +466,23 @@ class DocumentTab(QWidget):
 
     # -- operações em andamento --------------------------------------------------------
 
-    def _on_task_started(self, _title: str):
-        # Uma operação por vez em cada documento: o painel da ferramenta fica travado até ela
-        # terminar. O visualizador continua livre para navegar, dar zoom e buscar.
-        self.stack.setEnabled(False)
+    def _on_task_started(self, title: str):
+        # Uma operação por vez em cada documento: o painel da ferramenta mostra o andamento e
+        # trava as opções até ela terminar. O visualizador continua livre para navegar, dar
+        # zoom e buscar.
+        self._busy_panel = self.current_panel()
+        if self._busy_panel is not None:
+            self._busy_panel.task_started(title)
         self.changed.emit()
 
-    def _on_task_finished(self, _outcome: str):
-        self.stack.setEnabled(True)
+    def _on_task_progress(self, done: int, total: int, message: str):
+        if self._busy_panel is not None:
+            self._busy_panel.task_progress(done, total, message)
+
+    def _on_task_finished(self, outcome: str):
+        panel, self._busy_panel = self._busy_panel, None
+        if panel is not None:
+            panel.task_finished(outcome)
         self.changed.emit()
 
     # -- idioma, nome e fechamento --------------------------------------------------------
@@ -421,17 +490,14 @@ class DocumentTab(QWidget):
     def retranslate(self):
         """Traduz a aba sem perder o documento nem o que estava preenchido nas ferramentas (que
         são reconstruídas, ver `ui/widget_state.py`)."""
-        for row, old_page in list(self._pages.items()):
-            state = capture_state(old_page)
+        for row in list(self._pages):
+            state = capture_state(self.panel(row).body)
             del self._pages[row]
-            old_container = self.stack.widget(row).takeWidget()
-            restore_state(self.page(row), state)
-            if old_container is not None:
-                old_container.deleteLater()
+            self.page(row)
+            restore_state(self.panel(row).body, state)
         self.area_pick_state.set_active_page(self._pages.get(self._tool))
         self.viewer.retranslate()
         self.task_status.retranslate()
-        self.close_tool_button.setText(tr("Fechar"))
         for button, (_icon, tooltip) in zip(self._left_buttons, _LEFT_RAIL):
             button.setToolTip(tr(tooltip))
         for row, button in self._quick_buttons.items():
@@ -439,7 +505,7 @@ class DocumentTab(QWidget):
         self.all_tools_button.setToolTip(tr("Todas as ferramentas"))
         self.save_button.setToolTip(tr("Salvar (Ctrl+S)"))
         self.print_button.setToolTip(tr("Imprimir... (Ctrl+P)"))
-        self._update_tool_header()
+        self._update_quick_buttons()
 
     def is_empty(self) -> bool:
         return self.session.path() is None

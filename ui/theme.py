@@ -206,18 +206,54 @@ QStatusBar QLabel {{
     background-color: {t["panel"]};
 }}
 
-#ToolPanel {{
+/* -- painel de ferramenta (ui/tool_panel.py) ----------------------------------- */
+
+#ToolStack {{
+    background-color: {t["panel"]};
     border-left: 1px solid {t["border"]};
 }}
 
-#toolPanelScroll, #toolPanelScroll > QWidget, #toolPanelScroll > QWidget > QWidget {{
+#ToolStack[drawer="true"] {{
+    border: 1px solid {t["border_strong"]};
+}}
+
+#ToolHeader {{
+    border-bottom: 1px solid {t["border"]};
+}}
+
+QLabel#IconTile {{
+    background-color: {t["accent_fill"]};
+    border-radius: 8px;
+}}
+
+QLabel#ToolTitle {{
+    font-size: 15px;
+    font-weight: 600;
+}}
+
+QLabel#ResultTitle {{
+    font-weight: 600;
+}}
+
+#ToolScroll, #ToolScroll > QWidget, #ToolBody {{
     background-color: {t["panel"]};
     border: none;
 }}
 
-#toolHeader {{
+#ToolFooter {{
     background-color: {t["panel"]};
-    border-bottom: 1px solid {t["border"]};
+    border-top: 1px solid {t["border"]};
+}}
+
+QFrame#InputChip {{
+    background-color: {t["raised"]};
+    border: 1px solid {t["border"]};
+    border-radius: 8px;
+}}
+
+QFrame#InputChip[empty="true"] {{
+    background: transparent;
+    border: 1.5px dashed {t["border_strong"]};
 }}
 
 #documentNotice {{
@@ -393,18 +429,18 @@ QPushButton[ofVariant="primary"]:disabled, QPushButton#primaryButton:disabled {{
     color: {t["text3"]};
 }}
 
-QPushButton[ofVariant="ghost"], QPushButton#closeToolButton {{
+QPushButton[ofVariant="ghost"] {{
     background: transparent;
     border-color: transparent;
     color: {t["text2"]};
 }}
 
-QPushButton[ofVariant="ghost"]:hover, QPushButton#closeToolButton:hover {{
+QPushButton[ofVariant="ghost"]:hover {{
     background-color: {t["hover"]};
     color: {t["text"]};
 }}
 
-QPushButton[ofVariant="ghost"]:focus, QPushButton#closeToolButton:focus {{
+QPushButton[ofVariant="ghost"]:focus {{
     border: 2px solid {t["accent"]};
 }}
 
@@ -967,7 +1003,7 @@ QLabel#pageSubtitle, QLabel[ofRole="secondary"] {{
     color: {t["text2"]};
 }}
 
-QLabel#sectionTitle, QLabel#toolHeaderTitle {{
+QLabel#sectionTitle {{
     font-size: 15px;
     font-weight: 600;
 }}
@@ -1022,6 +1058,21 @@ QFrame[ofRole="result"][state="error"] {{
     background-color: {t["danger_fill"]};
     border: 1px solid {t["danger"]};
     border-radius: 8px;
+}}
+
+QFrame[ofRole="result"][state="info"] {{
+    background-color: {t["raised"]};
+    border: 1px solid {t["border_strong"]};
+    border-radius: 8px;
+}}
+
+#ViewerEmpty {{
+    background-color: {t["canvas"]};
+}}
+
+QLabel#EmptyTitle {{
+    font-size: 17px;
+    font-weight: 600;
 }}
 
 QFrame#DropZone {{

@@ -720,6 +720,29 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Buscar ferramentas e comandos": "Search tools and commands",
     "Idioma da interface": "Interface language",
     "alterações não salvas": "unsaved changes",
+    "Executar a ação da ferramenta": "Run the tool's action",
+    # Tool panel (ui/tool_panel.py) and its input/output widgets
+    "Entrada": "Input",
+    "Opções": "Options",
+    "Saída": "Output",
+    "Fechar ferramenta (Esc)": "Close tool (Esc)",
+    "Escolha um PDF de entrada para habilitar.": "Choose an input PDF to enable.",
+    "Você pode continuar lendo enquanto isso.": "You can keep reading meanwhile.",
+    "Operação cancelada.": "Operation cancelled.",
+    "Nada foi gravado.": "Nothing was saved.",
+    "Tentar de novo": "Try again",
+    "Concluir": "Done",
+    "Mostrar detalhes": "Show details",
+    "Nenhum PDF escolhido": "No PDF chosen",
+    "Trocar...": "Change...",
+    "{count} página(s)": "{count} page(s)",
+    "No documento aberto": "In the open document",
+    "Arquivo novo": "New file",
+    "Gravar o resultado num arquivo novo": "Save the result to a new file",
+    "Ctrl+Z desfaz a operação inteira.": "Ctrl+Z undoes the whole operation.",
+    "Nenhum documento aberto": "No document open",
+    "Arraste um PDF para cá ou escolha um arquivo no computador.": "Drop a PDF here or choose a file on your computer.",
+    "Abrir arquivo...": "Open file...",
     "Página {current} de {total}": "Page {current} of {total}",
     "Página {number}": "Page {number}",
     # PDF viewer: opening documents
@@ -1511,7 +1534,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
         '"{name}" has unsaved changes. Save first?'
     ),
     'Não foi possível salvar o arquivo: {error}': 'Could not save the file: {error}',
-    'No documento': 'In the document',
     'Aplicar o resultado ao documento aberto (Ctrl+Z desfaz)': (
         'Apply the result to the open document (Ctrl+Z undoes)'
     ),

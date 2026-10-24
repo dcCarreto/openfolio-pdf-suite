@@ -12,6 +12,7 @@ from ui.tasks import run_task
 class ScanCleanupPage(QWidget):
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.blank_check = QCheckBox(tr("Remover páginas em branco"))
@@ -20,6 +21,7 @@ class ScanCleanupPage(QWidget):
         for check in (self.blank_check, self.deskew_check, self.crop_check):
             check.setChecked(True)
         self.clean_button = QPushButton(tr("Limpar páginas"))
+        self.action_buttons.append(self.clean_button)
         self.clean_button.clicked.connect(self._clean)
         self.status_label = QLabel()
         self.status_label.setWordWrap(True)

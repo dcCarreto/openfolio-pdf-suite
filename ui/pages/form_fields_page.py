@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QStackedWidget,
@@ -44,6 +43,7 @@ from ui.i18n import tr
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 _FIELD_TYPE_LABELS = ["Texto", "Data", "Caixa de seleção", "Lista suspensa", "Lista de seleção"]
 _FIELD_TYPE_VALUES = {
@@ -78,6 +78,7 @@ class FormFieldsPage(QWidget):
 
     def __init__(self, session, area_pick_state: AreaPickState | None = None, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
         self.area_pick_state = area_pick_state or AreaPickState()
         self.area_pick_state.area_picked.connect(self._on_area_picked)
@@ -225,6 +226,7 @@ class FormFieldsPage(QWidget):
         size_layout.addRow(tr("Altura:"), self.height_spin)
 
         add_button = QPushButton(tr("Adicionar campo"))
+        self.action_buttons.append(add_button)
         add_button.clicked.connect(self._add_field)
 
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
@@ -253,13 +255,13 @@ class FormFieldsPage(QWidget):
         field_name = self.name_edit.text().strip()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Campo de formulário"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Campo de formulário"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Campo de formulário"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Campo de formulário"), tr("Escolha o arquivo de saída."))
             return
         if not field_name:
-            QMessageBox.warning(
+            notify_error(
                 self, tr("Campo de formulário"), tr("Digite um nome para o campo.")
             )
             return
@@ -288,7 +290,7 @@ class FormFieldsPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Campo de formulário"), tr("Campo adicionado com sucesso."))
+            notify_success(self, tr("Campo de formulário"), tr("Campo adicionado com sucesso."))
 
         run_task(
             self,
@@ -339,6 +341,7 @@ class FormFieldsPage(QWidget):
         row_buttons_layout.addWidget(remove_row_button)
 
         create_button = QPushButton(tr("Criar grupo"))
+        self.action_buttons.append(create_button)
         create_button.clicked.connect(self._add_radio_group)
 
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
@@ -375,13 +378,13 @@ class FormFieldsPage(QWidget):
         field_name = self.radio_name_edit.text().strip()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Grupo de opções"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Grupo de opções"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Grupo de opções"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Grupo de opções"), tr("Escolha o arquivo de saída."))
             return
         if not field_name:
-            QMessageBox.warning(self, tr("Grupo de opções"), tr("Digite um nome para o campo."))
+            notify_error(self, tr("Grupo de opções"), tr("Digite um nome para o campo."))
             return
 
         try:
@@ -395,7 +398,7 @@ class FormFieldsPage(QWidget):
                 y = float(self.radio_table.item(row, 3).text())
                 options.append(RadioOption(value=value, page_number=page_number, x=x, y=y))
         except ValueError:
-            QMessageBox.warning(
+            notify_error(
                 self,
                 tr("Grupo de opções"),
                 tr("Página, X e Y precisam ser números em todas as linhas preenchidas."),
@@ -416,7 +419,7 @@ class FormFieldsPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Grupo de opções"), tr("Grupo criado com sucesso."))
+            notify_success(self, tr("Grupo de opções"), tr("Grupo criado com sucesso."))
 
         run_task(
             self,
@@ -434,6 +437,7 @@ class FormFieldsPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         list_button = QPushButton(tr("Listar campos"))
+        self.action_buttons.append(list_button)
         list_button.clicked.connect(self._list_fields)
 
         self.fields_list = QListWidget()
@@ -492,7 +496,7 @@ class FormFieldsPage(QWidget):
         self.fields_list.clear()
         self._field_infos = {}
         if not input_path:
-            QMessageBox.warning(self, tr("Campos de formulário"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Campos de formulário"), tr("Abra um PDF para começar."))
             return
 
         task = call(ListFormFields().run, input_path)
@@ -533,16 +537,16 @@ class FormFieldsPage(QWidget):
         input_path = self.session.path()
         output_path = self.edit_output_picker.path()
         if not input_path:
-            QMessageBox.warning(self, title, tr("Abra um PDF para começar."))
+            notify_error(self, title, tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, title, tr("Escolha o arquivo de saída."))
+            notify_error(self, title, tr("Escolha o arquivo de saída."))
             return
 
         def done(_result):
             self.session.open(output_path)
             self._list_fields()
-            QMessageBox.information(self, title, success)
+            notify_success(self, title, success)
 
         run_task(
             self,
@@ -555,7 +559,7 @@ class FormFieldsPage(QWidget):
     def _apply_field_edit(self):
         name = self._selected_field()
         if name is None:
-            QMessageBox.warning(self, tr("Campos de formulário"), tr("Escolha um campo da lista."))
+            notify_error(self, tr("Campos de formulário"), tr("Escolha um campo da lista."))
             return
         options = {
             "new_name": self.edit_name_edit.text(),
@@ -572,7 +576,7 @@ class FormFieldsPage(QWidget):
     def _remove_field(self):
         name = self._selected_field()
         if name is None:
-            QMessageBox.warning(self, tr("Campos de formulário"), tr("Escolha um campo da lista."))
+            notify_error(self, tr("Campos de formulário"), tr("Escolha um campo da lista."))
             return
         self._run_on_form(
             tr("Campos de formulário"),
@@ -588,7 +592,7 @@ class FormFieldsPage(QWidget):
             if (name := self.fields_list.item(row).data(Qt.ItemDataRole.UserRole))
         ]
         if mode == "list" and not order:
-            QMessageBox.warning(self, tr("Campos de formulário"), tr('Clique em "Listar campos" primeiro.'))
+            notify_error(self, tr("Campos de formulário"), tr('Clique em "Listar campos" primeiro.'))
             return
         self._run_on_form(
             tr("Campos de formulário"),
@@ -607,6 +611,7 @@ class FormFieldsPage(QWidget):
         output_picker = FilePicker(mode="save", file_filter=file_filter)
 
         export_button = QPushButton(tr("Exportar"))
+        self.action_buttons.append(export_button)
         export_button.clicked.connect(lambda: self._export_data(fmt, output_picker))
 
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
@@ -619,16 +624,16 @@ class FormFieldsPage(QWidget):
         output_path = output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Exportar dados"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Exportar dados"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Exportar dados"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Exportar dados"), tr("Escolha o arquivo de saída."))
             return
 
         operation = ExportFormDataCSV() if fmt == "csv" else ExportFormDataFDF()
 
         def done(count):
-            QMessageBox.information(
+            notify_success(
                 self, tr("Exportar dados"), tr("{count} campo(s) exportado(s) com sucesso.").format(count=count)
             )
 
@@ -654,6 +659,7 @@ class FormFieldsPage(QWidget):
         )
 
         import_button = QPushButton(tr("Importar"))
+        self.action_buttons.append(import_button)
         import_button.clicked.connect(lambda: self._import_data(fmt, data_picker, output_picker))
 
         label = tr("Arquivo CSV ou Excel com os dados:") if fmt == "csv" else tr("Arquivo FDF com os dados:")
@@ -670,13 +676,13 @@ class FormFieldsPage(QWidget):
         output_path = output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Importar dados"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Importar dados"), tr("Abra um PDF para começar."))
             return
         if not data_path:
-            QMessageBox.warning(self, tr("Importar dados"), tr("Escolha o arquivo de dados."))
+            notify_error(self, tr("Importar dados"), tr("Escolha o arquivo de dados."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Importar dados"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Importar dados"), tr("Escolha o arquivo de saída."))
             return
 
         operation = ImportFormDataCSV() if fmt == "csv" else ImportFormDataFDF()
@@ -688,7 +694,7 @@ class FormFieldsPage(QWidget):
                 message += "\n\n" + tr("Sem campo correspondente no PDF (ignorados): {names}").format(
                     names=", ".join(result.not_found)
                 )
-            QMessageBox.information(self, tr("Importar dados"), message)
+            notify_success(self, tr("Importar dados"), message)
 
         run_task(
             self,
@@ -718,6 +724,7 @@ class FormFieldsPage(QWidget):
             mode="save", suggested_source=self.session.path, suggested_suffix="achatado"
         )
         flatten_button = QPushButton(tr("Achatar formulário"))
+        self.action_buttons.append(flatten_button)
         flatten_button.clicked.connect(self._flatten_form)
 
         layout.addWidget(note)
@@ -731,17 +738,17 @@ class FormFieldsPage(QWidget):
         output_path = self.flatten_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Achatar formulário"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Achatar formulário"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Achatar formulário"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Achatar formulário"), tr("Escolha o arquivo de saída."))
             return
 
         task = call(FlattenFormFields().run, input_path, output_path)
 
         def done(count):
             self.session.open(output_path)
-            QMessageBox.information(
+            notify_success(
                 self,
                 tr("Achatar formulário"),
                 tr("{count} campo(s) achatado(s) com sucesso.").format(count=count),

@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QStackedWidget,
@@ -28,6 +27,7 @@ from ui.viewer.render import render_page
 from ui.widgets.color_combo import ColorCombo
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 _POSITIONS = (
     ("Centro", "center"),
@@ -45,6 +45,7 @@ class WatermarkPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -125,6 +126,7 @@ class WatermarkPage(QWidget):
         preview_button.setToolTip(tr("Mostra a página atual do visualizador com a marca d'água, sem gravar nada."))
         preview_button.clicked.connect(self._preview)
         apply_button = QPushButton(tr("Aplicar marca d'água"))
+        self.action_buttons.append(apply_button)
         apply_button.clicked.connect(self._apply)
         buttons = QHBoxLayout()
         buttons.addWidget(preview_button)
@@ -153,13 +155,13 @@ class WatermarkPage(QWidget):
         if self.kind_combo.currentIndex() == 0:
             text = self.text_edit.text().strip()
             if not text:
-                QMessageBox.warning(self, tr("Marca d'água"), tr("Digite o texto da marca d'água."))
+                notify_error(self, tr("Marca d'água"), tr("Digite o texto da marca d'água."))
                 return None
             options.update(text=text, font_size=self.font_size_spin.value(), color=self.color_combo.color())
         else:
             image_path = self.image_picker.path()
             if not image_path:
-                QMessageBox.warning(self, tr("Marca d'água"), tr("Escolha a imagem da marca d'água."))
+                notify_error(self, tr("Marca d'água"), tr("Escolha a imagem da marca d'água."))
                 return None
             options.update(image_path=image_path, image_width=self.image_width_spin.value() / 100)
         return options
@@ -167,7 +169,7 @@ class WatermarkPage(QWidget):
     def _preview(self):
         input_path = self.session.path()
         if not input_path:
-            QMessageBox.warning(self, tr("Marca d'água"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Marca d'água"), tr("Abra um PDF para começar."))
             return
         options = self._options()
         if options is None:
@@ -199,10 +201,10 @@ class WatermarkPage(QWidget):
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Marca d'água"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Marca d'água"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Marca d'água"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Marca d'água"), tr("Escolha o arquivo de saída."))
             return
         options = self._options()
         if options is None:
@@ -217,7 +219,7 @@ class WatermarkPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Marca d'água"), tr("Marca d'água aplicada com sucesso."))
+            notify_success(self, tr("Marca d'água"), tr("Marca d'água aplicada com sucesso."))
 
         run_task(
             self,

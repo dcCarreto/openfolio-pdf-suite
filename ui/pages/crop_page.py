@@ -5,7 +5,6 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -21,6 +20,7 @@ from ui.tasks import call, run_task
 from ui.page_sizes import CUSTOM_SIZE_LABEL, PAGE_SIZES
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 _SIZE_LABELS = [*PAGE_SIZES.keys(), CUSTOM_SIZE_LABEL]
 
@@ -30,6 +30,7 @@ class CropPage(QWidget):
 
     def __init__(self, session, area_pick_state: AreaPickState | None = None, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
         self.area_pick_state = area_pick_state or AreaPickState()
         self.area_pick_state.area_picked.connect(self._on_area_picked)
@@ -79,6 +80,7 @@ class CropPage(QWidget):
         margins_layout.addRow(tr("Topo:"), self.top_spin)
 
         apply_button = QPushButton(tr("Cortar"))
+        self.action_buttons.append(apply_button)
         apply_button.clicked.connect(self._crop)
 
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
@@ -114,6 +116,7 @@ class CropPage(QWidget):
         size_layout.addRow(tr("Altura:"), self.height_spin)
 
         apply_button = QPushButton(tr("Redimensionar"))
+        self.action_buttons.append(apply_button)
         apply_button.clicked.connect(self._scale)
 
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
@@ -195,10 +198,10 @@ class CropPage(QWidget):
         output_path = self.crop_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Cortar"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Cortar"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Cortar"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Cortar"), tr("Escolha o arquivo de saída."))
             return
 
         task = call(
@@ -213,7 +216,7 @@ class CropPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Cortar"), tr("Páginas cortadas com sucesso."))
+            notify_success(self, tr("Cortar"), tr("Páginas cortadas com sucesso."))
 
         run_task(
             self,
@@ -228,10 +231,10 @@ class CropPage(QWidget):
         output_path = self.scale_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Redimensionar"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Redimensionar"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Redimensionar"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Redimensionar"), tr("Escolha o arquivo de saída."))
             return
 
         task = call(
@@ -244,7 +247,7 @@ class CropPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Redimensionar"), tr("Páginas redimensionadas com sucesso."))
+            notify_success(self, tr("Redimensionar"), tr("Páginas redimensionadas com sucesso."))
 
         run_task(
             self,

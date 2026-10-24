@@ -66,9 +66,12 @@ um ponto aparece no lugar do "x"), o **+** para abrir um PDF, a busca de ferrame
 comandos (Ctrl+K) e o idioma (**PT | EN**). Em cada documento, a barra sobre a página tem
 abrir, salvar, imprimir, o número da página (digite outro e Enter), zoom e modos de exibição;
 a coluna de ícones da esquerda mostra miniaturas, marcadores e anexos; a da direita abre as
-ferramentas mais usadas num painel ao lado do documento, com o nome da ferramenta e
-**Fechar** no topo. Numa janela estreita, as miniaturas se recolhem enquanto uma ferramenta
-está aberta e parte da barra vai para o menu **...**. No
+ferramentas mais usadas num painel ao lado do documento. Todo painel segue a mesma ordem:
+**Entrada** (o documento), **Opções** e **Saída** (no próprio documento ou num arquivo
+novo), com o botão da ação no rodapé (também Ctrl+Enter); ali mesmo aparecem o andamento, o
+**Cancelar** e o resultado, com **Desfazer**. Numa janela estreita, as miniaturas se
+recolhem enquanto uma ferramenta está aberta, o painel abre por cima do documento (Esc o
+recolhe) e parte da barra vai para o menu **...**. No
 centro fica o visualizador — sempre visível, com zoom (também com Ctrl + roda do mouse), ajuste à largura ou à página, rotação da visualização,
 rolagem contínua, página única, página dupla ou livro (capa sozinha), busca que destaca todas
 as ocorrências e seleção de texto com Ctrl+C; **Exibir > Apresentação** (F5) mostra o
@@ -417,6 +420,8 @@ ui/              Interface gráfica (PySide6)
   top_bar.py           A faixa do topo: menus, abas, busca de comandos e idioma
   document_tab.py      Aba de documento: visualizador, colunas de ícones e painel da ferramenta
                        (cada ferramenta é construída na primeira vez em que é aberta)
+  tool_panel.py        Painel da ferramenta: Entrada, Opções, Saída e o rodapé com o andamento
+                       e o resultado
   home_page.py         Aba Início: abrir, ferramentas de partida e arquivos recentes
   tools_center.py      Aba Ferramentas: todas as ferramentas, por categoria
   tools.py             Catálogo das ferramentas (categorias e atalhos da coluna da direita)
@@ -440,7 +445,7 @@ ui/              Interface gráfica (PySide6)
   viewer/              Visualizador central: renderização, painel lateral (miniaturas,
                        marcadores, anexos), busca, zoom, seleção de texto
   pages/               Uma classe de página por ferramenta (MergePage, CompressPage, ...)
-  widgets/             Widgets reutilizáveis (FilePicker, FileListEditor, PageContainer)
+  widgets/             Widgets reutilizáveis (FilePicker, FileListEditor, DocumentSourceBar)
 
 tests/           Testes pytest (um arquivo por operação de core, + teste de fumaça da UI)
 

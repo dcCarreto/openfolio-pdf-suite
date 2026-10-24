@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSpinBox,
@@ -34,6 +33,7 @@ from ui.widgets.color_combo import ColorCombo
 from ui.widgets.current_page import with_current_page_button
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_info, notify_success
 
 _MODES = ["Substituir imagem", "Editar texto", "Adicionar link", "Listar links", "Remover link"]
 _EDIT_TEXT_MODE = 1
@@ -51,6 +51,7 @@ class EditPage(QWidget):
 
     def __init__(self, session, area_pick_state: AreaPickState | None = None, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
         self.area_pick_state = area_pick_state or AreaPickState()
         self.area_pick_state.area_picked.connect(self._on_area_picked)
@@ -126,6 +127,7 @@ class EditPage(QWidget):
             mode="save", suggested_source=self.session.path, suggested_suffix="imagem_substituida"
         )
         replace_button = QPushButton(tr("Substituir imagem"))
+        self.action_buttons.append(replace_button)
         replace_button.clicked.connect(self._replace_image)
 
         layout.addWidget(list_button)
@@ -147,7 +149,7 @@ class EditPage(QWidget):
         input_path = self.session.path()
         self.images_list.clear()
         if not input_path:
-            QMessageBox.warning(self, tr("Substituir imagem"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Substituir imagem"), tr("Abra um PDF para começar."))
             return
 
         task = call(ListEmbeddedImages().run, input_path)
@@ -185,13 +187,13 @@ class EditPage(QWidget):
         output_path = self.replace_image_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Substituir imagem"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Substituir imagem"), tr("Abra um PDF para começar."))
             return
         if not new_image_path:
-            QMessageBox.warning(self, tr("Substituir imagem"), tr("Escolha a nova imagem."))
+            notify_error(self, tr("Substituir imagem"), tr("Escolha a nova imagem."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Substituir imagem"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Substituir imagem"), tr("Escolha o arquivo de saída."))
             return
 
         task = call(
@@ -212,7 +214,7 @@ class EditPage(QWidget):
                 message += "\n\n" + tr(
                     "A mesma imagem também aparecia na(s) página(s) {pages}, que mudaram junto."
                 ).format(pages=pages)
-            QMessageBox.information(self, tr("Substituir imagem"), message)
+            notify_success(self, tr("Substituir imagem"), message)
 
         run_task(
             self,
@@ -285,6 +287,7 @@ class EditPage(QWidget):
             mode="save", suggested_source=self.session.path, suggested_suffix="texto_editado"
         )
         apply_button = QPushButton(tr("Aplicar edição"))
+        self.action_buttons.append(apply_button)
         apply_button.clicked.connect(self._apply_edit_text)
 
         layout.addWidget(note)
@@ -379,10 +382,10 @@ class EditPage(QWidget):
         output_path = self.edit_text_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Editar texto"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Editar texto"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Editar texto"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Editar texto"), tr("Escolha o arquivo de saída."))
             return
 
         try:
@@ -410,7 +413,7 @@ class EditPage(QWidget):
                 )
                 area_rows.append(row + 1)
         except ValueError:
-            QMessageBox.warning(
+            notify_error(
                 self,
                 tr("Editar texto"),
                 tr("Página e as coordenadas precisam ser números em todas as linhas preenchidas."),
@@ -418,7 +421,7 @@ class EditPage(QWidget):
             return
 
         if not edits:
-            QMessageBox.warning(self, tr("Editar texto"), tr("Marque pelo menos uma área com texto novo."))
+            notify_error(self, tr("Editar texto"), tr("Marque pelo menos uma área com texto novo."))
             return
 
         task = call_with_progress(EditTextArea().run, input_path, output_path, edits)
@@ -432,7 +435,7 @@ class EditPage(QWidget):
                     "O texto não coube inteiro na(s) área(s) {areas}: o que não coube ficou de fora. "
                     "Aumente a área ou diminua a fonte."
                 ).format(areas=areas)
-            QMessageBox.information(self, tr("Editar texto"), message)
+            notify_success(self, tr("Editar texto"), message)
 
         run_task(
             self,
@@ -485,6 +488,7 @@ class EditPage(QWidget):
             mode="save", suggested_source=self.session.path, suggested_suffix="com_link"
         )
         add_button = QPushButton(tr("Adicionar link"))
+        self.action_buttons.append(add_button)
         add_button.clicked.connect(self._add_link)
 
         layout.addWidget(hint)
@@ -511,17 +515,17 @@ class EditPage(QWidget):
         output_path = self.add_link_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Adicionar link"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Adicionar link"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Adicionar link"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Adicionar link"), tr("Escolha o arquivo de saída."))
             return
 
         is_url = self.link_target_combo.currentIndex() == 0
         url = self.link_url_edit.text().strip() or None if is_url else None
         target_page = None if is_url else self.link_target_page_spin.value() - 1
         if is_url and not url:
-            QMessageBox.warning(self, tr("Adicionar link"), tr("Digite a URL de destino."))
+            notify_error(self, tr("Adicionar link"), tr("Digite a URL de destino."))
             return
 
         task = call(
@@ -539,7 +543,7 @@ class EditPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Adicionar link"), tr("Link adicionado com sucesso."))
+            notify_success(self, tr("Adicionar link"), tr("Link adicionado com sucesso."))
 
         run_task(
             self,
@@ -557,6 +561,7 @@ class EditPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         list_button = QPushButton(tr("Listar links"))
+        self.action_buttons.append(list_button)
         list_button.clicked.connect(self._list_links)
         self.links_list = QListWidget()
 
@@ -568,7 +573,7 @@ class EditPage(QWidget):
         input_path = self.session.path()
         self.links_list.clear()
         if not input_path:
-            QMessageBox.warning(self, tr("Listar links"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Listar links"), tr("Abra um PDF para começar."))
             return
 
         task = call(ListLinks().run, input_path)
@@ -614,6 +619,7 @@ class EditPage(QWidget):
             mode="save", suggested_source=self.session.path, suggested_suffix="sem_link"
         )
         remove_button = QPushButton(tr("Remover link"))
+        self.action_buttons.append(remove_button)
         remove_button.clicked.connect(self._remove_link)
 
         layout.addWidget(note)
@@ -631,7 +637,7 @@ class EditPage(QWidget):
     def _load_links_to_remove(self):
         input_path = self.session.path()
         if not input_path:
-            QMessageBox.warning(self, tr("Remover link"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Remover link"), tr("Abra um PDF para começar."))
             return
 
         def done(links):
@@ -644,7 +650,7 @@ class EditPage(QWidget):
                 )
             self.remove_links_list.blockSignals(False)
             if not links:
-                QMessageBox.information(self, tr("Remover link"), tr("Nenhum link encontrado."))
+                notify_info(self, tr("Remover link"), tr("Nenhum link encontrado."))
             self._publish_areas()
 
         run_task(
@@ -675,10 +681,10 @@ class EditPage(QWidget):
         output_path = self.remove_link_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Remover link"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Remover link"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Remover link"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Remover link"), tr("Escolha o arquivo de saída."))
             return
 
         task = call(
@@ -694,7 +700,7 @@ class EditPage(QWidget):
             self._loaded_links = []
             self.remove_links_list.clear()
             self._publish_areas()
-            QMessageBox.information(self, tr("Remover link"), tr("Link removido com sucesso."))
+            notify_success(self, tr("Remover link"), tr("Link removido com sucesso."))
 
         run_task(
             self,

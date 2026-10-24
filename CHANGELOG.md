@@ -20,6 +20,16 @@ depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no avi
   de tamanhos prontos e o modo Livro ao lado dos outros modos de exibição.
 - Numa janela estreita, as miniaturas se recolhem enquanto uma ferramenta está aberta (e voltam
   quando ela fecha) e parte da barra do documento vai para o menu "...".
+- Todas as ferramentas seguem o mesmo painel: o documento de entrada no topo, as opções no
+  meio e, embaixo, onde gravar o resultado (no próprio documento ou num arquivo novo) e o
+  botão da ação, que também roda com Ctrl+Enter.
+- Enquanto a operação roda, o rodapé do painel mostra o andamento e o botão Cancelar. Ao
+  terminar, o resultado aparece ali mesmo, com Desfazer, em vez de uma janela de aviso; a
+  barra de status repete a mensagem. Um erro aparece no mesmo lugar, com Tentar de novo.
+- Numa janela estreita, o painel da ferramenta abre por cima do documento; Esc ou um clique
+  na página o recolhem.
+- Sem documento aberto, o centro mostra onde soltar um PDF, com Abrir arquivo e os recentes,
+  e o painel da ferramenta avisa que espera um documento.
 
 ### Anotações e redação
 

@@ -4,7 +4,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QLabel,
     QListWidget,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -16,6 +15,7 @@ from ui.i18n import tr
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 
 class LayersPage(QWidget):
@@ -24,6 +24,7 @@ class LayersPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -44,6 +45,7 @@ class LayersPage(QWidget):
             mode="save", suggested_source=self.session.path, suggested_suffix="camadas"
         )
         apply_button = QPushButton(tr("Aplicar visibilidade"))
+        self.action_buttons.append(apply_button)
         apply_button.clicked.connect(self._apply_visibility)
 
         layout = QVBoxLayout(self)
@@ -68,7 +70,7 @@ class LayersPage(QWidget):
         self._layer_indexes = []
         self.layers_list.clear()
         if not input_path:
-            QMessageBox.warning(self, tr("Camadas"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Camadas"), tr("Abra um PDF para começar."))
             return
 
         task = call(ListLayers().run, input_path)
@@ -95,10 +97,10 @@ class LayersPage(QWidget):
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Camadas"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Camadas"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Camadas"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Camadas"), tr("Escolha o arquivo de saída."))
             return
 
         visible = self.visibility_combo.currentIndex() == 0
@@ -110,7 +112,7 @@ class LayersPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Camadas"), tr("Visibilidade da camada alterada com sucesso."))
+            notify_success(self, tr("Camadas"), tr("Visibilidade da camada alterada com sucesso."))
 
         run_task(
             self,

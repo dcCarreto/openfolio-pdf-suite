@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QStackedWidget,
     QTextEdit,
@@ -32,6 +31,7 @@ from ui.i18n import tr, tr_message
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 _POSITION_LABELS = [
     "Inferior direito",
@@ -149,6 +149,7 @@ class SignaturePage(QWidget):
 
     def __init__(self, session, area_pick_state: AreaPickState | None = None, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
         self.area_pick_state = area_pick_state or AreaPickState()
         self.area_pick_state.area_picked.connect(self._on_area_picked)
@@ -236,6 +237,7 @@ class SignaturePage(QWidget):
             mode="save", suggested_source=self.session.path, suggested_suffix="assinado", working_copy=False
         )
         sign_button = QPushButton(tr("Assinar"))
+        self.action_buttons.append(sign_button)
         sign_button.clicked.connect(self._apply_sign)
 
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
@@ -283,7 +285,7 @@ class SignaturePage(QWidget):
     def _show_certificate(self):
         pfx_path = self.pfx_picker.path()
         if not pfx_path:
-            QMessageBox.warning(self, tr("Assinar"), tr("Escolha o arquivo .pfx/.p12."))
+            notify_error(self, tr("Assinar"), tr("Escolha o arquivo .pfx/.p12."))
             return
 
         def done(summary):
@@ -342,6 +344,7 @@ class SignaturePage(QWidget):
 
         self.verify_input_picker = FilePicker(mode="open")
         verify_button = QPushButton(tr("Verificar"))
+        self.action_buttons.append(verify_button)
         verify_button.clicked.connect(self._apply_verify)
 
         self.verify_result = QTextEdit()
@@ -379,13 +382,13 @@ class SignaturePage(QWidget):
         output_path = self.sign_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Assinar"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Assinar"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Assinar"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Assinar"), tr("Escolha o arquivo de saída."))
             return
         if self.page_combo.currentIndex() < 0:
-            QMessageBox.warning(self, tr("Assinar"), tr("O PDF de entrada não tem páginas."))
+            notify_error(self, tr("Assinar"), tr("O PDF de entrada não tem páginas."))
             return
 
         position = _POSITION_VALUES[_POSITION_LABELS[self.position_combo.currentIndex()]]
@@ -401,7 +404,7 @@ class SignaturePage(QWidget):
         }
         if position == "custom":
             if self._stamp_area is None:
-                QMessageBox.warning(self, tr("Assinar"), tr("Arraste no visualizador para marcar a área do selo."))
+                notify_error(self, tr("Assinar"), tr("Arraste no visualizador para marcar a área do selo."))
                 return
             kwargs["page_index"], kwargs["box"] = self._stamp_area
             kwargs["position"] = "bottom-right"  # ignorada quando há `box`
@@ -409,14 +412,14 @@ class SignaturePage(QWidget):
         if self.cert_mode_combo.currentIndex() == 0:
             pfx_path = self.pfx_picker.path()
             if not pfx_path:
-                QMessageBox.warning(self, tr("Assinar"), tr("Escolha o arquivo .pfx/.p12."))
+                notify_error(self, tr("Assinar"), tr("Escolha o arquivo .pfx/.p12."))
                 return
             kwargs["pfx_path"] = pfx_path
             kwargs["pfx_password"] = self.pfx_password_edit.text()
         else:
             test_name = self.test_name_edit.text().strip()
             if not test_name:
-                QMessageBox.warning(self, tr("Assinar"), tr("Digite o nome para o certificado de teste."))
+                notify_error(self, tr("Assinar"), tr("Digite o nome para o certificado de teste."))
                 return
             kwargs["test_common_name"] = test_name
             kwargs["test_email"] = self.test_email_edit.text().strip()
@@ -426,7 +429,7 @@ class SignaturePage(QWidget):
         def done(_result):
             self.pfx_password_edit.clear()  # depois de assinar; "Ver o certificado" ainda usa
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Assinar"), tr("PDF assinado com sucesso."))
+            notify_success(self, tr("Assinar"), tr("PDF assinado com sucesso."))
 
         run_task(
             self,
@@ -439,7 +442,7 @@ class SignaturePage(QWidget):
     def _apply_verify(self):
         input_path = self.verify_input_picker.path() or self.session.path()
         if not input_path:
-            QMessageBox.warning(self, tr("Verificar assinatura"), tr("Escolha o arquivo PDF a verificar."))
+            notify_error(self, tr("Verificar assinatura"), tr("Escolha o arquivo PDF a verificar."))
             return
 
         task = call(DescribeSignatures().run, input_path)

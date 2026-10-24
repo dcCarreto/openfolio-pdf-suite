@@ -227,6 +227,7 @@ class MainWindow(QMainWindow):
         doc.session.set_discard_confirmation(lambda d=doc: self._confirm_discard_changes(d))
         doc.changed.connect(lambda d=doc: self._on_document_changed(d))
         doc.tool_changed.connect(self._update_document_actions)
+        doc.tool_changed.connect(lambda d=doc: self._update_tab(d))
         doc.all_tools_requested.connect(lambda: self.tabs.setCurrentIndex(_TOOLS))
         doc.session.path_changed.connect(lambda d=doc: self._remember_opened_document(d))
         doc.viewer.layout_changed.connect(lambda layout, d=doc: self._on_layout_changed(d, layout))
@@ -310,7 +311,9 @@ class MainWindow(QMainWindow):
         bar = self.tabs.tabBar()
         modified = doc.session.is_modified()
         unsaved = tr("alterações não salvas")
-        self.tabs.setTabText(index, doc.title(modified_mark=False))
+        # Sem documento, com uma ferramenta aberta (Criar, Mesclar...): a aba leva o nome dela.
+        tool = doc.current_tool() if doc.is_empty() else -1
+        self.tabs.setTabText(index, tr(SECTIONS[tool][1]) if tool >= 0 else doc.title(modified_mark=False))
         tip = doc.session.source_path() or doc.title()
         self.tabs.setTabToolTip(index, f"{tip}\n{unsaved}" if modified else tip)
         doc.close_button.set_dirty(modified)
@@ -321,7 +324,13 @@ class MainWindow(QMainWindow):
         if busy != (bar.tabButton(index, QTabBar.ButtonPosition.LeftSide) is doc.busy_spinner):
             bar.setTabButton(index, QTabBar.ButtonPosition.LeftSide, doc.busy_spinner if busy else None)
             doc.busy_spinner.setVisible(busy)
-            self.tabs.setTabIcon(index, QIcon() if busy else build_file_icon())
+            self.tabs.setTabIcon(index, QIcon() if busy else self._tab_icon(doc))
+        elif not busy:
+            self.tabs.setTabIcon(index, self._tab_icon(doc))
+
+    def _tab_icon(self, doc: DocumentTab) -> QIcon:
+        tool = doc.current_tool() if doc.is_empty() else -1
+        return getattr(sidebar_icons, SECTIONS[tool][0])() if tool >= 0 else build_file_icon()
 
     def _on_document_changed(self, doc: DocumentTab):
         self._update_tab(doc)
@@ -424,6 +433,10 @@ class MainWindow(QMainWindow):
         self._undo_action.triggered.connect(self.undo)
         self._redo_action = command(edit_menu, "edit.redo", tr("Refazer"), "Ctrl+Y", "Ctrl+Shift+Z")
         self._redo_action.triggered.connect(self.redo)
+        self._run_tool_action = command(
+            edit_menu, "edit.run_tool", tr("Executar a ação da ferramenta"), "Ctrl+Return", "Ctrl+Enter"
+        )
+        self._run_tool_action.triggered.connect(lambda: self.document is not None and self.document.run_current_tool())
         edit_menu.addSeparator()
         command(edit_menu, "edit.shortcuts", tr("Atalhos de teclado...")).triggered.connect(self.edit_shortcuts)
 

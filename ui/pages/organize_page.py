@@ -56,6 +56,7 @@ class OrganizePage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
         self._document = None
         self._pixmaps: dict[int, QPixmap] = {}
@@ -115,6 +116,7 @@ class OrganizePage(QWidget):
         ]
 
         self.apply_button = QPushButton(tr("Aplicar"))
+        self.action_buttons.append(self.apply_button)
         self.apply_button.clicked.connect(self._apply)
         self.discard_button = QPushButton(tr("Descartar alterações"))
         self.discard_button.clicked.connect(self._load)

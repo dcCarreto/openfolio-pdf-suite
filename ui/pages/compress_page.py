@@ -1,12 +1,13 @@
 """Aba de compressão de PDFs."""
 
-from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from core.compress import CompressPDF
 from ui.i18n import tr
 from ui.tasks import call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_info, notify_success
 
 _LEVELS = [
     ("light", "Leve (sem perda de qualidade)"),
@@ -20,6 +21,7 @@ class CompressPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -35,6 +37,7 @@ class CompressPage(QWidget):
         self.grayscale_check = QCheckBox(tr("Converter as imagens para escala de cinza"))
 
         compress_button = QPushButton(tr("Comprimir"))
+        self.action_buttons.append(compress_button)
         compress_button.clicked.connect(self._compress)
 
         layout = QVBoxLayout(self)
@@ -52,10 +55,10 @@ class CompressPage(QWidget):
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Comprimir"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Comprimir"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Comprimir"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Comprimir"), tr("Escolha o arquivo de saída."))
             return
 
         task = call_with_progress(
@@ -72,7 +75,7 @@ class CompressPage(QWidget):
                 "compressed": f"{result.compressed_size / 1024:.1f}",
             }
             if not result.written:
-                QMessageBox.information(
+                notify_info(
                     self,
                     tr("Comprimir"),
                     tr(
@@ -87,7 +90,7 @@ class CompressPage(QWidget):
             )
             if result.images_recompressed:
                 message += "\n" + tr("{count} imagem(ns) recomprimida(s).").format(count=result.images_recompressed)
-            QMessageBox.information(self, tr("Comprimir"), message)
+            notify_success(self, tr("Comprimir"), message)
 
         run_task(
             self,

@@ -80,7 +80,8 @@ def _show(window, width, height):
 
 def test_every_menu_action_and_shortcut_is_still_there(window):
     found = [(action.objectName(), [key.toString() for key in action.shortcuts()]) for _label, action in window.commands()]
-    assert found == _COMMANDS_BEFORE
+    assert [command for command in found if command in _COMMANDS_BEFORE] == _COMMANDS_BEFORE
+    assert ("edit.run_tool", ["Ctrl+Return", "Ctrl+Enter"]) in found  # novo: a ação da ferramenta
 
 
 def test_one_top_bar_holds_logo_menus_tabs_launcher_and_language(window):
@@ -156,7 +157,7 @@ def test_the_document_tab_layout(window, tmp_path):
     assert doc.left_rail.width() == 48 and doc.right_rail.width() == 52
     assert doc.viewer.toolbar.parent() is doc.center and doc.viewer.toolbar.height() == 44
     assert window.statusBar().objectName() == "StatusBar" and window.statusBar().height() == 28
-    assert doc.splitter.widget(2) is doc.tool_panel and doc.tool_header.parent() is doc.tool_panel
+    assert doc.splitter.widget(2) is doc.tool_panel
 
 
 def test_a_tool_in_a_1280_window_folds_the_thumbnails_and_gives_them_back(window, tmp_path):

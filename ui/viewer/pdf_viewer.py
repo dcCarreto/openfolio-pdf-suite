@@ -3,14 +3,16 @@ contínua, busca de texto e preenchimento de formulários."""
 
 import dataclasses
 import time
+from pathlib import Path
 
 import pypdfium2 as pdfium
 from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QIntValidator, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
+from PySide6.QtGui import QColor, QIcon, QIntValidator, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -38,6 +40,7 @@ from ui.i18n import tr, tr_message
 from ui.area_pick_state import AreaPickState
 from ui.measure_state import MeasureState, format_distance
 from ui.redaction_state import RedactionState
+from ui.preferences import preferences
 from ui.tasks import run_task
 from ui.viewer.page_canvas import PageCanvas
 from ui.viewer.presentation import PresentationWindow
@@ -51,6 +54,7 @@ from ui.viewer.viewer_icons import (
     build_book_icon,
     build_continuous_page_icon,
     build_double_page_icon,
+    build_file_icon,
     build_fit_page_icon,
     build_fit_width_icon,
     build_more_icon,
@@ -266,18 +270,46 @@ class PdfViewer(QWidget):
         self._set_document_controls_enabled(False)
 
     def _build_empty_state(self) -> QWidget:
+        """Sem documento: a zona de soltar, com "Abrir arquivo..." e os recentes."""
         widget = QWidget()
+        widget.setObjectName("ViewerEmpty")
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(12)
 
-        self._empty_label = QLabel(tr("Nenhum PDF aberto"))
-        self._empty_label.setObjectName("pageSubtitle")
-        self._empty_open_button = QPushButton(tr("Abrir PDF..."))
+        zone = QFrame()
+        zone.setObjectName("DropZone")
+        zone.setFixedWidth(440)
+        icon = QLabel()
+        icon.setPixmap(build_file_icon().pixmap(QSize(32, 32), QIcon.Mode.Selected))
+        self._empty_label = QLabel()
+        self._empty_label.setObjectName("EmptyTitle")
+        self._empty_hint = QLabel()
+        self._empty_hint.setProperty("ofRole", "secondary")
+        self._empty_hint.setWordWrap(True)
+        self._empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_open_button = QPushButton()
+        self._empty_open_button.setProperty("ofVariant", "primary")
         self._empty_open_button.clicked.connect(self._browse_open)
-
-        layout.addWidget(self._empty_label, 0, Qt.AlignmentFlag.AlignHCenter)
-        layout.addWidget(self._empty_open_button, 0, Qt.AlignmentFlag.AlignHCenter)
+        self._empty_recent_button = QPushButton()
+        recent_menu = QMenu(self._empty_recent_button)
+        recent_menu.aboutToShow.connect(lambda: self._fill_recent_menu(recent_menu))
+        self._empty_recent_button.setMenu(recent_menu)
+        buttons = QHBoxLayout()
+        buttons.setSpacing(8)
+        buttons.addStretch()
+        buttons.addWidget(self._empty_open_button)
+        buttons.addWidget(self._empty_recent_button)
+        buttons.addStretch()
+        zone_layout = QVBoxLayout(zone)
+        zone_layout.setContentsMargins(24, 28, 24, 28)
+        zone_layout.setSpacing(10)
+        zone_layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignHCenter)
+        zone_layout.addWidget(self._empty_label, 0, Qt.AlignmentFlag.AlignHCenter)
+        zone_layout.addWidget(self._empty_hint)
+        zone_layout.addSpacing(6)
+        zone_layout.addLayout(buttons)
+        layout.addWidget(zone, 0, Qt.AlignmentFlag.AlignHCenter)
+        self._retranslate_empty_state()
         return widget
 
     def retranslate(self):
@@ -287,8 +319,7 @@ class PdfViewer(QWidget):
             widget.setToolTip(tr(text))
             widget.setAccessibleName(tr(text))
         self._retranslate_toolbar_menus()
-        self._empty_label.setText(tr("Nenhum PDF aberto"))
-        self._empty_open_button.setText(tr("Abrir PDF..."))
+        self._retranslate_empty_state()
         self.search_bar.retranslate()
         self.thumbnail_list.retranslate()
         self.side_panel.retranslate()
@@ -497,6 +528,22 @@ class PdfViewer(QWidget):
             widget.setEnabled(enabled)
 
     # -- carregamento do documento -----------------------------------------
+
+    def _retranslate_empty_state(self):
+        self._empty_label.setText(tr("Nenhum documento aberto"))
+        self._empty_hint.setText(tr("Arraste um PDF para cá ou escolha um arquivo no computador."))
+        self._empty_open_button.setText(tr("Abrir arquivo..."))
+        self._empty_recent_button.setText(tr("Recentes"))
+
+    def _fill_recent_menu(self, menu: QMenu):
+        menu.clear()
+        recent = preferences().recent_files()
+        for path in recent:
+            action = menu.addAction(Path(path).name)
+            action.setToolTip(path)
+            action.triggered.connect(lambda _checked=False, p=path: self.open_path(p))
+        if not recent:
+            menu.addAction(tr("Nenhum arquivo recente")).setEnabled(False)
 
     def _browse_open(self):
         path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), "", "PDF (*.pdf)")

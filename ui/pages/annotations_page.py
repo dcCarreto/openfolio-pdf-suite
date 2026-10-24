@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
-    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -45,6 +44,7 @@ from ui.tasks import call, run_task
 from ui.stamp_library import StampLibrary
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 _TOOLS = [
     ("select", "Selecionar/Apagar"),
@@ -121,6 +121,7 @@ class AnnotationsPage(QWidget):
 
     def __init__(self, session: DocumentSession, annotation_state: AnnotationState, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
         self.annotation_state = annotation_state
         self._history = PendingHistory(annotation_state, annotation_state.set_pending)
@@ -222,6 +223,7 @@ class AnnotationsPage(QWidget):
             mode="save", suggested_source=session.path, suggested_suffix="anotado"
         )
         save_button = QPushButton(tr("Salvar anotações"))
+        self.action_buttons.append(save_button)
         save_button.clicked.connect(self._save)
 
         self._comments: list[AnnotationInfo] = []
@@ -339,7 +341,7 @@ class AnnotationsPage(QWidget):
         (Ctrl+Z desfaz) e mostra `message(resultado)`."""
         input_path = self.session.path()
         if not input_path:
-            QMessageBox.warning(self, title, tr("Abra um PDF para começar."))
+            notify_error(self, title, tr("Abra um PDF para começar."))
             return
         output_path = self.session.new_version_path()
 
@@ -347,7 +349,7 @@ class AnnotationsPage(QWidget):
             self.session.open(output_path)
             text = message(result)
             if text:
-                QMessageBox.information(self, title, text)
+                notify_success(self, title, text)
 
         run_task(self, title, call(operation, input_path, output_path), on_success=done)
 
@@ -412,7 +414,7 @@ class AnnotationsPage(QWidget):
 
     def _import_xfdf(self):
         if not self.session.path():
-            QMessageBox.warning(self, tr("Anotações"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Anotações"), tr("Abra um PDF para começar."))
             return
         xfdf_path, _ = QFileDialog.getOpenFileName(
             self, tr("Importar comentários (XFDF)"), start_folder(), "XFDF (*.xfdf);;XML (*.xml)"
@@ -485,7 +487,7 @@ class AnnotationsPage(QWidget):
     def _save_custom_stamp(self):
         text = self.stamp_combo.currentText().strip()
         if not text:
-            QMessageBox.warning(self, tr("Anotações"), tr("Digite o texto do carimbo antes de salvar."))
+            notify_error(self, tr("Anotações"), tr("Digite o texto do carimbo antes de salvar."))
             return
         name = self.new_stamp_name_edit.text().strip() or text
 
@@ -497,13 +499,13 @@ class AnnotationsPage(QWidget):
 
         self.new_stamp_name_edit.clear()
         self._reload_stamp_combo(select_name=name)
-        QMessageBox.information(self, tr("Anotações"), tr("Carimbo salvo com sucesso."))
+        notify_success(self, tr("Anotações"), tr("Carimbo salvo com sucesso."))
 
     def _remove_custom_stamp(self):
         index = self.stamp_combo.currentIndex()
         entry = self._stamp_entries[index] if 0 <= index < len(self._stamp_entries) else None
         if entry is None or entry[2] is None:
-            QMessageBox.warning(
+            notify_error(
                 self, tr("Anotações"), tr("Selecione um carimbo customizado para remover.")
             )
             return
@@ -552,13 +554,13 @@ class AnnotationsPage(QWidget):
         pending = self.annotation_state.pending()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Anotações"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Anotações"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Anotações"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Anotações"), tr("Escolha o arquivo de saída."))
             return
         if not pending:
-            QMessageBox.warning(
+            notify_error(
                 self, tr("Anotações"), tr("Adicione pelo menos uma anotação antes de salvar.")
             )
             return
@@ -570,7 +572,7 @@ class AnnotationsPage(QWidget):
         def done(_result):
             self.annotation_state.clear_pending()
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Anotações"), tr("Anotações salvas com sucesso."))
+            notify_success(self, tr("Anotações"), tr("Anotações salvas com sucesso."))
 
         run_task(
             self,
@@ -585,10 +587,10 @@ class AnnotationsPage(QWidget):
         output_path = self.export_csv_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Anotações"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Anotações"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Anotações"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Anotações"), tr("Escolha o arquivo de saída."))
             return
 
         if output_path.lower().endswith(".xfdf"):
@@ -603,7 +605,7 @@ class AnnotationsPage(QWidget):
                 text += " " + tr("{count} de tipo que o XFDF daqui não leva (anexo, som...) ficou de fora.").format(
                     count=skipped
                 )
-            QMessageBox.information(self, tr("Anotações"), text)
+            notify_success(self, tr("Anotações"), text)
 
         run_task(
             self,

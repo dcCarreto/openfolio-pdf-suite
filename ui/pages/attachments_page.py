@@ -5,7 +5,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
-    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -17,6 +16,7 @@ from ui.i18n import tr
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 
 def _format_size(size: int) -> str:
@@ -30,6 +30,7 @@ class AttachmentsPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -59,6 +60,7 @@ class AttachmentsPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         list_button = QPushButton(tr("Listar anexos"))
+        self.action_buttons.append(list_button)
         list_button.clicked.connect(self._list_attachments)
         self.attachments_list = QListWidget()
 
@@ -76,6 +78,7 @@ class AttachmentsPage(QWidget):
             mode="save", suggested_source=self.session.path, suggested_suffix="com_anexo"
         )
         add_button = QPushButton(tr("Adicionar anexo"))
+        self.action_buttons.append(add_button)
         add_button.clicked.connect(self._add_attachment)
 
         layout.addWidget(QLabel(tr("Arquivo a anexar:")))
@@ -99,6 +102,7 @@ class AttachmentsPage(QWidget):
             mode="save", suggested_source=self.session.path, suggested_suffix="sem_anexo"
         )
         remove_button = QPushButton(tr("Remover anexo"))
+        self.action_buttons.append(remove_button)
         remove_button.clicked.connect(self._remove_attachment)
 
         layout.addWidget(note)
@@ -116,6 +120,7 @@ class AttachmentsPage(QWidget):
 
         self.extract_output_picker = FilePicker(mode="directory")
         extract_button = QPushButton(tr("Extrair anexos"))
+        self.action_buttons.append(extract_button)
         extract_button.clicked.connect(self._extract_attachments)
 
         layout.addWidget(QLabel(tr("Pasta de saída:")))
@@ -130,7 +135,7 @@ class AttachmentsPage(QWidget):
         input_path = self.session.path()
         self.attachments_list.clear()
         if not input_path:
-            QMessageBox.warning(self, tr("Anexos"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Anexos"), tr("Abra um PDF para começar."))
             return
 
         task = call(ListAttachments().run, input_path)
@@ -156,20 +161,20 @@ class AttachmentsPage(QWidget):
         output_path = self.add_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Anexos"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Anexos"), tr("Abra um PDF para começar."))
             return
         if not attachment_path:
-            QMessageBox.warning(self, tr("Anexos"), tr("Escolha o arquivo a anexar."))
+            notify_error(self, tr("Anexos"), tr("Escolha o arquivo a anexar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Anexos"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Anexos"), tr("Escolha o arquivo de saída."))
             return
 
         task = call(AddAttachment().run, input_path, output_path, attachment_path)
 
         def done(name):
             self.session.open(output_path)
-            QMessageBox.information(
+            notify_success(
                 self, tr("Anexos"), tr('Anexo "{name}" adicionado com sucesso.').format(name=name)
             )
 
@@ -187,20 +192,20 @@ class AttachmentsPage(QWidget):
         name = self.remove_name_edit.text().strip()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Anexos"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Anexos"), tr("Abra um PDF para começar."))
             return
         if not name:
-            QMessageBox.warning(self, tr("Anexos"), tr("Digite o nome do anexo a remover."))
+            notify_error(self, tr("Anexos"), tr("Digite o nome do anexo a remover."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Anexos"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Anexos"), tr("Escolha o arquivo de saída."))
             return
 
         task = call(RemoveAttachment().run, input_path, output_path, name=name)
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Anexos"), tr("Anexo removido com sucesso."))
+            notify_success(self, tr("Anexos"), tr("Anexo removido com sucesso."))
 
         run_task(
             self,
@@ -215,16 +220,16 @@ class AttachmentsPage(QWidget):
         output_dir = self.extract_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Anexos"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Anexos"), tr("Abra um PDF para começar."))
             return
         if not output_dir:
-            QMessageBox.warning(self, tr("Anexos"), tr("Escolha a pasta de saída."))
+            notify_error(self, tr("Anexos"), tr("Escolha a pasta de saída."))
             return
 
         task = call(ExtractAttachments().run, input_path, output_dir)
 
         def done(output_paths):
-            QMessageBox.information(
+            notify_success(
                 self,
                 tr("Anexos"),
                 tr("{count} anexo(s) extraído(s) com sucesso.").format(count=len(output_paths)),

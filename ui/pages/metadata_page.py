@@ -1,6 +1,6 @@
 """Aba de edição de metadados de PDFs."""
 
-from PySide6.QtWidgets import QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
 from core.metadata import ReadMetadata, SetMetadata
 from ui.errors import show_error
@@ -8,6 +8,7 @@ from ui.i18n import tr
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 
 class MetadataPage(QWidget):
@@ -16,6 +17,7 @@ class MetadataPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -41,6 +43,7 @@ class MetadataPage(QWidget):
             mode="save", suggested_source=session.path, suggested_suffix="metadados"
         )
         save_button = QPushButton(tr("Salvar"))
+        self.action_buttons.append(save_button)
         save_button.clicked.connect(self._save)
 
         layout = QVBoxLayout(self)
@@ -67,7 +70,7 @@ class MetadataPage(QWidget):
     def _load(self):
         input_path = self.session.path()
         if not input_path:
-            QMessageBox.warning(self, tr("Metadados"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Metadados"), tr("Abra um PDF para começar."))
             return
 
         try:
@@ -106,10 +109,10 @@ class MetadataPage(QWidget):
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Metadados"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Metadados"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Metadados"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Metadados"), tr("Escolha o arquivo de saída."))
             return
 
         task = call(
@@ -126,7 +129,7 @@ class MetadataPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Metadados"), tr("Metadados salvos com sucesso."))
+            notify_success(self, tr("Metadados"), tr("Metadados salvos com sucesso."))
 
         run_task(
             self,

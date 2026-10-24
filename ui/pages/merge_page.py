@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PySide6.QtWidgets import QCheckBox, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from core.base import READ, open_reader
 from core.merge import MergePDF
@@ -11,6 +11,7 @@ from ui.page_ranges import parse_page_ranges
 from ui.tasks import run_task
 from ui.widgets.file_list_editor import FileListEditor
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 
 class MergePage(QWidget):
@@ -19,6 +20,7 @@ class MergePage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.file_list_editor = FileListEditor(
@@ -39,6 +41,7 @@ class MergePage(QWidget):
         self.interleave_check.toggled.connect(self.reverse_check.setEnabled)
 
         merge_button = QPushButton(tr("Mesclar"))
+        self.action_buttons.append(merge_button)
         merge_button.clicked.connect(self._merge)
 
         layout = QVBoxLayout(self)
@@ -56,13 +59,13 @@ class MergePage(QWidget):
         output_path = self.output_picker.path()
 
         if not entries:
-            QMessageBox.warning(self, tr("Mesclar"), tr("Adicione pelo menos um arquivo."))
+            notify_error(self, tr("Mesclar"), tr("Adicione pelo menos um arquivo."))
             return
         if self.interleave_check.isChecked() and len(entries) != 2:
-            QMessageBox.warning(self, tr("Mesclar"), tr("Para intercalar, deixe na lista só dois arquivos: o das frentes e o dos versos."))
+            notify_error(self, tr("Mesclar"), tr("Para intercalar, deixe na lista só dois arquivos: o das frentes e o dos versos."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Mesclar"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Mesclar"), tr("Escolha o arquivo de saída."))
             return
 
         options = {
@@ -86,7 +89,7 @@ class MergePage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Mesclar"), tr("PDFs mesclados com sucesso."))
+            notify_success(self, tr("Mesclar"), tr("PDFs mesclados com sucesso."))
 
         run_task(
             self,

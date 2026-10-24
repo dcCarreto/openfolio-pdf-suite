@@ -3,7 +3,6 @@
 from PySide6.QtWidgets import (
     QComboBox,
     QLabel,
-    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -15,6 +14,7 @@ from ui.i18n import tr, tr_message
 from ui.tasks import call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 _PARTS = [1, 2, 3]
 _CONFORMANCE_LABELS = {
@@ -34,6 +34,7 @@ class PDFAPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -83,6 +84,7 @@ class PDFAPage(QWidget):
         self._update_conformance_options()
 
         apply_button = QPushButton(tr("Converter"))
+        self.action_buttons.append(apply_button)
         apply_button.clicked.connect(self._apply_convert)
 
         layout.addWidget(note)
@@ -118,6 +120,7 @@ class PDFAPage(QWidget):
         note.setWordWrap(True)
 
         validate_button = QPushButton(tr("Validar"))
+        self.action_buttons.append(validate_button)
         validate_button.clicked.connect(self._apply_validate)
 
         layout.addWidget(note)
@@ -132,10 +135,10 @@ class PDFAPage(QWidget):
         output_path = self.convert_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("PDF/A"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("PDF/A"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("PDF/A"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("PDF/A"), tr("Escolha o arquivo de saída."))
             return
 
         task = call_with_progress(
@@ -149,13 +152,13 @@ class PDFAPage(QWidget):
         def done(result):
             if not result.written:
                 message = tr("O documento não pôde ser convertido, e nada foi gravado:") + "\n" + _bullets(result.issues)
-                QMessageBox.warning(self, tr("PDF/A"), message)
+                notify_error(self, tr("PDF/A"), message)
                 return
             self.session.open(output_path)
             message = tr("PDF convertido com sucesso.")
             if result.fixed:
                 message += "\n\n" + tr("Ajustes feitos:") + "\n" + _bullets(result.fixed)
-            QMessageBox.information(self, tr("PDF/A"), message)
+            notify_success(self, tr("PDF/A"), message)
 
         run_task(
             self,
@@ -168,7 +171,7 @@ class PDFAPage(QWidget):
     def _apply_validate(self):
         input_path = self.session.path()
         if not input_path:
-            QMessageBox.warning(self, tr("PDF/A"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("PDF/A"), tr("Abra um PDF para começar."))
             return
 
         task = call_with_progress(ValidatePDFA().run, input_path)
@@ -179,9 +182,9 @@ class PDFAPage(QWidget):
                     "Nenhum problema encontrado nas verificações do app. Elas não cobrem a "
                     "norma inteira: para arquivamento legal, confirme com o veraPDF."
                 )
-                QMessageBox.information(self, tr("PDF/A"), text)
+                notify_success(self, tr("PDF/A"), text)
             else:
-                QMessageBox.warning(
+                notify_error(
                     self,
                     tr("PDF/A"),
                     tr("Problemas encontrados:\n{issues}").format(issues=_bullets(result.issues)),
