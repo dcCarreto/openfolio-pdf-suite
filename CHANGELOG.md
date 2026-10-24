@@ -4,6 +4,13 @@ O OpenFolio PDF Suite não tem número de versão: há uma só, que recebe atual
 atualização é identificada pela data em que foi publicada e só é instalada se você aceitar,
 depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no aviso do app).
 
+## 2026-10-24
+
+### Atualizações
+
+- Com a verificação ao iniciar ligada, o app consulta se há atualização no máximo uma vez por
+  dia, e não mais a cada abertura. Ajuda > Verificar atualizações continua consultando na hora.
+
 ## 2026-10-23
 
 Primeira atualização depois da beta 0.2.0-beta.1. O app ainda não tem assinatura de código: no

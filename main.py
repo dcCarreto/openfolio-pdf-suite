@@ -45,7 +45,7 @@ def main():
     windows = AppWindows(make_window)
     windows.open([])
     windows.windows()[0].offer_app_menu()
-    if preferences.check_updates_on_start():
+    if preferences.check_updates_on_start() and preferences.update_check_due():
         windows.windows()[0].check_for_updates(manual=False)
 
     file_open_filter = FileOpenFilter(lambda path: windows.open([path]))

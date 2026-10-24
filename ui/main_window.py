@@ -818,6 +818,7 @@ class MainWindow(QMainWindow):
                     tr("Não foi possível verificar atualizações. Confira a conexão e tente de novo."),
                 )
             return
+        self._preferences.set_last_update_check()  # a verificação ao iniciar espera um dia
         update = updates.newest_update(releases, APP_VERSION)
         if update is None:
             if manual:
