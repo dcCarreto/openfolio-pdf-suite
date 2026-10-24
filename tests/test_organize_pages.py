@@ -152,8 +152,7 @@ def test_window_ctrl_z_undoes_grid_edits_first(make_pdf, tmp_path):
     try:
         window.session.open(str(make_pdf("doc.pdf", [(100, 300), (200, 300)])))
         row = window._row_of["OrganizePage"]
-        window.sidebar.setCurrentRow(row)
-        page = window.page(row)
+        page = window.open_tool(row)
         assert not window._undo_action.isEnabled()
 
         _select(page, 1)

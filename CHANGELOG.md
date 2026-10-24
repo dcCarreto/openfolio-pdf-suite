@@ -29,6 +29,13 @@ mas foram menos usadas na prática que a do Windows.
 
 ### Uso
 
+- Janela nova, organizada em abas: Início (abrir um PDF, as ferramentas de partida e os
+  recentes), Ferramentas (todas as ferramentas, por categoria) e uma aba por documento aberto,
+  cada um com o próprio desfazer. Em cada documento, a barra do topo traz abrir, salvar e
+  imprimir; a coluna da esquerda, miniaturas, marcadores e anexos; a da direita, as ferramentas
+  mais usadas, num painel ao lado do documento com Fechar no topo.
+- O modo de exibição das páginas (página única, rolagem contínua, página dupla ou livro) fica
+  guardado para a próxima vez que o app abrir.
 - Operações longas mostram o andamento e podem ser canceladas, sem travar a janela.
 - O documento aberto ganha desfazer e refazer (Ctrl+Z e Ctrl+Y) para todas as ferramentas.
 - Novas ferramentas: imprimir, organizar páginas, preencher formulários direto no documento,
@@ -70,8 +77,8 @@ mas foram menos usadas na prática que a do Windows.
 - No Windows, o instalador oferece escolher o OpenFolio como programa padrão para PDF.
 - No Linux, o AppImage oferece aparecer no menu de aplicativos e na escolha do programa para
   abrir PDF (Ajuda > Mostrar no menu de aplicativos).
-- Com o OpenFolio já aberto, abrir outro PDF (duplo clique, "Abrir com") abre uma janela nova
-  no app aberto, mais rápido; uma operação numa janela não trava as outras.
+- Com o OpenFolio já aberto, abrir outro PDF (duplo clique, "Abrir com") abre uma aba nova na
+  janela aberta, mais rápido; uma operação num documento não trava os outros.
 - Tema claro ou o do sistema, modo apresentação, página dupla e livro, paleta de comandos
   (Ctrl+K) e atalhos de teclado configuráveis.
 - Linha de comando (`openfolio`) para usar as ferramentas em scripts, que vem com os

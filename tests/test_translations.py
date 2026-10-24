@@ -167,7 +167,7 @@ def _collect_tab_texts():
     window = MainWindow()
     try:
         tabs = {_SECTIONS[row][4]: _visible_texts(window._ensure_page(row)) for row in range(len(_SECTIONS))}
-        tabs["sidebar"] = [window.sidebar.item(row).text() for row in range(window.sidebar.count())]
+        tabs["tools"] = [card.text() for card in window.tools_center.cards.values()]
     finally:
         window.close()
     return tabs
@@ -208,8 +208,8 @@ def test_no_tab_shows_portuguese_in_english(english):
             found = sorted({text for text in _visible_texts(page) if _looks_portuguese(text)})
             if found:
                 leftovers[_SECTIONS[row][4]] = found
-        sidebar = [window.sidebar.item(row).text() for row in range(window.sidebar.count())]
-        leftovers.update({"sidebar": [t for t in sidebar if _looks_portuguese(t)]} if any(map(_looks_portuguese, sidebar)) else {})
+        cards = [card.text() for card in window.tools_center.cards.values()]
+        leftovers.update({"tools": [t for t in cards if _looks_portuguese(t)]} if any(map(_looks_portuguese, cards)) else {})
     finally:
         window.close()
     assert leftovers == {}

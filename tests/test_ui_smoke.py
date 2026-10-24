@@ -4,9 +4,10 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QListWidget
+from PySide6.QtWidgets import QApplication
 
 from ui.main_window import MainWindow
+from ui.tools import QUICK_TOOLS, SECTIONS
 from ui.viewer.pdf_viewer import PdfViewer
 
 
@@ -14,85 +15,60 @@ def _app() -> QApplication:
     return QApplication.instance() or QApplication([])
 
 
-def test_main_window_builds_with_all_sections():
+def test_main_window_opens_on_home_with_all_tools_in_the_tools_tab():
     _app()
     window = MainWindow()
 
     assert window.windowTitle() == "OpenFolio PDF Suite"
     assert not window.windowIcon().isNull()
+    assert [window.tabs.tabText(i) for i in range(window.tabs.count())] == ["Início", "Ferramentas"]
+    assert window.tabs.currentWidget() is window.home
+    assert window.documents() == []  # nenhum documento até o usuário abrir um
 
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar is not None
-    assert sidebar.count() == 30
-    assert [sidebar.item(i).text() for i in range(sidebar.count())] == [
-        "Criar PDF",
-        "Mesclar",
-        "Dividir",
-        "Páginas",
-        "Organizar páginas",
-        "Comprimir",
-        "Converter",
-        "Marca d'água",
-        "Proteger",
-        "Metadados",
-        "Numeração",
-        "PDF/A",
-        "Extrair texto",
-        "Extrair imagens",
-        "Cortar/Redimensionar",
-        "Editar",
-        "Marcadores",
-        "Camadas",
-        "Anexos",
-        "Campos de formulário",
-        "Anotações",
-        "Medição",
-        "OCR",
-        "Limpar escaneados",
-        "Redigir/Sanitizar",
-        "Preencher e assinar",
-        "Assinatura digital",
-        "Acessibilidade",
-        "Comparar",
-        "Processar em lote",
-    ]
-    assert all(not sidebar.item(i).icon().isNull() for i in range(sidebar.count()))
-    assert window.stack.count() == 30
+    cards = window.tools_center.cards
+    assert sorted(card.text() for card in cards.values()) == sorted(title for _i, title, *_rest in SECTIONS)
+    assert all(not card.icon().isNull() for card in cards.values())
 
+    doc = window.current_document()  # uma aba de documento vazia, como uma janela sem PDF
+    assert window.documents() == [doc] and window.tabs.currentWidget() is doc
     assert isinstance(window.viewer, PdfViewer)
     assert window.viewer.content_stack.currentIndex() == 0  # nenhum PDF aberto ainda
     assert window.session.path() is None
-    assert window.annotation_state.is_page_active() is False  # "Criar PDF" é a aba inicial
+    assert window.stack.count() == 30 and not window.stack.isVisibleTo(doc)  # nenhuma ferramenta aberta
+    assert len(doc._quick_buttons) == len(QUICK_TOOLS)
+    assert window.annotation_state.is_page_active() is False
 
     window.close()
 
 
-def test_selecting_annotations_row_activates_annotation_state():
+def test_opening_annotations_activates_annotation_state_and_closing_deactivates():
     _app()
     window = MainWindow()
     annotations_row = window._annotations_row
-    assert window.sidebar.item(annotations_row).text() == "Anotações"
 
-    window.sidebar.setCurrentRow(annotations_row)
+    window.open_tool(annotations_row)
+    doc = window.document
     assert window.annotation_state.is_page_active() is True
+    assert doc.tool_header.isVisibleTo(doc) and doc._tool_title.text() == "Anotações"
+    assert doc._quick_buttons[annotations_row].isChecked()
 
-    window.sidebar.setCurrentRow(0)
+    doc.close_tool()
     assert window.annotation_state.is_page_active() is False
+    assert not doc.tool_header.isVisibleTo(doc) and not doc.stack.isVisibleTo(doc)
 
     window.close()
 
 
-def test_selecting_redaction_row_activates_redaction_state():
+def test_opening_redaction_deactivates_annotations():
     _app()
     window = MainWindow()
     redaction_row = window._redaction_row
-    assert window.sidebar.item(redaction_row).text() == "Redigir/Sanitizar"
 
-    window.sidebar.setCurrentRow(redaction_row)
+    window.open_tool(redaction_row)
     assert window.redaction_state.is_page_active() is True
     assert window.annotation_state.is_page_active() is False
 
-    window.sidebar.setCurrentRow(window._annotations_row)
+    window.open_tool(window._annotations_row)
     assert window.redaction_state.is_page_active() is False
     assert window.annotation_state.is_page_active() is True
 

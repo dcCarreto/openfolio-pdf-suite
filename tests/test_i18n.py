@@ -5,7 +5,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtWidgets import QApplication, QListWidget
+from PySide6.QtWidgets import QApplication
 
 from ui import i18n
 from ui.main_window import MainWindow
@@ -62,28 +62,27 @@ def test_set_language_emits_signal_only_on_change():
     assert len(calls) == 1
 
 
-def test_main_window_rebuilds_sidebar_on_language_change():
+def test_main_window_is_translated_without_losing_the_open_tool():
+    from ui.tools import ROW_OF
+
     _app()
     window = MainWindow()
     original_session = window.session
+    compress = ROW_OF["CompressPage"]
+    assert window.tools_center.cards[ROW_OF["MergePage"]].text() == "Mesclar"
 
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar.item(1).text() == "Mesclar"
-
-    sidebar.setCurrentRow(5)  # Comprimir
+    window.open_tool(compress)
     i18n.set_language(i18n.EN_US)
 
-    # A sessão do documento aberto precisa sobreviver ao rebuild da UI.
+    # A sessão do documento aberto precisa sobreviver à tradução da UI.
     assert window.session is original_session
-
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar.item(1).text() == "Merge"
-    assert sidebar.item(5).text() == "Compress"
-    assert sidebar.currentRow() == 5  # preserva a seção selecionada
+    assert [window.tabs.tabText(i) for i in range(2)] == ["Home", "Tools"]
+    assert window.tools_center.cards[ROW_OF["MergePage"]].text() == "Merge"
+    assert window.document.current_tool() == compress  # a ferramenta aberta continua aberta
+    assert window.document._tool_title.text() == "Compress"
 
     i18n.set_language(i18n.PT_BR)
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar.item(1).text() == "Mesclar"
+    assert window.tools_center.cards[ROW_OF["MergePage"]].text() == "Mesclar"
 
     window.close()
 

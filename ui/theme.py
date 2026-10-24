@@ -317,6 +317,131 @@ QStatusBar {{
     border-top: 1px solid {_BORDER};
     color: {_TEXT_MUTED};
 }}
+
+/* Abas da janela: Início, Ferramentas e uma por documento. */
+QTabWidget#documentTabs::pane {{
+    border: none;
+    border-radius: 0;
+    top: 0;
+    background-color: {_BG};
+}}
+
+QTabWidget#documentTabs > QTabBar {{
+    background-color: {_PANEL};
+}}
+
+QTabWidget#documentTabs > QTabBar::tab {{
+    padding: 8px 18px;
+    margin: 0;
+    border-radius: 0;
+    border-right: 1px solid {_BORDER};
+    border-bottom: 2px solid transparent;
+    min-width: 80px;
+    max-width: 260px;
+}}
+
+QTabWidget#documentTabs > QTabBar::tab:selected {{
+    background-color: {_BG};
+    color: {_TEXT};
+    border-bottom: 2px solid {_ACCENT};
+}}
+
+QToolButton#tabCloseButton {{
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+}}
+
+QToolButton#tabCloseButton:hover {{
+    background-color: rgba({_OVERLAY}, 30);
+}}
+
+QWidget#viewerToolbar {{
+    background-color: {_PANEL};
+    border-bottom: 1px solid {_BORDER};
+}}
+
+QWidget#toolHeader {{
+    background-color: {_ELEVATED};
+    border-bottom: 1px solid {_BORDER};
+}}
+
+QLabel#toolHeaderTitle {{
+    font-size: 12pt;
+    font-weight: 600;
+}}
+
+QWidget#leftRail {{
+    background-color: {_PANEL};
+    border-right: 1px solid {_BORDER};
+}}
+
+QWidget#rightRail {{
+    background-color: {_PANEL};
+    border-left: 1px solid {_BORDER};
+}}
+
+QToolButton#railButton {{
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+}}
+
+QToolButton#railButton:hover {{
+    background-color: rgba({_OVERLAY}, 18);
+}}
+
+QToolButton#railButton:checked {{
+    background-color: {_ELEVATED};
+    border: 1px solid {_ACCENT};
+}}
+
+QStackedWidget#toolPanel {{
+    border-left: 1px solid {_BORDER};
+}}
+
+QLabel#sectionTitle {{
+    font-size: 12pt;
+    font-weight: 600;
+}}
+
+QToolButton#toolCard {{
+    background-color: {_PANEL};
+    border: 1px solid {_BORDER};
+    border-radius: 10px;
+    padding: 10px 6px 8px 6px;
+}}
+
+QToolButton#toolCard:hover {{
+    background-color: {_ELEVATED};
+    border: 1px solid {_ACCENT};
+}}
+
+QListWidget#recentList {{
+    background-color: {_PANEL};
+    border: 1px solid {_BORDER};
+    border-radius: 8px;
+    padding: 4px;
+}}
+
+QListWidget#recentList::item {{
+    padding: 9px 12px;
+    border-radius: 6px;
+}}
+
+QListWidget#recentList::item:hover {{
+    background-color: rgba({_OVERLAY}, 12);
+}}
+
+QPushButton#primaryButton {{
+    background-color: {_ACCENT};
+    border-color: {_ACCENT};
+    color: white;
+}}
+
+QPushButton#primaryButton:hover {{
+    background-color: {_ACCENT_PRESSED};
+}}
 """
 
 
