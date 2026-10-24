@@ -54,12 +54,16 @@ coisa, ele mostra o que a atualização traz e pergunta; no Windows, se você ac
 confere o arquivo e instala sozinho. Tudo o que mudou fica em [CHANGELOG.md](CHANGELOG.md).
 
 <p align="center">
-  <img src="assets/screenshots/01-visao-geral.png" alt="Janela principal do OpenFolio PDF Suite: sidebar, visualizador central com um PDF aberto e a aba Anotações" width="900">
+  <img src="assets/screenshots/01-visao-geral.png" alt="Janela principal do OpenFolio PDF Suite: abas de documento, miniaturas à esquerda, um PDF aberto e a ferramenta Anotações à direita" width="900">
 </p>
 
-A navegação é feita por uma barra lateral com ícone e descrição de cada ferramenta. No centro
-fica o visualizador — sempre visível, com miniaturas, marcadores e anexos ao lado, zoom
-(também com Ctrl + roda do mouse), ajuste à largura ou à página, rotação da visualização,
+A janela é organizada em abas: **Início** (abrir um PDF, as ferramentas de partida e os
+arquivos recentes), **Ferramentas** (todas as ferramentas, por categoria) e uma aba por
+documento aberto, com o próprio desfazer e a própria fila de operações. Em cada documento, a
+barra do topo tem abrir, salvar, imprimir, páginas, zoom e modos de exibição; a coluna de
+ícones da esquerda mostra miniaturas, marcadores e anexos; a da direita abre as ferramentas
+mais usadas num painel ao lado do documento, com o nome da ferramenta e **Fechar** no topo. No
+centro fica o visualizador — sempre visível, com zoom (também com Ctrl + roda do mouse), ajuste à largura ou à página, rotação da visualização,
 rolagem contínua, página única, página dupla ou livro (capa sozinha), busca que destaca todas
 as ocorrências e seleção de texto com Ctrl+C; **Exibir > Apresentação** (F5) mostra o
 documento em tela cheia, uma página por vez (setas, espaço ou clique passam; Esc sai). É nele que você desenha as anotações, marca as áreas de redação e posiciona o que
@@ -70,6 +74,10 @@ caixa ou a opção, ou mostra a lista de opções; cada campo preenchido pode se
 Ctrl+Z. Um aviso no topo indica quando o PDF está protegido, assinado, tem formulário ou
 camadas. Se o PDF estiver protegido por senha, o próprio
 visualizador pede a senha na hora de abrir.
+
+<p align="center">
+  <img src="assets/screenshots/12-ferramentas.png" alt="Aba Ferramentas com todas as ferramentas em cartões, agrupadas por categoria" width="900">
+</p>
 
 O documento aberto é um documento de trabalho: as ferramentas aplicam o resultado nele, cada
 operação pode ser desfeita (Ctrl+Z) e refeita (Ctrl+Y), e nada vai para o arquivo original
@@ -100,9 +108,10 @@ para editar título, autor e os outros campos da descrição e o pacote XMP inte
 nova do documento, que Ctrl+Z desfaz) e verificar o PDF/A e a acessibilidade.
 
 As operações rodam em segundo plano: a janela continua respondendo, a barra de status mostra
-o andamento e o botão "Cancelar" interrompe a operação sem deixar arquivo pela metade. Os
-divisores entre a barra lateral, o visualizador e o painel podem ser arrastados, e o app
-lembra o tamanho da janela. Erros inesperados ficam registrados em `openfolio.log`, na pasta
+o andamento e o botão "Cancelar" interrompe a operação sem deixar arquivo pela metade; uma
+operação longa num documento não trava os outros. Os divisores entre o painel lateral, o
+visualizador e o painel da ferramenta podem ser arrastados, e o app lembra o tamanho da janela,
+a largura dos painéis e o modo de exibição das páginas. Erros inesperados ficam registrados em `openfolio.log`, na pasta
 de dados do app (no Windows, `%LOCALAPPDATA%\OpenFolio\OpenFolio PDF Suite\logs`), para
 anexar a uma issue.
 
@@ -313,8 +322,8 @@ Isso instala o pacote em modo editável junto com todas as dependências (`pypdf
 python main.py
 ```
 
-A janela principal abre em modo escuro, com a aba **Criar PDF** selecionada por padrão. Basta
-escolher a ferramenta desejada na barra lateral. **Exibir > Tema** troca para o tema claro ou
+A janela principal abre em modo escuro, na aba **Início**. Abra um PDF ou escolha uma
+ferramenta na aba **Ferramentas** (ou na coluna de ícones à direita do documento). **Exibir > Tema** troca para o tema claro ou
 segue o do sistema (inclusive quando ele muda com o app aberto); a escolha é lembrada.
 
 **Ctrl+K** (Exibir > Paleta de comandos) abre uma busca por todas as ferramentas e comandos dos
@@ -398,8 +407,12 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
   signature.py     Assinatura digital (pyhanko) e verificação completa das assinaturas
 
 ui/              Interface gráfica (PySide6)
-  main_window.py       Janela principal: sidebar, visualizador e as 26 seções (cada aba é
-                       construída na primeira vez em que é aberta)
+  main_window.py       Janela principal: as abas Início, Ferramentas e uma por documento
+  document_tab.py      Aba de documento: visualizador, colunas de ícones e painel da ferramenta
+                       (cada ferramenta é construída na primeira vez em que é aberta)
+  home_page.py         Aba Início: abrir, ferramentas de partida e arquivos recentes
+  tools_center.py      Aba Ferramentas: todas as ferramentas, por categoria
+  tools.py             Catálogo das ferramentas (categorias e atalhos da coluna da direita)
   theme.py             Temas escuro e claro (ou o do sistema), inspirados no macOS
   icon.py              Ícone da aplicação (renderizado a partir de assets/logo.svg)
   document_session.py  Documento de trabalho: arquivo do usuário, versões, desfazer/refazer
