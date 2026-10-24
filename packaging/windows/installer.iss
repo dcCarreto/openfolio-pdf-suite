@@ -112,8 +112,10 @@ Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,OpenFolio PDF S
 ; clique o torna o padrão para .pdf.
 Filename: "ms-settings:defaultapps?registeredAppMachine=OpenFolioPDFSuite"; Description: "{cm:DefaultPdf}"; Flags: shellexec nowait postinstall skipifsilent runasoriginaluser; Tasks: associatepdf; Check: IsAdminInstallMode
 Filename: "ms-settings:defaultapps?registeredAppUser=OpenFolioPDFSuite"; Description: "{cm:DefaultPdf}"; Flags: shellexec nowait postinstall skipifsilent runasoriginaluser; Tasks: associatepdf; Check: not IsAdminInstallMode
-; Atualização feita pelo app (/SILENT): ele fechou para instalar e abre de novo.
-Filename: "{app}\{#AppExeName}"; Flags: nowait skipifnotsilent
+; Atualização feita pelo app (/SILENT): ele fechou para instalar e abre de novo, como o usuário
+; e não como o administrador do instalador (um leitor de PDF elevado não recebe arquivos
+; arrastados do Explorer nem os abertos por fora, e é um risco à toa).
+Filename: "{app}\{#AppExeName}"; Flags: nowait skipifnotsilent runasoriginaluser
 
 [Code]
 function EnvironmentKey(Param: String): String;
