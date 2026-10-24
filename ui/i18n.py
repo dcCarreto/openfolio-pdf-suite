@@ -1611,6 +1611,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     'Página em branco': 'Blank page',
     'edição na grade': 'grid edit',
+    'anotação': 'annotation',
+    'área de redação': 'redaction area',
     'Extrair páginas': 'Extract pages',
     '{count} página(s) salva(s) em {path}.': '{count} page(s) saved to {path}.',
     'Preencher formulário': 'Fill form',

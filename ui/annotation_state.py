@@ -109,3 +109,8 @@ class AnnotationState(QObject):
             return
         self._pending = []
         self.pending_changed.emit()
+
+    def set_pending(self, specs: list[AnnotationSpec]) -> None:
+        """Troca a lista inteira (desfazer/refazer)."""
+        self._pending = list(specs)
+        self.pending_changed.emit()

@@ -1,6 +1,6 @@
 """Aba de redação real e sanitização de PDFs."""
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -27,6 +27,7 @@ from core.redaction import (
     TEXT_KIND,
 )
 from ui.i18n import tr
+from ui.pending_history import PendingHistory
 from ui.tasks import call, call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -91,6 +92,9 @@ class RedactionPage(QWidget):
     """Permite apagar definitivamente áreas de um PDF (marcadas no visualizador) ou
     sanitizar o documento antes de compartilhar (remover metadados, JavaScript, anexos e,
     opcionalmente, anotações)."""
+
+    edits_changed = Signal()  # as áreas marcadas mudaram: desfazer/refazer delas podem ter mudado
+    edit_label = "área de redação"  # o "Desfazer área de redação" do menu
 
     def __init__(self, session, redaction_state, parent=None):
         super().__init__(parent)
@@ -170,7 +174,10 @@ class RedactionPage(QWidget):
         pending_buttons.addWidget(remove_selected_button)
         pending_buttons.addWidget(clear_button)
 
-        self.redaction_state.pending_changed.connect(self._refresh_pending)
+        self._history = PendingHistory(self.redaction_state, self.redaction_state.set_pending)
+        self.redaction_state.pending_changed.connect(self._on_pending_changed)
+        # Ligado depois do visualizador, que limpa as pendentes ao trocar de arquivo.
+        self.session.path_changed.connect(self._on_document_changed)
         self._refresh_pending()
 
         self.also_sanitize_checkbox = QCheckBox(tr("Também sanitizar o documento"))
@@ -246,6 +253,29 @@ class RedactionPage(QWidget):
         self.stack.setCurrentIndex(index)
 
     # -- lista de áreas pendentes -------------------------------------------------------
+
+    def _on_pending_changed(self):
+        self._history.changed()
+        self._refresh_pending()
+        self.edits_changed.emit()
+
+    def _on_document_changed(self):
+        self._history.reset()
+        self.edits_changed.emit()
+
+    # Ctrl+Z / Ctrl+Y da janela: as áreas marcadas vêm antes das versões do documento.
+
+    def can_undo_edit(self) -> bool:
+        return self._history.can_undo()
+
+    def can_redo_edit(self) -> bool:
+        return self._history.can_redo()
+
+    def undo_edit(self) -> None:
+        self._history.undo()
+
+    def redo_edit(self) -> None:
+        self._history.redo()
 
     def _refresh_pending(self):
         pending = self.redaction_state.pending()

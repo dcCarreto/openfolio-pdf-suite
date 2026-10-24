@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 from reportlab.pdfgen import canvas as rl_canvas
 
 from core.annotations import AddAnnotations, AnnotationSpec, ListAnnotations
+from core.redaction import RedactionRect
 from core.xfdf import ExportAnnotationsXFDF
 from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
@@ -193,3 +194,54 @@ def test_recolor_and_author_of_new_annotations(tmp_path, monkeypatch):
     page.author_edit.setText("Revisora")
     page.author_edit.editingFinished.emit()
     assert AnnotationsPage(session, state).author_edit.text() == "Revisora"  # fica guardado
+
+
+def test_window_ctrl_z_undoes_and_redoes_pending_marks(tmp_path):
+    from PySide6.QtCore import QSettings, Qt
+    from PySide6.QtTest import QTest
+
+    from ui.main_window import MainWindow
+
+    _app()
+    _make_pdf(tmp_path / "doc.pdf")
+    window = MainWindow(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    try:
+        window.open_document(str(tmp_path / "doc.pdf"))
+        window.open_tool(window._row_of["AnnotationsPage"])
+        state = window.annotation_state
+        first = AnnotationSpec(page_index=0, kind="note", position=(10, 10), text="a")
+        second = AnnotationSpec(page_index=0, kind="ink", points=[(10, 10), (50, 50)])
+        state.add_pending(first)
+        state.add_pending(second)
+        assert window._undo_action.isEnabled() and window._undo_action.text() == "Desfazer anotação"
+
+        window.show()
+        window.activateWindow()
+        assert QTest.qWaitForWindowActive(window)  # o atalho só chega à janela ativa
+        window.viewer.setFocus()
+        QTest.keyClick(window.viewer, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+        assert state.pending() == [first]  # pelo atalho, a última some primeiro
+        window.undo()
+        assert state.pending() == [] and window._redo_action.isEnabled()
+        window.redo()
+        assert state.pending() == [first]
+
+        state.add_pending(second)  # anotação nova apaga o "refazer"
+        assert not window._redo_action.isEnabled()
+        state.clear_pending()  # "Limpar pendentes" também se desfaz
+        window.undo()
+        assert state.pending() == [first, second]
+
+        window.session.open(str(tmp_path / "doc.pdf"))  # outro arquivo: nada a desfazer dele
+        assert state.pending() == [] and not window._undo_action.isEnabled()
+
+        window.open_tool(window._row_of["RedactionPage"])
+        area = RedactionRect(page_index=0, left=10, bottom=10, right=50, top=50)
+        window.redaction_state.add_pending(area)
+        assert window._undo_action.text() == "Desfazer área de redação"
+        window.undo()
+        assert window.redaction_state.pending() == []
+        window.redo()
+        assert window.redaction_state.pending() == [area]
+    finally:
+        window.close()
