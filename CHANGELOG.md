@@ -12,6 +12,14 @@ depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no avi
   embutida no app (licença livre OFL), igual em todos os sistemas.
 - O foco do teclado aparece em botões, campos, caixas de marcar e abas.
 - Exibir > Animações da interface liga ou desliga as transições da interface.
+- Menus, abas, a busca de ferramentas e comandos e o idioma ficam numa só faixa no topo,
+  deixando mais altura para o documento. O idioma troca em "PT | EN".
+- As abas de documento se reordenam arrastando. Com alterações não salvas, um ponto aparece
+  no lugar do "x"; com uma operação em andamento, um arco gira no lugar do ícone.
+- A barra sobre a página tem o número da página editável (digite e Enter), o zoom com um menu
+  de tamanhos prontos e o modo Livro ao lado dos outros modos de exibição.
+- Numa janela estreita, as miniaturas se recolhem enquanto uma ferramenta está aberta (e voltam
+  quando ela fecha) e parte da barra do documento vai para o menu "...".
 
 ### Anotações e redação
 

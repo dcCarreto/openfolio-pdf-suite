@@ -1,7 +1,8 @@
 """Janela principal da aplicação.
 
 Organizada em abas: Início, Ferramentas e uma aba por documento aberto (ver
-`ui/document_tab.py`). Os menus, a barra de status e as ações de documento (salvar, desfazer,
+`ui/document_tab.py`). A barra superior (`ui/top_bar.py`) junta os menus, as abas, a busca de
+comandos e o idioma. Os menus, a barra de status e as ações de documento (salvar, desfazer,
 imprimir...) valem para a aba de documento atual.
 """
 
@@ -13,7 +14,7 @@ from pathlib import Path
 from typing import cast
 
 from PySide6.QtCore import QByteArray, QProcess, QSettings, QSize, QStandardPaths, Qt, QUrl
-from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QGuiApplication, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QGuiApplication, QIcon, QKeySequence
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
@@ -22,11 +23,10 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QMainWindow,
+    QMenuBar,
     QMessageBox,
     QProgressDialog,
-    QPushButton,
     QTabBar,
-    QTabWidget,
     QToolButton,
     QWidget,
 )
@@ -38,9 +38,8 @@ from ui import desktop_integration, i18n, sidebar_icons, theme
 from ui.about_dialog import AboutDialog
 from ui.app_events import pdf_paths_from_mime
 from ui.diagnostics import log_path
-from ui.document_tab import PANEL_MIN_WIDTH, PANEL_WIDTH, VIEWER_MIN_WIDTH, DocumentTab
+from ui.document_tab import PANEL_MIN_WIDTH, PANEL_WIDTH, SIDE_WIDTH, VIEWER_MIN_WIDTH, DocumentTab
 from ui.errors import show_error
-from ui.flags import build_br_flag_icon, build_us_flag_icon
 from ui.home_page import HomePage
 from ui.i18n import tr
 from ui.icon import build_app_icon
@@ -52,14 +51,17 @@ from ui.tasks import call, run_task
 from ui.theme import apply_titlebar
 from ui.tools import ROW_OF, SECTIONS
 from ui.tools_center import ToolsCenter
+from ui.top_bar import FIXED_TABS, CommandLauncher, DocumentTabs, LangSwitch, bar_separator
 from ui.update_dialog import UpdateDialog
 from ui.viewer import pdf_viewer as viewer_layouts
-from ui.viewer.viewer_icons import build_close_icon
+from ui.viewer.viewer_icons import build_file_icon, build_home_icon, build_plus_icon
 
 logger = logging.getLogger(__name__)
 
 _SECTIONS = SECTIONS  # nome antigo, usado pelos testes que percorrem todas as ferramentas
 _HOME, _TOOLS = 0, 1  # as abas fixas, antes das de documento
+NARROW_WIDTH = 1180  # abaixo disso a barra superior e a do visualizador se compactam
+MIN_SIZE = (960, 600)
 
 
 def _installs_updates() -> bool:
@@ -111,12 +113,8 @@ class MainWindow(QMainWindow):
     # -- montagem ------------------------------------------------------------
 
     def _build_ui(self):
-        self.tabs = QTabWidget()
-        self.tabs.setObjectName("documentTabs")
-        self.tabs.setDocumentMode(True)
-        self.tabs.setTabsClosable(True)
-        self.tabs.setElideMode(Qt.TextElideMode.ElideMiddle)
-        self.tabs.tabBar().setExpanding(False)
+        self.setMinimumSize(*MIN_SIZE)
+        self.tabs = DocumentTabs()
         self.tabs.tabCloseRequested.connect(self._on_tab_close_requested)
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -125,17 +123,85 @@ class MainWindow(QMainWindow):
         self.home.tool_requested.connect(self.open_tool)
         self.tools_center = ToolsCenter()
         self.tools_center.tool_requested.connect(self.open_tool)
-        self.tabs.addTab(self.home, "")
-        self.tabs.addTab(self.tools_center, "")
-        for index in (_HOME, _TOOLS):  # as abas fixas não fecham
-            self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.RightSide, None)
+        self.tabs.addTab(self.home, build_home_icon(), "")
+        self.tabs.addTab(self.tools_center, sidebar_icons.build_organize_icon(), "")
+        for index, tag in enumerate(FIXED_TABS):
+            self.tabs.tabBar().setTabData(index, tag)
         self._retranslate_fixed_tabs()
+        self.setMenuWidget(self._build_top_bar())
         self.setCentralWidget(self.tabs)
-        self.statusBar().showMessage("OpenFolio PDF Suite")
+        status_bar = self.statusBar()
+        status_bar.setObjectName("StatusBar")
+        status_bar.setSizeGripEnabled(False)
+        status_bar.setFixedHeight(28)
+        status_bar.showMessage("OpenFolio PDF Suite")
+
+    def _build_top_bar(self) -> QWidget:
+        """Logo, menus, abas, "+" (abrir), a busca de comandos e o idioma, numa faixa só."""
+        bar = QWidget()
+        bar.setObjectName("TopBar")
+        bar.setFixedHeight(44)
+        self._menu_bar = QMenuBar()
+        self._menu_bar.setObjectName("MainMenu")
+        self._logo_button = QToolButton()
+        self._logo_button.setObjectName("LogoButton")
+        self._logo_button.setIcon(build_app_icon())
+        self._logo_button.setIconSize(QSize(18, 18))
+        self._logo_button.setFixedSize(28, 28)
+        self._logo_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._logo_button.clicked.connect(lambda: self.tabs.setCurrentWidget(self.home))
+        self._new_tab_button = QToolButton()
+        self._new_tab_button.setObjectName("NewTabButton")
+        self._new_tab_button.setProperty("ofRole", "icon")
+        self._new_tab_button.setIcon(build_plus_icon())
+        self._new_tab_button.setIconSize(QSize(18, 18))
+        self._new_tab_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._new_tab_button.clicked.connect(self._open_pdf)
+        self._command_launcher = CommandLauncher()
+        self._command_launcher.clicked.connect(self.show_command_palette)
+        self._language_switcher = LangSwitch()
+
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(8, 0, 8, 0)
+        layout.setSpacing(4)
+        layout.addWidget(self._logo_button)
+        layout.addWidget(self._menu_bar)
+        layout.addWidget(bar_separator())
+        layout.addWidget(self.tabs.tabBar(), 1)
+        layout.addWidget(self._new_tab_button)
+        layout.addSpacing(8)
+        layout.addWidget(self._command_launcher)
+        layout.addSpacing(4)
+        layout.addWidget(self._language_switcher)
+        self._retranslate_top_bar()
+        return bar
+
+    def _retranslate_top_bar(self):
+        self._logo_button.setToolTip(tr("Início"))
+        self._logo_button.setAccessibleName(tr("Início"))
+        self._new_tab_button.setToolTip(tr("Abrir PDF...") + " (Ctrl+O)")
+        self._new_tab_button.setAccessibleName(tr("Abrir PDF..."))
+        self._command_launcher.retranslate()
+        self._language_switcher.retranslate()
+
+    def menuBar(self) -> QMenuBar:  # type: ignore[override]
+        """A barra de menus mora na barra superior (o QMainWindow criaria outra no lugar dela)."""
+        return self._menu_bar
 
     def _retranslate_fixed_tabs(self):
         self.tabs.setTabText(_HOME, tr("Início"))
         self.tabs.setTabText(_TOOLS, tr("Ferramentas"))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        narrow = self.width() < NARROW_WIDTH
+        if narrow != getattr(self, "_narrow", None):
+            self._narrow = narrow
+            self._command_launcher.set_compact(narrow)
+            bar = self.tabs.tabBar()
+            bar.setProperty("compact", narrow)
+            bar.style().unpolish(bar)
+            bar.style().polish(bar)
 
     # -- abas de documento --------------------------------------------------------
 
@@ -167,24 +233,18 @@ class MainWindow(QMainWindow):
         if self._preferences.page_layout() in viewer_layouts.LAYOUTS:
             doc.viewer.set_layout(self._preferences.page_layout())
         # Só a escolha do usuário fica guardada: uma ferramenta de desenho força a página única.
-        for button in (doc.viewer.single_page_button, doc.viewer.continuous_button, doc.viewer.double_page_button):
+        for button in doc.viewer._mode_buttons.values():
             button.clicked.connect(lambda _checked=False, d=doc: self._remember_page_layout(d))
         doc.tasks.finished.connect(lambda outcome, d=doc: self._on_task_finished(d, outcome))
         doc.save_button.clicked.connect(self.save_document)
         doc.print_button.clicked.connect(self.print_document)
         doc.task_status.hide()
         self.statusBar().addPermanentWidget(doc.task_status)
-        index = self.tabs.addTab(doc, build_app_icon(), doc.title())
-        # O "x" nas cores do tema, no lugar do botão nativo (vermelho no Windows).
-        close_button = QToolButton()
-        close_button.setObjectName("tabCloseButton")
-        close_button.setIcon(build_close_icon())
-        close_button.setIconSize(QSize(14, 14))
-        close_button.setFixedSize(20, 20)
-        close_button.setAutoRaise(True)
-        close_button.setToolTip(tr("Fechar documento"))
-        close_button.clicked.connect(lambda _checked=False, d=doc: self.close_document(d))
-        self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.RightSide, close_button)
+        index = self.tabs.addTab(doc, build_file_icon(), doc.title(modified_mark=False))
+        # O "x" nas cores do tema, no lugar do botão nativo; vira um ponto com alterações.
+        doc.close_button.clicked.connect(lambda _checked=False, d=doc: self.close_document(d))
+        self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.RightSide, doc.close_button)
+        self._update_tab(doc)
         self._apply_splitter_state(doc)
         self.tabs.setCurrentWidget(doc)
         return doc
@@ -241,11 +301,30 @@ class MainWindow(QMainWindow):
             doc.task_status.setVisible(doc is self.document and doc.tasks.is_busy())
         self._update_document_actions()
 
-    def _on_document_changed(self, doc: DocumentTab):
+    def _update_tab(self, doc: DocumentTab):
+        """Nome, dica, ponto de alterado e, com uma operação rodando, o arco girando no lugar
+        do ícone."""
         index = self.tabs.indexOf(doc)
-        if index >= 0:
-            self.tabs.setTabText(index, doc.title())
-            self.tabs.setTabToolTip(index, doc.session.source_path() or "")
+        if index < 0:
+            return
+        bar = self.tabs.tabBar()
+        modified = doc.session.is_modified()
+        unsaved = tr("alterações não salvas")
+        self.tabs.setTabText(index, doc.title(modified_mark=False))
+        tip = doc.session.source_path() or doc.title()
+        self.tabs.setTabToolTip(index, f"{tip}\n{unsaved}" if modified else tip)
+        doc.close_button.set_dirty(modified)
+        close_name = tr("Fechar documento")
+        doc.close_button.setToolTip(close_name)
+        doc.close_button.setAccessibleName(f"{close_name}, {unsaved}" if modified else close_name)
+        busy = doc.tasks.is_busy()
+        if busy != (bar.tabButton(index, QTabBar.ButtonPosition.LeftSide) is doc.busy_spinner):
+            bar.setTabButton(index, QTabBar.ButtonPosition.LeftSide, doc.busy_spinner if busy else None)
+            doc.busy_spinner.setVisible(busy)
+            self.tabs.setTabIcon(index, QIcon() if busy else build_file_icon())
+
+    def _on_document_changed(self, doc: DocumentTab):
+        self._update_tab(doc)
         if doc is self.document:
             doc.task_status.setVisible(doc.tasks.is_busy())
         self._update_document_actions()
@@ -420,45 +499,7 @@ class MainWindow(QMainWindow):
             self._commands.append((tr("Ferramentas"), action))
         self._apply_shortcuts()
         self._update_document_actions()
-
-        # Mantemos uma referência Python (self._language_switcher): sem ela, o PySide6
-        # pode coletar o widget mesmo com o Qt "dono" dele internamente via setCornerWidget.
-        self._language_switcher = self._build_language_switcher()
-        menu_bar.setCornerWidget(self._language_switcher, Qt.Corner.TopRightCorner)
-        # Ao reconstruir o menu (troca de idioma), o widget do canto não fica visível
-        # sozinho sem um show() explícito.
-        self._language_switcher.show()
         self._language_switcher.setEnabled(not self._any_busy())
-
-    def _build_language_switcher(self) -> QWidget:
-        widget = QWidget()
-        layout = QHBoxLayout(widget)
-        layout.setContentsMargins(4, 0, 8, 0)
-        layout.setSpacing(4)
-
-        icon_size = QSize(26, 17)
-
-        us_button = QPushButton()
-        us_button.setObjectName("flagButton")
-        us_button.setIcon(build_us_flag_icon())
-        us_button.setIconSize(icon_size)
-        us_button.setToolTip("English")
-        us_button.setFixedSize(38, 26)
-        us_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        us_button.clicked.connect(lambda: i18n.set_language(i18n.EN_US))
-
-        br_button = QPushButton()
-        br_button.setObjectName("flagButton")
-        br_button.setIcon(build_br_flag_icon())
-        br_button.setIconSize(icon_size)
-        br_button.setToolTip("Português (Brasil)")
-        br_button.setFixedSize(38, 26)
-        br_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        br_button.clicked.connect(lambda: i18n.set_language(i18n.PT_BR))
-
-        layout.addWidget(us_button)
-        layout.addWidget(br_button)
-        return widget
 
     # -- comandos e atalhos (A18) ------------------------------------------------------
 
@@ -505,17 +546,17 @@ class MainWindow(QMainWindow):
 
     def _apply_splitter_state(self, doc: DocumentTab):
         """Cada documento novo abre com as larguras de painel que o usuário deixou por último."""
-        state = self._settings.value("window/document_splitter") if self._settings else None
+        state = self._settings.value("ui/splitter") if self._settings else None
         if isinstance(state, QByteArray) and doc.splitter.restoreState(state):
             return
         width = max(self.width(), VIEWER_MIN_WIDTH + PANEL_MIN_WIDTH)
         panel = min(PANEL_WIDTH, max(PANEL_MIN_WIDTH, width // 3))
-        side = doc.viewer.side_panel.width()
+        side = SIDE_WIDTH
         doc.splitter.setSizes([side, max(VIEWER_MIN_WIDTH, width - panel - side), panel])
 
     def _save_splitter_state(self, doc: DocumentTab):
         if self._settings is not None:
-            self._settings.setValue("window/document_splitter", doc.splitter.saveState())
+            self._settings.setValue("ui/splitter", doc.splitter.saveState())
 
     def _save_layout(self):
         if self._settings is None:
@@ -532,6 +573,7 @@ class MainWindow(QMainWindow):
         i18n.install_qt_translator(QApplication.instance())
         self._preferences.set_language(i18n.get_language())
         self._retranslate_fixed_tabs()
+        self._retranslate_top_bar()
         self.home.retranslate()
         self.tools_center.retranslate()
         for doc in self.documents():

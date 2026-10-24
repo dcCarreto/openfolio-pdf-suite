@@ -711,7 +711,15 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Ajustar à largura": "Fit to width",
     "Página única": "Single page",
     "Rolagem contínua": "Continuous scroll",
-    "Buscar": "Search",
+    "Buscar (Ctrl+F)": "Search (Ctrl+F)",
+    "Ajustar à página": "Fit page",
+    "Zoom": "Zoom",
+    "de {total}": "of {total}",
+    "Mais opções de exibição": "More view options",
+    # Top bar and document tabs
+    "Buscar ferramentas e comandos": "Search tools and commands",
+    "Idioma da interface": "Interface language",
+    "alterações não salvas": "unsaved changes",
     "Página {current} de {total}": "Page {current} of {total}",
     "Página {number}": "Page {number}",
     # PDF viewer: opening documents

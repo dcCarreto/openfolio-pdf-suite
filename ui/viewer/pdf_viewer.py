@@ -6,7 +6,7 @@ import time
 
 import pypdfium2 as pdfium
 from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
+from PySide6.QtGui import QColor, QIntValidator, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QStackedWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -45,11 +46,14 @@ from ui.viewer.search import DocumentSearch, SearchMatch
 from ui.viewer.search_bar import SearchBar
 from ui.viewer.side_panel import DocumentSidePanel
 from ui.viewer.thumbnail_list import ThumbnailList
+from ui.top_bar import bar_separator as _separator
 from ui.viewer.viewer_icons import (
+    build_book_icon,
     build_continuous_page_icon,
     build_double_page_icon,
     build_fit_page_icon,
     build_fit_width_icon,
+    build_more_icon,
     build_next_page_icon,
     build_open_icon,
     build_prev_page_icon,
@@ -281,6 +285,8 @@ class PdfViewer(QWidget):
         página e modo de exibição."""
         for widget, text in self._translatable_tooltips:
             widget.setToolTip(tr(text))
+            widget.setAccessibleName(tr(text))
+        self._retranslate_toolbar_menus()
         self._empty_label.setText(tr("Nenhum PDF aberto"))
         self._empty_open_button.setText(tr("Abrir PDF..."))
         self.search_bar.retranslate()
@@ -293,75 +299,144 @@ class PdfViewer(QWidget):
         self._update_page_indicator()
 
     def _build_toolbar(self) -> QWidget:
+        """A barra sobre o documento (44 px), em grupos:
+
+            [abrir salvar imprimir] ... [< página de N >] | [- 120% +] | [ajustes girar][modos] ... [buscar]
+
+        Estreita (`set_compact`), os ajustes, o girar e os modos vão para o menu "...".
+        """
         toolbar = QWidget()
-        toolbar.setObjectName("viewerToolbar")
+        toolbar.setObjectName("ViewerBar")
+        toolbar.setFixedHeight(44)
         layout = QHBoxLayout(toolbar)
-        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setContentsMargins(8, 0, 8, 0)
         layout.setSpacing(4)
 
         open_button = self._tool_button(build_open_icon(), "Abrir PDF...")
         open_button.clicked.connect(self._browse_open)
-        layout.addWidget(open_button)
-        layout.addSpacing(4)
+        layout.addWidget(open_button)  # a aba de documento põe Salvar e Imprimir logo depois
+        layout.addStretch()
 
         prev_button = self._tool_button(build_prev_page_icon(), "Página anterior")
         prev_button.clicked.connect(self._go_prev)
         next_button = self._tool_button(build_next_page_icon(), "Próxima página")
         next_button.clicked.connect(self._go_next)
-        # Clicar no indicador (ou Ctrl+G) pede o número da página para ir direto a ela.
-        self.page_indicator = QPushButton()
-        self.page_indicator.setObjectName("pageIndicatorButton")
-        self.page_indicator.setFlat(True)
-        self.page_indicator.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.page_indicator.setToolTip(tr("Ir para a página... (Ctrl+G)"))
-        self._translatable_tooltips.append((self.page_indicator, "Ir para a página... (Ctrl+G)"))
-        self.page_indicator.clicked.connect(self._ask_go_to_page)
+        # O número da página atual, editável: Enter vai direto para a página digitada.
+        self.page_field = QLineEdit()
+        self.page_field.setObjectName("PageField")
+        self.page_field.setFixedWidth(40)
+        self.page_field.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.page_field.setValidator(QIntValidator(1, 99999, self.page_field))
+        self.page_field.returnPressed.connect(self._go_to_typed_page)
+        self.page_total = QLabel()
+        self.page_total.setProperty("ofRole", "secondary")
         layout.addWidget(prev_button)
-        layout.addWidget(self.page_indicator)
+        layout.addWidget(self.page_field)
+        layout.addWidget(self.page_total)
         layout.addWidget(next_button)
-        layout.addSpacing(4)
+        layout.addWidget(_separator())
 
         zoom_out_button = self._tool_button(build_zoom_out_icon(), "Diminuir zoom")
         zoom_out_button.clicked.connect(self._zoom_out)
         zoom_in_button = self._tool_button(build_zoom_in_icon(), "Aumentar zoom")
         zoom_in_button.clicked.connect(self._zoom_in)
+        self.zoom_button = QToolButton()
+        self.zoom_button.setObjectName("ZoomButton")
+        self.zoom_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.zoom_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.zoom_button.setText(f"{int(self._scale * 100)}%")
+        zoom_menu = QMenu(self.zoom_button)
+        for percent in (50, 75, 100, 125, 150, 200):
+            zoom_menu.addAction(f"{percent}%").triggered.connect(lambda _checked=False, p=percent: self._set_zoom(p))
+        zoom_menu.addSeparator()
+        self._zoom_fit_width_action = zoom_menu.addAction("")
+        self._zoom_fit_width_action.triggered.connect(self._fit_width)
+        self._zoom_fit_page_action = zoom_menu.addAction("")
+        self._zoom_fit_page_action.triggered.connect(self._fit_page)
+        self.zoom_button.setMenu(zoom_menu)
+        layout.addWidget(zoom_out_button)
+        layout.addWidget(self.zoom_button)
+        layout.addWidget(zoom_in_button)
+
         fit_width_button = self._tool_button(build_fit_width_icon(), "Ajustar à largura")
         fit_width_button.clicked.connect(self._fit_width)
         fit_page_button = self._tool_button(build_fit_page_icon(), "Ajustar à página (Ctrl+0)")
         fit_page_button.clicked.connect(self._fit_page)
         rotate_button = self._tool_button(build_rotate_icon(), "Girar a visualização (o arquivo não muda)")
         rotate_button.clicked.connect(self._rotate_view)
-        self._zoom_label = QLabel(f"{int(self._scale * 100)}%")
-        layout.addWidget(zoom_out_button)
-        layout.addWidget(self._zoom_label)
-        layout.addWidget(zoom_in_button)
+
+        # Os modos de exibição, só ícones, num segmentado: um marcado por vez.
+        modes = QWidget()
+        modes.setObjectName("Segmented")
+        modes.setFixedHeight(32)
+        modes_layout = QHBoxLayout(modes)
+        modes_layout.setContentsMargins(2, 2, 2, 2)
+        modes_layout.setSpacing(2)
+        self._mode_group = QButtonGroup(self)
+        self._mode_group.setExclusive(True)
+        self._mode_buttons = {}
+        for key, icon, tooltip in (
+            (SINGLE, build_single_page_icon(), "Página única"),
+            (CONTINUOUS, build_continuous_page_icon(), "Rolagem contínua"),
+            (DOUBLE, build_double_page_icon(), "Página dupla"),
+            (BOOK, build_book_icon(), "Livro (capa sozinha)"),
+        ):
+            button = QToolButton()
+            button.setIcon(icon)
+            button.setIconSize(QSize(16, 16))
+            button.setFixedSize(28, 26)
+            button.setCheckable(True)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setToolTip(tr(tooltip))
+            button.setAccessibleName(tr(tooltip))
+            self._translatable_tooltips.append((button, tooltip))
+            button.clicked.connect(lambda _checked=False, k=key: self.set_layout(k))
+            self._mode_group.addButton(button)
+            modes_layout.addWidget(button)
+            self._mode_buttons[key] = button
+        self.single_page_button = self._mode_buttons[SINGLE]
+        self.continuous_button = self._mode_buttons[CONTINUOUS]
+        self.double_page_button = self._mode_buttons[DOUBLE]
+        self.book_button = self._mode_buttons[BOOK]
+        self.single_page_button.setChecked(True)
+
+        view_separator = _separator()
+        layout.addWidget(view_separator)
         layout.addWidget(fit_width_button)
         layout.addWidget(fit_page_button)
         layout.addWidget(rotate_button)
         layout.addSpacing(4)
+        layout.addWidget(modes)
+        self._view_widgets = [view_separator, fit_width_button, fit_page_button, rotate_button, modes]
 
-        self.single_page_button = self._tool_button(build_single_page_icon(), "Página única")
-        self.single_page_button.setCheckable(True)
-        self.single_page_button.setChecked(True)
-        self.single_page_button.clicked.connect(lambda: self.set_layout(SINGLE))
-
-        self.continuous_button = self._tool_button(build_continuous_page_icon(), "Rolagem contínua")
-        self.continuous_button.setCheckable(True)
-        self.continuous_button.clicked.connect(lambda: self.set_layout(CONTINUOUS))
-
-        self.double_page_button = self._tool_button(build_double_page_icon(), "Página dupla")
-        self.double_page_button.setCheckable(True)
-        self.double_page_button.clicked.connect(lambda: self.set_layout(DOUBLE))
-
-        self._mode_group = QButtonGroup(self)
-        self._mode_group.setExclusive(True)
-        self._mode_group.addButton(self.single_page_button)
-        self._mode_group.addButton(self.continuous_button)
-        self._mode_group.addButton(self.double_page_button)
-        layout.addWidget(self.single_page_button)
-        layout.addWidget(self.continuous_button)
-        layout.addWidget(self.double_page_button)
-        layout.addSpacing(4)
+        # Janela estreita: o mesmo que os botões acima, num menu.
+        self.more_button = self._tool_button(build_more_icon(), "Mais opções de exibição")
+        self.more_button.setObjectName("MoreButton")
+        self.more_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        more_menu = QMenu(self.more_button)
+        self._more_actions = []
+        for handler, text in (
+            (self._fit_width, "Ajustar à largura"),
+            (self._fit_page, "Ajustar à página (Ctrl+0)"),
+            (self._rotate_view, "Girar a visualização (o arquivo não muda)"),
+        ):
+            action = more_menu.addAction("")
+            action.triggered.connect(handler)
+            self._more_actions.append((action, text))
+        more_menu.addSeparator()
+        for key, text in (
+            (SINGLE, "Página única"),
+            (CONTINUOUS, "Rolagem contínua"),
+            (DOUBLE, "Página dupla"),
+            (BOOK, "Livro (capa sozinha)"),
+        ):
+            action = more_menu.addAction("")
+            action.triggered.connect(lambda _checked=False, k=key: self.set_layout(k))
+            self._more_actions.append((action, text))
+        self.more_button.setMenu(more_menu)
+        self.more_button.hide()
+        layout.addWidget(self.more_button)
+        layout.addStretch()
 
         self.thumbnails_button = self._tool_button(build_thumbnails_icon(), "Painel lateral (miniaturas, marcadores, anexos)")
         self.thumbnails_button.setCheckable(True)
@@ -369,36 +444,50 @@ class PdfViewer(QWidget):
         self.thumbnails_button.clicked.connect(self._toggle_thumbnails)
         layout.addWidget(self.thumbnails_button)
 
-        search_button = self._tool_button(build_search_icon(), "Buscar")
+        search_button = self._tool_button(build_search_icon(), "Buscar (Ctrl+F)")
         search_button.clicked.connect(self._toggle_search)
         layout.addWidget(search_button)
-
-        layout.addStretch()
 
         self._document_dependent_widgets = [
             prev_button,
             next_button,
             zoom_out_button,
             zoom_in_button,
+            self.zoom_button,
             fit_width_button,
             fit_page_button,
             rotate_button,
-            self.page_indicator,
-            self.single_page_button,
-            self.continuous_button,
-            self.double_page_button,
+            self.page_field,
+            *self._mode_buttons.values(),
+            self.more_button,
             self.thumbnails_button,
             search_button,
         ]
+        self._retranslate_toolbar_menus()
         return toolbar
 
-    def _tool_button(self, icon, tooltip: str) -> QPushButton:
-        button = QPushButton()
-        button.setObjectName("viewerToolButton")
+    def _retranslate_toolbar_menus(self):
+        self._zoom_fit_width_action.setText(tr("Ajustar à largura"))
+        self._zoom_fit_page_action.setText(tr("Ajustar à página"))
+        self.zoom_button.setToolTip(tr("Zoom"))
+        self.zoom_button.setAccessibleName(tr("Zoom"))
+        for action, text in self._more_actions:
+            action.setText(tr(text))
+
+    def set_compact(self, compact: bool) -> None:
+        """Janela estreita: ajustes, girar e modos de exibição vão para o menu "..."."""
+        for widget in self._view_widgets:
+            widget.setVisible(not compact)
+        self.more_button.setVisible(compact)
+
+    def _tool_button(self, icon, tooltip: str) -> QToolButton:
+        button = QToolButton()
+        button.setProperty("ofRole", "icon")
         button.setIcon(icon)
         button.setIconSize(QSize(18, 18))
-        button.setFixedSize(30, 30)
+        button.setFixedSize(32, 32)
         button.setToolTip(tr(tooltip))
+        button.setAccessibleName(tr(tooltip))
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._translatable_tooltips.append((button, tooltip))
         return button
@@ -985,17 +1074,23 @@ class PdfViewer(QWidget):
     def _update_page_indicator(self):
         self.session.set_current_page(self._current_page)
         if self._document is None:
-            self.page_indicator.setText("")
+            self.page_field.setText("")
+            self.page_total.setText("")
             return
-        # Curto na barra ("3 / 12"), completo na dica: a barra precisa caber no visualizador
-        # mesmo com a janela em 1280 px.
-        text = f"{self._current_page + 1} / {self._page_count()}"
-        self.page_indicator.setText(text)
-        self.page_indicator.setToolTip(
+        self.page_field.setText(str(self._current_page + 1))
+        self.page_total.setText(tr("de {total}").format(total=self._page_count()))
+        tip = (
             tr("Página {current} de {total}").format(current=self._current_page + 1, total=self._page_count())
             + " — " + tr("Ir para a página... (Ctrl+G)")
         )
-        self.page_indicator.setFixedWidth(self.page_indicator.fontMetrics().horizontalAdvance(text) + 16)
+        self.page_field.setToolTip(tip)
+        self.page_field.setAccessibleName(tip)
+
+    def _go_to_typed_page(self):
+        text = self.page_field.text().strip()
+        if text.isdigit():
+            self._go_to_page(int(text) - 1)
+        self._update_page_indicator()  # campo vazio: volta ao número da página atual
 
     # -- navegação e zoom -----------------------------------------------------
 
@@ -1090,8 +1185,12 @@ class PdfViewer(QWidget):
             return True
         return super().eventFilter(watched, event)
 
+    def _set_zoom(self, percent: int):
+        self._scale = max(_MIN_SCALE, min(_MAX_SCALE, percent / 100))
+        self._apply_zoom()
+
     def _apply_zoom(self):
-        self._zoom_label.setText(f"{int(self._scale * 100)}%")
+        self.zoom_button.setText(f"{int(self._scale * 100)}%")
         if self._document is None:
             return
         if self._continuous:
@@ -1155,9 +1254,8 @@ class PdfViewer(QWidget):
         if layout not in LAYOUTS:
             raise ValueError(f"Layout inválido: {layout}")
         continuous, spread = layout != SINGLE, layout if layout in (DOUBLE, BOOK) else None
-        if hasattr(self, "single_page_button"):
-            buttons = {SINGLE: self.single_page_button, CONTINUOUS: self.continuous_button}
-            buttons.get(layout, self.double_page_button).setChecked(True)
+        if hasattr(self, "_mode_buttons"):
+            self._mode_buttons[layout].setChecked(True)
         if (continuous, spread) == (self._continuous, self._spread):
             return
         page = self._current_page

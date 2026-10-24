@@ -1,5 +1,5 @@
 """Ícones da barra de ferramentas do visualizador, desenhados em runtime (mesma técnica
-usada em ui/sidebar_icons.py e ui/flags.py)."""
+usada em ui/sidebar_icons.py)."""
 
 from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QIcon, QPolygonF
@@ -161,5 +161,58 @@ def build_close_icon() -> QIcon:
     def draw(p):
         p.drawLine(QPointF(7, 7), QPointF(15, 15))
         p.drawLine(QPointF(15, 7), QPointF(7, 15))
+
+    return _build(draw)
+
+
+def build_plus_icon() -> QIcon:
+    """Abrir em aba nova: um "+"."""
+
+    def draw(p):
+        p.drawLine(QPointF(11, 5), QPointF(11, 17))
+        p.drawLine(QPointF(5, 11), QPointF(17, 11))
+
+    return _build(draw)
+
+
+def build_home_icon() -> QIcon:
+    """Início: a casa."""
+
+    def draw(p):
+        p.drawPolyline(QPolygonF([QPointF(4, 10), QPointF(11, 4), QPointF(18, 10)]))
+        p.drawRoundedRect(QRectF(6, 9, 10, 9), 1.5, 1.5)
+        p.drawPolyline(QPolygonF([QPointF(9.5, 18), QPointF(9.5, 14), QPointF(12.5, 14), QPointF(12.5, 18)]))
+
+    return _build(draw)
+
+
+def build_file_icon() -> QIcon:
+    """A aba de um documento: a folha com a dobra e as linhas do texto."""
+
+    def draw(p):
+        p.drawPolygon(QPolygonF([QPointF(5, 3), QPointF(13, 3), QPointF(17, 7), QPointF(17, 19), QPointF(5, 19)]))
+        p.drawPolyline(QPolygonF([QPointF(13, 3), QPointF(13, 7), QPointF(17, 7)]))
+        p.drawLine(QPointF(8, 11.5), QPointF(14, 11.5))
+        p.drawLine(QPointF(8, 14.5), QPointF(12, 14.5))
+
+    return _build(draw)
+
+
+def build_book_icon() -> QIcon:
+    """Livro (capa sozinha): o livro aberto."""
+
+    def draw(p):
+        p.drawPolygon(QPolygonF([QPointF(3, 5), QPointF(9, 5), QPointF(11, 7), QPointF(11, 18), QPointF(9, 16), QPointF(3, 16)]))
+        p.drawPolygon(QPolygonF([QPointF(19, 5), QPointF(13, 5), QPointF(11, 7), QPointF(11, 18), QPointF(13, 16), QPointF(19, 16)]))
+
+    return _build(draw)
+
+
+def build_more_icon() -> QIcon:
+    """Mais opções: três pontos."""
+
+    def draw(p):
+        for x in (6, 11, 16):
+            p.drawEllipse(QRectF(x - 1, 10, 2, 2))
 
     return _build(draw)

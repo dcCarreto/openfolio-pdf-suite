@@ -63,9 +63,25 @@ def test_keyboard_navigation_handlers(viewer):
 def test_go_to_page_asks_for_the_number(viewer, monkeypatch):
     monkeypatch.setattr(QInputDialog, "getInt", lambda *args, **kwargs: (3, True))
 
-    viewer.page_indicator.click()
+    viewer._ask_go_to_page()  # Ctrl+G
 
     assert viewer._current_page == 2
+
+
+def test_typing_a_page_number_in_the_bar_goes_to_it(viewer):
+    assert viewer.page_field.text() == "1" and viewer.page_total.text() == "de 4"
+
+    viewer.page_field.setText("3")
+    viewer.page_field.returnPressed.emit()
+    assert viewer._current_page == 2 and viewer.page_field.text() == "3"
+
+    viewer.page_field.setText("99")  # além do fim: vai para a última, como o Ctrl+G
+    viewer.page_field.returnPressed.emit()
+    assert viewer._current_page == 3 and viewer.page_field.text() == "4"
+
+    viewer.page_field.setText("")  # apagado: volta ao número da página atual
+    viewer.page_field.returnPressed.emit()
+    assert viewer._current_page == 3 and viewer.page_field.text() == "4"
 
 
 def test_fit_page_makes_the_whole_page_visible(viewer):

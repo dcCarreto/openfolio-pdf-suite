@@ -151,7 +151,7 @@ QWidget {{
     color: {t["text"]};
 }}
 
-QMainWindow, #homePage, #toolsCenter, #toolsCenterContent, #documentTab {{
+QMainWindow, #homePage, #toolsCenter, #toolsCenterContent, #documentTab, #CenterColumn {{
     background-color: {t["bg"]};
 }}
 
@@ -169,19 +169,19 @@ QLabel {{
 
 /* -- superfícies ------------------------------------------------------------ */
 
-#TopBar, #ViewerBar, #viewerToolbar, #LeftRail, #leftRail, #RightRail, #rightRail {{
+#TopBar, #ViewerBar, #LeftRail, #RightRail {{
     background-color: {t["bg"]};
 }}
 
-#TopBar, #ViewerBar, #viewerToolbar {{
+#TopBar, #ViewerBar {{
     border-bottom: 1px solid {t["border"]};
 }}
 
-#LeftRail, #leftRail {{
+#LeftRail {{
     border-right: 1px solid {t["border"]};
 }}
 
-#RightRail, #rightRail {{
+#RightRail {{
     border-left: 1px solid {t["border"]};
 }}
 
@@ -202,11 +202,11 @@ QStatusBar QLabel {{
     border: none;
 }}
 
-#SidePanel, #ToolPanel, #viewerSidePanel, #toolPanel {{
+#SidePanel, #ToolPanel, #viewerSidePanel {{
     background-color: {t["panel"]};
 }}
 
-#ToolPanel, #toolPanel {{
+#ToolPanel {{
     border-left: 1px solid {t["border"]};
 }}
 
@@ -251,8 +251,7 @@ QToolButton:focus {{
     border: 2px solid {t["accent"]};
 }}
 
-QToolButton[ofRole="icon"], QToolButton[ofRole="rail"], QToolButton#railButton,
-QPushButton#viewerToolButton {{
+QToolButton[ofRole="icon"], QToolButton[ofRole="rail"] {{
     background: transparent;
     border: 1px solid transparent;
     border-radius: 8px;
@@ -262,63 +261,71 @@ QPushButton#viewerToolButton {{
     color: {t["text2"]};
 }}
 
-QToolButton[ofRole="rail"], QToolButton#railButton {{
+QToolButton[ofRole="rail"] {{
     min-width: 36px;
     min-height: 36px;
 }}
 
-QToolButton[ofRole="icon"]:hover, QToolButton[ofRole="rail"]:hover, QToolButton#railButton:hover,
-QPushButton#viewerToolButton:hover {{
+QToolButton[ofRole="icon"]:hover, QToolButton[ofRole="rail"]:hover {{
     background-color: {t["hover"]};
 }}
 
-QToolButton[ofRole="icon"]:pressed, QToolButton[ofRole="rail"]:pressed, QToolButton#railButton:pressed,
-QPushButton#viewerToolButton:pressed {{
+QToolButton[ofRole="icon"]:pressed, QToolButton[ofRole="rail"]:pressed {{
     background-color: {t["pressed"]};
 }}
 
-QToolButton[ofRole="icon"]:checked, QToolButton[ofRole="rail"]:checked, QToolButton#railButton:checked,
-QPushButton#viewerToolButton:checked {{
+QToolButton[ofRole="icon"]:checked, QToolButton[ofRole="rail"]:checked {{
     background-color: {t["accent_fill"]};
     border-color: {t["accent_line"]};
 }}
 
-QToolButton[ofRole="icon"]:disabled, QToolButton[ofRole="rail"]:disabled, QToolButton#railButton:disabled,
-QPushButton#viewerToolButton:disabled {{
+QToolButton[ofRole="icon"]:disabled, QToolButton[ofRole="rail"]:disabled {{
     background: transparent;
     border-color: transparent;
 }}
 
-QToolButton[ofRole="icon"]:focus, QToolButton[ofRole="rail"]:focus, QToolButton#railButton:focus,
-QPushButton#viewerToolButton:focus {{
+QToolButton[ofRole="icon"]:focus, QToolButton[ofRole="rail"]:focus {{
     border: 2px solid {t["accent"]};
 }}
 
-QPushButton#pageIndicatorButton {{
-    background: transparent;
-    border: 1px solid transparent;
+QToolButton#ZoomButton {{
+    min-height: 32px;
+    padding: 0 20px 0 8px;
+    border-radius: 8px;
+    color: {t["text"]};
+}}
+
+QToolButton#ZoomButton::menu-indicator {{
+    image: url(of:caret-down-{key}.png);
+    subcontrol-origin: padding;
+    subcontrol-position: right center;
+    right: 6px;
+    width: 10px;
+    height: 10px;
+}}
+
+QToolButton#MoreButton::menu-indicator {{
+    image: none;
+    width: 0;
+}}
+
+QLineEdit#PageField {{
     min-height: 28px;
-    padding: 0 6px;
+    padding: 0 4px;
 }}
 
-QPushButton#pageIndicatorButton:hover {{
-    background-color: {t["hover"]};
+QLineEdit#PageField:focus {{
+    padding: 0 3px;
 }}
 
-QPushButton#flagButton {{
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    min-height: 0;
-    padding: 0;
+QSplitter::handle {{
+    background-color: {t["border"]};
 }}
 
-QPushButton#flagButton:hover {{
-    background-color: {t["hover"]};
-}}
-
-QPushButton#flagButton:pressed {{
-    background-color: {t["pressed"]};
+QPushButton#StatusCancel {{
+    min-height: 22px;
+    max-height: 22px;
+    padding: 0 8px;
 }}
 
 /* -- botões de texto ---------------------------------------------------------- */
@@ -724,53 +731,83 @@ QTabBar::tab:selected {{
     color: {t["text"]};
 }}
 
-/* Abas da janela: Início, Ferramentas e uma por documento. */
-QTabWidget#documentTabs::pane {{
-    border: none;
-    border-radius: 0;
-    top: 0;
-    background-color: {t["bg"]};
+/* Abas da janela (na barra superior): Início, Ferramentas e uma por documento. */
+QTabBar#DocTabs {{
+    background: transparent;
 }}
 
-QTabWidget#documentTabs > QTabBar, QTabBar#DocTabs {{
-    background-color: {t["bg"]};
-}}
-
-QTabWidget#documentTabs > QTabBar::tab, QTabBar#DocTabs::tab {{
+QTabBar#DocTabs::tab {{
     height: 30px;
     min-width: 64px;
     max-width: 220px;
     padding: 0 6px 0 10px;
-    margin: 6px 1px;
+    margin: 0 1px;
     border-radius: 8px;
     background: transparent;
     color: {t["text2"]};
     font-weight: 500;
 }}
 
-QTabWidget#documentTabs > QTabBar::tab:hover:!selected, QTabBar#DocTabs::tab:hover:!selected {{
+QTabBar#DocTabs::tab:hover:!selected {{
     background-color: {t["hover"]};
 }}
 
-QTabWidget#documentTabs > QTabBar::tab:selected, QTabBar#DocTabs::tab:selected {{
+QTabBar#DocTabs::tab:selected {{
     background-color: {t["raised"]};
     color: {t["text"]};
     font-weight: 600;
 }}
 
-QTabWidget#documentTabs > QTabBar::tab:focus, QTabBar#DocTabs::tab:focus {{
+QTabBar#DocTabs::tab:focus {{
     border: 2px solid {t["accent"]};
 }}
 
-QToolButton#tabCloseButton {{
-    background: transparent;
-    border: none;
-    border-radius: 5px;
-    padding: 0;
+QTabBar#DocTabs[compact="true"]::tab {{
+    max-width: 150px;
 }}
 
-QToolButton#tabCloseButton:hover {{
-    background-color: {t["pressed"]};
+QTabBar#DocTabs QToolButton {{
+    background-color: {t["bg"]};
+    border: none;
+    border-radius: 6px;
+}}
+
+/* -- barra superior -------------------------------------------------------------- */
+
+QFrame#BarSeparator {{
+    background-color: {t["border"]};
+    border: none;
+}}
+
+QToolButton#LogoButton {{
+    border-radius: 8px;
+}}
+
+QPushButton#CommandLauncher {{
+    min-height: 0;
+    padding: 0 10px;
+    text-align: left;
+    background-color: {t["field"]};
+    border: 1px solid {t["border"]};
+    border-radius: 8px;
+    color: {t["text3"]};
+}}
+
+QPushButton#CommandLauncher:hover {{
+    background-color: {t["field"]};
+    border-color: {t["border_strong"]};
+}}
+
+QPushButton#CommandLauncher:focus {{
+    border: 2px solid {t["accent"]};
+    padding: 0 9px;
+}}
+
+#Segmented QToolButton[text="PT"], #Segmented QToolButton[text="EN"] {{
+    font-size: 11px;
+    font-weight: 600;
+    min-height: 24px;
+    padding: 0 8px;
 }}
 
 /* -- menus ------------------------------------------------------------------------ */

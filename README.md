@@ -60,10 +60,15 @@ confere o arquivo e instala sozinho. Tudo o que mudou fica em [CHANGELOG.md](CHA
 
 A janela é organizada em abas: **Início** (abrir um PDF, as ferramentas de partida e os
 arquivos recentes), **Ferramentas** (todas as ferramentas, por categoria) e uma aba por
-documento aberto, com o próprio desfazer e a própria fila de operações. Em cada documento, a
-barra do topo tem abrir, salvar, imprimir, páginas, zoom e modos de exibição; a coluna de
-ícones da esquerda mostra miniaturas, marcadores e anexos; a da direita abre as ferramentas
-mais usadas num painel ao lado do documento, com o nome da ferramenta e **Fechar** no topo. No
+documento aberto, com o próprio desfazer e a própria fila de operações. Uma só faixa no topo
+junta os menus, as abas (as de documento se reordenam arrastando; com alterações não salvas,
+um ponto aparece no lugar do "x"), o **+** para abrir um PDF, a busca de ferramentas e
+comandos (Ctrl+K) e o idioma (**PT | EN**). Em cada documento, a barra sobre a página tem
+abrir, salvar, imprimir, o número da página (digite outro e Enter), zoom e modos de exibição;
+a coluna de ícones da esquerda mostra miniaturas, marcadores e anexos; a da direita abre as
+ferramentas mais usadas num painel ao lado do documento, com o nome da ferramenta e
+**Fechar** no topo. Numa janela estreita, as miniaturas se recolhem enquanto uma ferramenta
+está aberta e parte da barra vai para o menu **...**. No
 centro fica o visualizador — sempre visível, com zoom (também com Ctrl + roda do mouse), ajuste à largura ou à página, rotação da visualização,
 rolagem contínua, página única, página dupla ou livro (capa sozinha), busca que destaca todas
 as ocorrências e seleção de texto com Ctrl+C; **Exibir > Apresentação** (F5) mostra o
@@ -409,6 +414,7 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
 
 ui/              Interface gráfica (PySide6)
   main_window.py       Janela principal: as abas Início, Ferramentas e uma por documento
+  top_bar.py           A faixa do topo: menus, abas, busca de comandos e idioma
   document_tab.py      Aba de documento: visualizador, colunas de ícones e painel da ferramenta
                        (cada ferramenta é construída na primeira vez em que é aberta)
   home_page.py         Aba Início: abrir, ferramentas de partida e arquivos recentes

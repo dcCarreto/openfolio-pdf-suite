@@ -17,7 +17,7 @@ class PageContainer(QWidget):
         subtitle_label.setWordWrap(True)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(4)
         layout.addWidget(title_label)
         layout.addWidget(subtitle_label)

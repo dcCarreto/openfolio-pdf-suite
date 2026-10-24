@@ -1,8 +1,11 @@
 """Uma aba de documento: o PDF aberto, o visualizador e as ferramentas.
 
-    [barra do visualizador: abrir, páginas, zoom, modos de exibição, busca]
-    [faixa da ferramenta aberta: ícone, nome .......................... Fechar]
-    ┃ícones┃ miniaturas/marcadores/anexos ┃ documento ┃ painel da ferramenta ┃ícones das ferramentas┃
+    ┃ícones┃ miniaturas/marcadores/anexos ┃ [barra do visualizador] ┃ [nome da ferramenta  Fechar] ┃ícones das┃
+    ┃      ┃                              ┃ documento               ┃ painel da ferramenta         ┃ferramen- ┃
+    ┃      ┃                              ┃                         ┃                              ┃tas       ┃
+
+Sem espaço para o documento, as miniaturas se recolhem sozinhas enquanto uma ferramenta está
+aberta e voltam quando ela fecha (`_apply_width_rules`).
 
 Cada aba tem a própria sessão (desfazer, salvar), os próprios estados de marcação e a própria
 fila de operações: uma operação longa num documento não trava os outros. As ferramentas são
@@ -33,6 +36,7 @@ from ui.i18n import tr
 from ui.measure_state import MeasureState
 from ui.redaction_state import RedactionState
 from ui.tasks import TaskManager
+from ui.top_bar import BusySpinner, TabCloseButton
 from ui.tools import AREA_PICK_PAGES, QUICK_TOOLS, ROW_OF, SECTIONS
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.viewer.viewer_icons import build_print_icon, build_save_icon, build_thumbnails_icon
@@ -40,9 +44,18 @@ from ui.widget_state import capture_state, restore_state
 from ui.widgets.page_container import PageContainer
 from ui.widgets.task_status import TaskStatus
 
-PANEL_WIDTH = 480
-PANEL_MIN_WIDTH = 340
+PANEL_WIDTH = 344
+PANEL_MIN_WIDTH = 300
+PANEL_MAX_WIDTH = 480
+SIDE_WIDTH = 176
+SIDE_MIN_WIDTH = 140
+SIDE_MAX_WIDTH = 320
+LEFT_RAIL_WIDTH = 48
+RIGHT_RAIL_WIDTH = 52
 VIEWER_MIN_WIDTH = 320
+CENTER_MIN_WIDTH = 640  # menos que isso com uma ferramenta aberta: as miniaturas se recolhem
+CROWDED_WIDTH = 1280  # abaixo disso, ferramenta aberta sempre recolhe as miniaturas
+NARROW_WIDTH = 1180  # abaixo disso, a barra do visualizador guarda parte dos botões no "..."
 
 # Os botões da coluna da esquerda, na ordem das abas do painel lateral do visualizador.
 _LEFT_RAIL = [
@@ -54,14 +67,15 @@ _LEFT_RAIL = [
 
 def _rail_button(icon, tooltip: str) -> QToolButton:
     button = QToolButton()
-    button.setObjectName("railButton")
+    button.setProperty("ofRole", "rail")
     button.setIcon(icon)
-    button.setIconSize(QSize(22, 22))
-    button.setFixedSize(40, 40)
+    button.setIconSize(QSize(18, 18))
+    button.setFixedSize(36, 36)
     button.setCheckable(True)
     button.setAutoRaise(True)
     button.setCursor(Qt.CursorShape.PointingHandCursor)
     button.setToolTip(tr(tooltip))
+    button.setAccessibleName(tr(tooltip))
     return button
 
 
@@ -81,9 +95,15 @@ class DocumentTab(QWidget):
         self.tasks = TaskManager(self)  # o run_task das ferramentas acha o da aba subindo pelos pais
         self._pages: dict[int, QWidget] = {}  # linha de SECTIONS -> ferramenta já construída
         self._tool = -1
+        self._crowded = False  # ferramenta aberta sem espaço para as miniaturas
+        self._side_auto_hidden = False  # as miniaturas se recolheram sozinhas (voltam depois)
 
         self._build_ui()
         self.task_status = TaskStatus(self.tasks)  # vai para a barra de status da janela
+        # O "x" e o arco de operação em andamento: a janela os põe na aba deste documento.
+        self.close_button = TabCloseButton()
+        self.busy_spinner = BusySpinner()
+        self.busy_spinner.hide()
 
         self.tasks.started.connect(self.session.note_operation)
         self.tasks.started.connect(self._on_task_started)
@@ -106,14 +126,17 @@ class DocumentTab(QWidget):
         self.viewer.verify_signatures_requested.connect(self._verify_signatures)
         self.viewer.thumbnails_button.hide()  # a coluna de ícones da esquerda faz o papel dele
         # Salvar e Imprimir logo depois de "Abrir"; a janela liga os cliques.
-        self.save_button = self._toolbar_button(build_save_icon(), "Salvar (Ctrl+S)")
-        self.print_button = self._toolbar_button(build_print_icon(), "Imprimir... (Ctrl+P)")
+        self.save_button = self.viewer._tool_button(build_save_icon(), "Salvar (Ctrl+S)")
+        self.save_button.setEnabled(False)
+        self.print_button = self.viewer._tool_button(build_print_icon(), "Imprimir... (Ctrl+P)")
+        self.print_button.setEnabled(False)
         toolbar_layout = self.viewer.toolbar.layout()
         toolbar_layout.insertWidget(1, self.save_button)
         toolbar_layout.insertWidget(2, self.print_button)
 
         self.tool_header = QWidget()
         self.tool_header.setObjectName("toolHeader")
+        self.tool_header.setFixedHeight(56)
         header_layout = QHBoxLayout(self.tool_header)
         header_layout.setContentsMargins(12, 6, 12, 6)
         self._tool_icon = QLabel()
@@ -121,31 +144,45 @@ class DocumentTab(QWidget):
         self._tool_title.setObjectName("toolHeaderTitle")
         self.close_tool_button = QPushButton(tr("Fechar"))
         self.close_tool_button.setObjectName("closeToolButton")
+        self.close_tool_button.setProperty("ofVariant", "ghost")
         self.close_tool_button.clicked.connect(self.close_tool)
         header_layout.addWidget(self._tool_icon)
         header_layout.addWidget(self._tool_title)
         header_layout.addStretch()
         header_layout.addWidget(self.close_tool_button)
-        self.tool_header.hide()
 
         self.stack = QStackedWidget()
-        self.stack.setObjectName("toolPanel")
-        self.stack.setMinimumWidth(PANEL_MIN_WIDTH)
+        self.stack.setObjectName("ToolStack")
         for _section in SECTIONS:
             scroll_area = QScrollArea()
             scroll_area.setObjectName("toolPanelScroll")
             scroll_area.setWidgetResizable(True)
             self.stack.addWidget(scroll_area)
-        self.stack.hide()
+
+        # O painel da ferramenta: o nome dela no topo e o formulário embaixo.
+        self.tool_panel = QWidget()
+        self.tool_panel.setObjectName("ToolPanel")
+        self.tool_panel.setMinimumWidth(PANEL_MIN_WIDTH)
+        self.tool_panel.setMaximumWidth(PANEL_MAX_WIDTH)
+        panel_layout = QVBoxLayout(self.tool_panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        panel_layout.setSpacing(0)
+        panel_layout.addWidget(self.tool_header)
+        panel_layout.addWidget(self.stack, 1)
+        self.tool_panel.hide()
 
         side_panel = self.viewer.side_panel
         side_panel.use_external_rail()
         side_panel.tabs_changed.connect(self._update_left_rail)
+        side_panel.setMinimumWidth(SIDE_MIN_WIDTH)
+        side_panel.setMaximumWidth(SIDE_MAX_WIDTH)
+        side_panel.resize(SIDE_WIDTH, side_panel.height())
 
         self.left_rail = QWidget()
-        self.left_rail.setObjectName("leftRail")
+        self.left_rail.setObjectName("LeftRail")
+        self.left_rail.setFixedWidth(LEFT_RAIL_WIDTH)
         left_layout = QVBoxLayout(self.left_rail)
-        left_layout.setContentsMargins(4, 8, 4, 8)
+        left_layout.setContentsMargins(6, 8, 6, 8)
         left_layout.setSpacing(4)
         self._left_buttons = []
         for index, (icon, tooltip) in enumerate(_LEFT_RAIL):
@@ -156,10 +193,11 @@ class DocumentTab(QWidget):
         left_layout.addStretch()
 
         self.right_rail = QWidget()
-        self.right_rail.setObjectName("rightRail")
+        self.right_rail.setObjectName("RightRail")
+        self.right_rail.setFixedWidth(RIGHT_RAIL_WIDTH)
         right_layout = QVBoxLayout(self.right_rail)
-        right_layout.setContentsMargins(4, 8, 4, 8)
-        right_layout.setSpacing(4)
+        right_layout.setContentsMargins(8, 8, 8, 8)
+        right_layout.setSpacing(2)
         self._quick_buttons: dict[int, QToolButton] = {}
         for class_name in QUICK_TOOLS:
             row = ROW_OF[class_name]
@@ -174,13 +212,24 @@ class DocumentTab(QWidget):
         self.all_tools_button.clicked.connect(self.all_tools_requested)
         right_layout.addWidget(self.all_tools_button)
 
-        # Divisores arrastáveis: o usuário escolhe quanto espaço dá ao documento.
+        # A barra do visualizador fica só sobre o documento, não sobre os painéis.
+        self.center = QWidget()
+        self.center.setObjectName("CenterColumn")
+        center_layout = QVBoxLayout(self.center)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(0)
+        center_layout.addWidget(self.viewer.toolbar)
+        center_layout.addWidget(self.viewer, 1)
+
+        # Divisores arrastáveis: o usuário escolhe quanto espaço dá ao documento. Com 1 px, o
+        # Qt ainda deixa uns 5 px de área para pegar o divisor.
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setObjectName("documentSplitter")
         self.splitter.setChildrenCollapsible(False)
+        self.splitter.setHandleWidth(1)
         self.splitter.addWidget(side_panel)
-        self.splitter.addWidget(self.viewer)
-        self.splitter.addWidget(self.stack)
+        self.splitter.addWidget(self.center)
+        self.splitter.addWidget(self.tool_panel)
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
         self.splitter.setStretchFactor(2, 0)
@@ -196,25 +245,13 @@ class DocumentTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self.viewer.toolbar)  # sai do visualizador para cobrir a largura da aba
-        layout.addWidget(self.tool_header)
         layout.addWidget(body, 1)
         self._update_left_rail()
-
-    def _toolbar_button(self, icon, tooltip: str) -> QPushButton:
-        button = QPushButton()
-        button.setObjectName("viewerToolButton")
-        button.setIcon(icon)
-        button.setIconSize(QSize(18, 18))
-        button.setFixedSize(30, 30)
-        button.setCursor(Qt.CursorShape.PointingHandCursor)
-        button.setToolTip(tr(tooltip))
-        button.setEnabled(False)
-        return button
 
     # -- painel lateral ----------------------------------------------------------
 
     def _on_left_rail(self, index: int):
+        self._side_auto_hidden = False  # a escolha agora é do usuário
         side_panel = self.viewer.side_panel
         if side_panel.isVisibleTo(self) and side_panel.currentIndex() == index:
             self.viewer.show_side_panel(False)  # clicar no botão aberto recolhe o painel
@@ -270,28 +307,62 @@ class DocumentTab(QWidget):
     def open_tool(self, row: int) -> QWidget:
         """Abre a ferramenta no painel da direita, com a faixa do nome dela no topo."""
         page = self.page(row)
-        first_time = not self.stack.isVisible()
+        first_time = not self.tool_panel.isVisibleTo(self)
         self.stack.setCurrentIndex(row)
-        self.stack.show()
-        if first_time:
-            sizes = self.splitter.sizes()
-            if sizes[2] < PANEL_MIN_WIDTH:
-                total = sum(sizes)
-                panel = min(PANEL_WIDTH, max(PANEL_MIN_WIDTH, total // 3))
-                self.splitter.setSizes([sizes[0], max(VIEWER_MIN_WIDTH, total - sizes[0] - panel), panel])
+        self.tool_panel.show()
+        # Provisório: o formulário que não cabe nos 344 px alarga o painel (até 480); some quando
+        # todas as ferramentas seguirem o padrão de painel novo, que cabe na largura padrão.
+        wanted = max(PANEL_WIDTH, min(PANEL_MAX_WIDTH, self.stack.widget(row).widget().minimumSizeHint().width() + 14))
+        sizes = self.splitter.sizes()
+        if (first_time and sizes[2] < PANEL_MIN_WIDTH) or sizes[2] < wanted:
+            total = sum(sizes)
+            self.splitter.setSizes([sizes[0], max(VIEWER_MIN_WIDTH, total - sizes[0] - wanted), wanted])
         self._tool = row
         self._update_tool_header()
         self._activate_marking(row)
+        self._apply_width_rules()
         self.tool_changed.emit()
         return page
 
     def close_tool(self) -> None:
         """"Fechar" da faixa: o painel some e o documento ganha a largura."""
         self._tool = -1
-        self.stack.hide()
+        self.tool_panel.hide()
         self._update_tool_header()
         self._activate_marking(-1)
+        self._apply_width_rules()
         self.tool_changed.emit()
+
+    # -- larguras ---------------------------------------------------------------------
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_width_rules()
+
+    def _apply_width_rules(self):
+        """Janela estreita: a barra do visualizador guarda parte dos botões no "...". Com uma
+        ferramenta aberta e o documento apertado (janela abaixo de 1280 px, ou sem espaço para
+        a barra do visualizador inteira), as miniaturas se recolhem e voltam quando houver
+        espaço de novo."""
+        width = self.width()
+        self.viewer.set_compact(width < NARROW_WIDTH)
+        # Pelas larguras padrão dos painéis: o divisor já espreme os dois quando falta espaço.
+        tool_open = self.tool_panel.isVisibleTo(self)
+        center = width - LEFT_RAIL_WIDTH - RIGHT_RAIL_WIDTH - SIDE_WIDTH - PANEL_WIDTH
+        # O centro precisa caber a barra do visualizador inteira (uns 700 px), não só 640.
+        needed = max(CENTER_MIN_WIDTH, self.viewer.toolbar.minimumSizeHint().width())
+        crowded = tool_open and (width < CROWDED_WIDTH or center < needed)
+        if crowded == self._crowded:
+            return
+        self._crowded = crowded
+        shown = self.viewer.side_panel.isVisibleTo(self)
+        if crowded and shown:
+            self._side_auto_hidden = True
+            self.viewer.show_side_panel(False)
+        elif not crowded and self._side_auto_hidden:
+            self._side_auto_hidden = False
+            self.viewer.show_side_panel(True)
+        self._update_left_rail()
 
     def _on_quick_tool(self, row: int):
         if self._tool == row:
@@ -373,12 +444,14 @@ class DocumentTab(QWidget):
     def is_empty(self) -> bool:
         return self.session.path() is None
 
-    def title(self) -> str:
-        """O nome do arquivo, com "*" se houver alterações não salvas."""
+    def title(self, modified_mark: bool = True) -> str:
+        """O nome do arquivo, com "*" se houver alterações não salvas (a aba mostra um ponto
+        no lugar e pede `modified_mark=False`)."""
         source = self.session.source_path()
         if not source:
             return tr("Sem documento")
-        return f"{Path(source).name}{' *' if self.session.is_modified() else ''}"
+        modified = modified_mark and self.session.is_modified()
+        return f"{Path(source).name}{' *' if modified else ''}"
 
     def shutdown(self) -> None:
         """Ao fechar a aba: solta o arquivo no pdfium e apaga as versões temporárias."""
