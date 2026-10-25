@@ -79,7 +79,7 @@ def test_main_window_is_translated_without_losing_the_open_tool():
     assert [window.tabs.tabText(i) for i in range(2)] == ["Home", "Tools"]
     assert window.tools_center.cards[ROW_OF["MergePage"]].text() == "Merge"
     assert window.document.current_tool() == compress  # a ferramenta aberta continua aberta
-    assert window.document._tool_title.text() == "Compress"
+    assert window.document.current_panel().title_label.text() == "Compress"
 
     i18n.set_language(i18n.PT_BR)
     assert window.tools_center.cards[ROW_OF["MergePage"]].text() == "Mesclar"

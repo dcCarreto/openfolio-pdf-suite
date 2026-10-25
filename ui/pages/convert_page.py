@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QStackedWidget,
@@ -31,6 +30,7 @@ from ui.text_to_pdf import convert_text_to_pdf
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_list_editor import FileListEditor
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 
 class ConvertPage(QWidget):
@@ -38,6 +38,7 @@ class ConvertPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.direction_combo = QComboBox()
@@ -100,6 +101,7 @@ class ConvertPage(QWidget):
         options.addRow(tr("Formato:"), self.image_format_combo)
         options.addRow(tr("Páginas:"), pages_row)
         convert_button = QPushButton(tr("Converter"))
+        self.action_buttons.append(convert_button)
         convert_button.clicked.connect(self._convert_to_images)
 
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
@@ -148,6 +150,7 @@ class ConvertPage(QWidget):
         options.addRow(tr("DPI da imagem:"), self.image_dpi_spin)
 
         convert_button = QPushButton(tr("Converter"))
+        self.action_buttons.append(convert_button)
         convert_button.clicked.connect(self._convert_from_images)
 
         layout.addWidget(QLabel(tr("Imagens (na ordem desejada):")))
@@ -183,6 +186,7 @@ class ConvertPage(QWidget):
         engine_label.setWordWrap(True)
 
         convert_button = QPushButton(tr("Converter"))
+        self.action_buttons.append(convert_button)
         convert_button.clicked.connect(self._convert_office)
 
         layout.addWidget(QLabel(tr("Arquivo Word, Excel ou PowerPoint de entrada:")))
@@ -204,6 +208,7 @@ class ConvertPage(QWidget):
         )
         self.xml_landscape_check = QCheckBox(tr("Páginas em paisagem (linhas mais longas)"))
         convert_button = QPushButton(tr("Converter"))
+        self.action_buttons.append(convert_button)
         convert_button.clicked.connect(self._convert_xml)
 
         layout.addWidget(QLabel(tr("Arquivo XML de entrada:")))
@@ -235,6 +240,7 @@ class ConvertPage(QWidget):
         )
         note.setWordWrap(True)
         convert_button = QPushButton(tr("Converter"))
+        self.action_buttons.append(convert_button)
         convert_button.clicked.connect(lambda: self._export(output_picker, operation))
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
         layout.addWidget(DocumentSourceBar(self.session))
@@ -265,6 +271,7 @@ class ConvertPage(QWidget):
         )
         note.setWordWrap(True)
         convert_button = QPushButton(tr("Converter"))
+        self.action_buttons.append(convert_button)
         convert_button.clicked.connect(self._convert_text)
 
         layout.addWidget(QLabel(tr("Arquivo HTML, Markdown ou texto de entrada:")))
@@ -286,10 +293,10 @@ class ConvertPage(QWidget):
         output_dir = self.images_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Converter"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Converter"), tr("Abra um PDF para começar."))
             return
         if not output_dir:
-            QMessageBox.warning(self, tr("Converter"), tr("Escolha a pasta de saída."))
+            notify_error(self, tr("Converter"), tr("Escolha a pasta de saída."))
             return
 
         image_format = self.image_format_combo.currentData()
@@ -303,7 +310,7 @@ class ConvertPage(QWidget):
             return ConvertToImages().run(input_path, output_dir, progress=progress, image_format=image_format, pages=pages)
 
         def done(output_paths):
-            QMessageBox.information(
+            notify_success(
                 self,
                 tr("Converter"),
                 tr("{count} imagem(ns) gerada(s) com sucesso.").format(count=len(output_paths)),
@@ -322,10 +329,10 @@ class ConvertPage(QWidget):
         output_path = self.pdf_output_picker.path()
 
         if not input_paths:
-            QMessageBox.warning(self, tr("Converter"), tr("Adicione pelo menos uma imagem."))
+            notify_error(self, tr("Converter"), tr("Adicione pelo menos uma imagem."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Converter"), tr("Escolha o arquivo PDF de saída."))
+            notify_error(self, tr("Converter"), tr("Escolha o arquivo PDF de saída."))
             return
 
         task = call_with_progress(
@@ -339,7 +346,7 @@ class ConvertPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Converter"), tr("PDF gerado com sucesso."))
+            notify_success(self, tr("Converter"), tr("PDF gerado com sucesso."))
 
         run_task(
             self,
@@ -354,10 +361,10 @@ class ConvertPage(QWidget):
         output_path = self.office_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Converter"), tr("Escolha o arquivo de entrada."))
+            notify_error(self, tr("Converter"), tr("Escolha o arquivo de entrada."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Converter"), tr("Escolha o arquivo PDF de saída."))
+            notify_error(self, tr("Converter"), tr("Escolha o arquivo PDF de saída."))
             return
 
         task = call_with_progress(ConvertOfficeToPDF().run, input_path, output_path)
@@ -368,7 +375,7 @@ class ConvertPage(QWidget):
             if result.warnings:
                 details = "\n".join("• " + tr_message(warning) for warning in result.warnings)
                 message += "\n\n" + tr("A conversão básica deixou de fora:") + "\n" + details
-            QMessageBox.information(self, tr("Converter"), message)
+            notify_success(self, tr("Converter"), message)
 
         run_task(
             self,
@@ -383,10 +390,10 @@ class ConvertPage(QWidget):
         output_path = self.xml_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Converter"), tr("Escolha o arquivo XML de entrada."))
+            notify_error(self, tr("Converter"), tr("Escolha o arquivo XML de entrada."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Converter"), tr("Escolha o arquivo PDF de saída."))
+            notify_error(self, tr("Converter"), tr("Escolha o arquivo PDF de saída."))
             return
 
         task = call(
@@ -395,7 +402,7 @@ class ConvertPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Converter"), tr("PDF gerado com sucesso."))
+            notify_success(self, tr("Converter"), tr("PDF gerado com sucesso."))
 
         run_task(
             self,
@@ -409,10 +416,10 @@ class ConvertPage(QWidget):
         input_path = self.session.path()
         output_path = output_picker.path()
         if not input_path:
-            QMessageBox.warning(self, tr("Converter"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Converter"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Converter"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Converter"), tr("Escolha o arquivo de saída."))
             return
 
         def done(empty_pages):
@@ -421,7 +428,7 @@ class ConvertPage(QWidget):
                 message += "\n\n" + tr("Páginas sem texto (escaneadas? faça o OCR antes): {pages}").format(
                     pages=format_page_ranges(empty_pages)
                 )
-            QMessageBox.information(self, tr("Converter"), message)
+            notify_success(self, tr("Converter"), message)
 
         run_task(
             self,
@@ -435,15 +442,15 @@ class ConvertPage(QWidget):
         input_path = self.text_input_picker.path()
         output_path = self.text_pdf_output_picker.path()
         if not input_path:
-            QMessageBox.warning(self, tr("Converter"), tr("Escolha o arquivo de entrada."))
+            notify_error(self, tr("Converter"), tr("Escolha o arquivo de entrada."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Converter"), tr("Escolha o arquivo PDF de saída."))
+            notify_error(self, tr("Converter"), tr("Escolha o arquivo PDF de saída."))
             return
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Converter"), tr("PDF gerado com sucesso."))
+            notify_success(self, tr("Converter"), tr("PDF gerado com sucesso."))
 
         run_task(
             self,

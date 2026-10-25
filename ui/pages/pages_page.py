@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QStackedWidget,
@@ -25,6 +24,7 @@ from ui.widgets.current_page import with_current_page_button
 from ui.tasks import run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 _OPERATIONS = ["Rotacionar", "Reordenar", "Remover", "Inserir", "Substituir"]
 _ROTATIONS = [("90° no sentido horário", 90), ("180°", 180), ("90° no sentido anti-horário", 270)]
@@ -44,6 +44,7 @@ class PagesPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -87,6 +88,7 @@ class PagesPage(QWidget):
         self.params_stack.addWidget(self._build_replace_widget())
 
         apply_button = QPushButton(tr("Aplicar"))
+        self.action_buttons.append(apply_button)
         apply_button.clicked.connect(self._apply)
 
         layout = QVBoxLayout(self)
@@ -178,10 +180,10 @@ class PagesPage(QWidget):
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Páginas"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Páginas"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Páginas"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Páginas"), tr("Escolha o arquivo de saída."))
             return
 
         operation = _OPERATIONS[self.operation_combo.currentIndex()]
@@ -196,13 +198,13 @@ class PagesPage(QWidget):
             elif operation == "Reordenar":
                 order = parse_page_ranges(self.reorder_edit.text(), total_pages)
                 if not order:
-                    QMessageBox.warning(self, tr("Páginas"), tr("Informe a nova ordem das páginas."))
+                    notify_error(self, tr("Páginas"), tr("Informe a nova ordem das páginas."))
                     return
                 action = lambda: ReorderPages().run(input_path, output_path, order=order)  # noqa: E731
             elif operation == "Remover":
                 pages = sorted(set(parse_page_ranges(self.remove_edit.text(), total_pages)))
                 if not pages:
-                    QMessageBox.warning(self, tr("Páginas"), tr("Informe quais páginas remover."))
+                    notify_error(self, tr("Páginas"), tr("Informe quais páginas remover."))
                     return
                 action = lambda: RemovePages().run(input_path, output_path, pages=pages)  # noqa: E731
             else:
@@ -211,7 +213,7 @@ class PagesPage(QWidget):
                 )
                 source_path = source_picker.path()
                 if not source_path:
-                    QMessageBox.warning(self, tr("Páginas"), tr("Escolha o PDF de origem das páginas."))
+                    notify_error(self, tr("Páginas"), tr("Escolha o PDF de origem das páginas."))
                     return
                 if operation == "Inserir":
                     at_index = self.insert_at_spin.value() - 1
@@ -223,12 +225,12 @@ class PagesPage(QWidget):
                         input_path, output_path, source_path, start_index=start_index, end_index=end_index
                     )
         except ValueError as exc:
-            QMessageBox.warning(self, tr("Páginas"), error_text(exc))
+            notify_error(self, tr("Páginas"), error_text(exc))
             return
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Páginas"), tr("Operação concluída com sucesso."))
+            notify_success(self, tr("Páginas"), tr("Operação concluída com sucesso."))
 
         # As variáveis capturadas por `action` já são valores lidos dos widgets aqui, na
         # thread da interface.

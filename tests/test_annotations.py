@@ -222,6 +222,39 @@ def test_stamp_on_rotated_page_occupies_a_box_upright_on_screen():
         assert (round(right - left), round(top - bottom)) == (160, 40)
 
 
+def test_dragged_stamp_grows_from_the_click_without_distorting():
+    # Arrastado para qualquer lado da tela, a caixa sai do clique para aquele lado e mantém
+    # a proporção 160x40: o lado mais puxado manda.
+    from core.annotations import stamp_box
+    from core.geometry import PageGeometry
+
+    for rotation in (0, 90, 180, 270):
+        geometry = PageGeometry.from_boxes((0, 0, 612, 792), rotation=rotation)
+        start = (300.0, 300.0)
+        for (dx, dy), box in (
+            ((320, 10), (300, 300, 620, 380)),  # para a direita: o dobro do tamanho
+            ((-40, 20), (220, 300, 300, 320)),  # para a esquerda e para cima: a altura manda
+            ((-80, -80), (-20, 220, 300, 300)),
+        ):
+            end = geometry.visual_to_user(start[0] + dx, start[1] + dy)
+            position, scale = stamp_box(geometry.visual_to_user(*start), end, rotation)
+            spec = AnnotationSpec(page_index=0, kind="stamp", position=position, text="OK", rotation=rotation, scale=scale)
+            assert tuple(round(v) for v in geometry.user_rect_to_visual(spec_rect(spec))) == box, (rotation, dx, dy)
+
+
+def test_bigger_stamp_is_saved_with_bigger_box_and_letters(tmp_path):
+    path_in, path_out = tmp_path / "doc.pdf", tmp_path / "out.pdf"
+    _make_pdf(path_in, "texto")
+    spec = AnnotationSpec(page_index=0, kind="stamp", position=(50, 50), text="APROVADO", scale=2)
+
+    AddAnnotations().run(str(path_in), str(path_out), [spec])
+
+    annotation = _annotations_by_subtype(path_out)["/FreeText"]
+    assert [float(v) for v in annotation["/Rect"]] == [50, 50, 370, 130]
+    assert [float(v) for v in annotation["/AP"]["/N"].get_object()["/BBox"]] == [0, 0, 320, 80]
+    assert b" 28 Tf" in annotation["/AP"]["/N"].get_object().get_data()  # a letra dobrou junto
+
+
 def test_stamp_appearance_is_rotated_with_the_page(tmp_path, make_text_pdf):
     path_in = make_text_pdf("rot.pdf", [(80, 650, "texto")], rotate=90)
     path_out = tmp_path / "out.pdf"

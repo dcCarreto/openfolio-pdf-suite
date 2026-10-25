@@ -51,6 +51,7 @@ class DocumentSession(QObject):
     path_changed = Signal()
     history_changed = Signal()  # desfazer/refazer, versão nova ou documento salvo
     page_selection_changed = Signal()  # páginas selecionadas nas miniaturas
+    current_page_changed = Signal()  # a página que o visualizador mostra
 
     def __init__(self):
         super().__init__()
@@ -102,7 +103,9 @@ class DocumentSession(QObject):
         return self._current_page
 
     def set_current_page(self, index: int) -> None:
-        self._current_page = max(0, index)
+        if max(0, index) != self._current_page:
+            self._current_page = max(0, index)
+            self.current_page_changed.emit()
 
     def selected_pages(self) -> list[int]:
         """Páginas (a partir de 0) selecionadas nas miniaturas do visualizador."""

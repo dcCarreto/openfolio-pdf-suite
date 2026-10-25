@@ -20,10 +20,12 @@ class AnnotationState(QObject):
     """
 
     tool_changed = Signal()
+    style_changed = Signal()  # cor ou espessura
     pending_changed = Signal()
     selection_changed = Signal()  # comentário existente escolhido na lista da aba
     # O comentário escolhido foi arrastado no visualizador: (página, novo /Rect).
     comment_geometry_requested = Signal(int, object)
+    page_requested = Signal(int)  # a lista de comentários pediu para mostrar uma página
 
     def __init__(self):
         super().__init__()
@@ -75,14 +77,21 @@ class AnnotationState(QObject):
         return self._active_color
 
     def set_color(self, color: str) -> None:
-        self._active_color = color
+        if color != self._active_color:
+            self._active_color = color
+            self.style_changed.emit()
 
     def width(self) -> float:
         """Espessura do traço da caneta e das formas, em pontos."""
         return self._width
 
     def set_width(self, width: float) -> None:
-        self._width = width
+        if width != self._width:
+            self._width = width
+            self.style_changed.emit()
+
+    def request_page(self, page_index: int) -> None:
+        self.page_requested.emit(page_index)
 
     def request_comment_geometry(self, page_index: int, rect: tuple[float, float, float, float]) -> None:
         self.comment_geometry_requested.emit(page_index, rect)
@@ -108,4 +117,9 @@ class AnnotationState(QObject):
         if not self._pending:
             return
         self._pending = []
+        self.pending_changed.emit()
+
+    def set_pending(self, specs: list[AnnotationSpec]) -> None:
+        """Troca a lista inteira (desfazer/refazer)."""
+        self._pending = list(specs)
         self.pending_changed.emit()

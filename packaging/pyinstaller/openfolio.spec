@@ -59,6 +59,8 @@ a = Analysis(
         (str(TESSDATA_DIR), "tessdata"),
         (str(PROJECT_ROOT / "assets" / "icon.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "logo.svg"), "assets"),
+        # A fonte da interface (Inter, SIL OFL 1.1), com a licença ao lado (ui/theme.py).
+        (str(PROJECT_ROOT / "assets" / "fonts"), "assets/fonts"),
         # Fontes embutidas no texto que o app desenha nos PDFs (core/fonts.py) e o perfil
         # de cor sRGB dos arquivos PDF/A (core/pdfa.py).
         (str(PROJECT_ROOT / "core" / "data" / "fonts"), "core/data/fonts"),

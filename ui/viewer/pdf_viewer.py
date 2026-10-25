@@ -3,14 +3,16 @@ contínua, busca de texto e preenchimento de formulários."""
 
 import dataclasses
 import time
+from pathlib import Path
 
 import pypdfium2 as pdfium
 from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
+from PySide6.QtGui import QColor, QIcon, QIntValidator, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -19,11 +21,12 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QStackedWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from core.annotations import AnnotationSpec, arrow_head, spec_rect
+from core.annotations import STAMP_FONT_SIZE, AnnotationSpec, arrow_head, spec_rect, stamp_box
 from core.base import known_password, remember_password
 from core.document_info import document_notices
 from core.form_fields import FillFormFields, FormWidget, ListFormWidgets
@@ -37,6 +40,7 @@ from ui.i18n import tr, tr_message
 from ui.area_pick_state import AreaPickState
 from ui.measure_state import MeasureState, format_distance
 from ui.redaction_state import RedactionState
+from ui.preferences import preferences
 from ui.tasks import run_task
 from ui.viewer.page_canvas import PageCanvas
 from ui.viewer.presentation import PresentationWindow
@@ -45,11 +49,15 @@ from ui.viewer.search import DocumentSearch, SearchMatch
 from ui.viewer.search_bar import SearchBar
 from ui.viewer.side_panel import DocumentSidePanel
 from ui.viewer.thumbnail_list import ThumbnailList
+from ui.top_bar import bar_separator as _separator
 from ui.viewer.viewer_icons import (
+    build_book_icon,
     build_continuous_page_icon,
     build_double_page_icon,
+    build_file_icon,
     build_fit_page_icon,
     build_fit_width_icon,
+    build_more_icon,
     build_next_page_icon,
     build_open_icon,
     build_prev_page_icon,
@@ -119,6 +127,7 @@ class PdfViewer(QWidget):
         self._view_rotation = 0  # "girar a visualização": só na tela, o arquivo não muda
         self._scale = _DEFAULT_SCALE
         self._continuous = False
+        self._top_inset = 0  # espaço da barra de marcação acima da primeira página
         self._spread: str | None = None  # DOUBLE ou BOOK (com `_continuous`)
         self._show_thumbnails = True
         self._current_page = 0
@@ -129,7 +138,8 @@ class PdfViewer(QWidget):
         self._page_tops: list[int] = []
         self._rendered_pages: set[int] = set()
         self._document_dependent_widgets: list[QWidget] = []
-        self._drag_start_pdf: tuple[float, float] | None = None
+        self._drag_start_pdf: tuple[float, float] | None = None  # realce/sublinhado/riscado e carimbo
+        self._drag_preview_base: QPixmap | None = None
         self._ink_points_pdf: list[tuple[float, float]] = []
         self._ink_preview_base: QPixmap | None = None
         self._shape_start_pdf: tuple[float, float] | None = None
@@ -186,6 +196,7 @@ class PdfViewer(QWidget):
         annotation_state.tool_changed.connect(self._on_markup_state_changed)
         annotation_state.pending_changed.connect(self._refresh_current_render)
         annotation_state.selection_changed.connect(self._on_comment_selection_changed)
+        annotation_state.page_requested.connect(self._go_to_page)
         redaction_state.active_changed.connect(self._on_markup_state_changed)
         redaction_state.pending_changed.connect(self._refresh_current_render)
         redaction_state.selection_changed.connect(self._on_redaction_selection_changed)
@@ -249,6 +260,7 @@ class PdfViewer(QWidget):
         self.content_stack.addWidget(self._build_empty_state())
 
         self.scroll_area = QScrollArea()
+        self.scroll_area.setObjectName("ViewerCanvas")
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.verticalScrollBar().valueChanged.connect(self._update_visible_pages)
         self.scroll_area.verticalScrollBar().rangeChanged.connect(self._apply_pending_scroll)
@@ -260,18 +272,46 @@ class PdfViewer(QWidget):
         self._set_document_controls_enabled(False)
 
     def _build_empty_state(self) -> QWidget:
+        """Sem documento: a zona de soltar, com "Abrir arquivo..." e os recentes."""
         widget = QWidget()
+        widget.setObjectName("ViewerEmpty")
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(12)
 
-        self._empty_label = QLabel(tr("Nenhum PDF aberto"))
-        self._empty_label.setObjectName("pageSubtitle")
-        self._empty_open_button = QPushButton(tr("Abrir PDF..."))
+        zone = QFrame()
+        zone.setObjectName("DropZone")
+        zone.setFixedWidth(440)
+        icon = QLabel()
+        icon.setPixmap(build_file_icon().pixmap(QSize(32, 32), QIcon.Mode.Selected))
+        self._empty_label = QLabel()
+        self._empty_label.setObjectName("EmptyTitle")
+        self._empty_hint = QLabel()
+        self._empty_hint.setProperty("ofRole", "secondary")
+        self._empty_hint.setWordWrap(True)
+        self._empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_open_button = QPushButton()
+        self._empty_open_button.setProperty("ofVariant", "primary")
         self._empty_open_button.clicked.connect(self._browse_open)
-
-        layout.addWidget(self._empty_label, 0, Qt.AlignmentFlag.AlignHCenter)
-        layout.addWidget(self._empty_open_button, 0, Qt.AlignmentFlag.AlignHCenter)
+        self._empty_recent_button = QPushButton()
+        recent_menu = QMenu(self._empty_recent_button)
+        recent_menu.aboutToShow.connect(lambda: self._fill_recent_menu(recent_menu))
+        self._empty_recent_button.setMenu(recent_menu)
+        buttons = QHBoxLayout()
+        buttons.setSpacing(8)
+        buttons.addStretch()
+        buttons.addWidget(self._empty_open_button)
+        buttons.addWidget(self._empty_recent_button)
+        buttons.addStretch()
+        zone_layout = QVBoxLayout(zone)
+        zone_layout.setContentsMargins(24, 28, 24, 28)
+        zone_layout.setSpacing(10)
+        zone_layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignHCenter)
+        zone_layout.addWidget(self._empty_label, 0, Qt.AlignmentFlag.AlignHCenter)
+        zone_layout.addWidget(self._empty_hint)
+        zone_layout.addSpacing(6)
+        zone_layout.addLayout(buttons)
+        layout.addWidget(zone, 0, Qt.AlignmentFlag.AlignHCenter)
+        self._retranslate_empty_state()
         return widget
 
     def retranslate(self):
@@ -279,8 +319,9 @@ class PdfViewer(QWidget):
         página e modo de exibição."""
         for widget, text in self._translatable_tooltips:
             widget.setToolTip(tr(text))
-        self._empty_label.setText(tr("Nenhum PDF aberto"))
-        self._empty_open_button.setText(tr("Abrir PDF..."))
+            widget.setAccessibleName(tr(text))
+        self._retranslate_toolbar_menus()
+        self._retranslate_empty_state()
         self.search_bar.retranslate()
         self.thumbnail_list.retranslate()
         self.side_panel.retranslate()
@@ -291,75 +332,144 @@ class PdfViewer(QWidget):
         self._update_page_indicator()
 
     def _build_toolbar(self) -> QWidget:
+        """A barra sobre o documento (44 px), em grupos:
+
+            [abrir salvar imprimir] ... [< página de N >] | [- 120% +] | [ajustes girar][modos] ... [buscar]
+
+        Estreita (`set_compact`), os ajustes, o girar e os modos vão para o menu "...".
+        """
         toolbar = QWidget()
-        toolbar.setObjectName("viewerToolbar")
+        toolbar.setObjectName("ViewerBar")
+        toolbar.setFixedHeight(44)
         layout = QHBoxLayout(toolbar)
-        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setContentsMargins(8, 0, 8, 0)
         layout.setSpacing(4)
 
         open_button = self._tool_button(build_open_icon(), "Abrir PDF...")
         open_button.clicked.connect(self._browse_open)
-        layout.addWidget(open_button)
-        layout.addSpacing(4)
+        layout.addWidget(open_button)  # a aba de documento põe Salvar e Imprimir logo depois
+        layout.addStretch()
 
         prev_button = self._tool_button(build_prev_page_icon(), "Página anterior")
         prev_button.clicked.connect(self._go_prev)
         next_button = self._tool_button(build_next_page_icon(), "Próxima página")
         next_button.clicked.connect(self._go_next)
-        # Clicar no indicador (ou Ctrl+G) pede o número da página para ir direto a ela.
-        self.page_indicator = QPushButton()
-        self.page_indicator.setObjectName("pageIndicatorButton")
-        self.page_indicator.setFlat(True)
-        self.page_indicator.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.page_indicator.setToolTip(tr("Ir para a página... (Ctrl+G)"))
-        self._translatable_tooltips.append((self.page_indicator, "Ir para a página... (Ctrl+G)"))
-        self.page_indicator.clicked.connect(self._ask_go_to_page)
+        # O número da página atual, editável: Enter vai direto para a página digitada.
+        self.page_field = QLineEdit()
+        self.page_field.setObjectName("PageField")
+        self.page_field.setFixedWidth(40)
+        self.page_field.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.page_field.setValidator(QIntValidator(1, 99999, self.page_field))
+        self.page_field.returnPressed.connect(self._go_to_typed_page)
+        self.page_total = QLabel()
+        self.page_total.setProperty("ofRole", "secondary")
         layout.addWidget(prev_button)
-        layout.addWidget(self.page_indicator)
+        layout.addWidget(self.page_field)
+        layout.addWidget(self.page_total)
         layout.addWidget(next_button)
-        layout.addSpacing(4)
+        layout.addWidget(_separator())
 
         zoom_out_button = self._tool_button(build_zoom_out_icon(), "Diminuir zoom")
         zoom_out_button.clicked.connect(self._zoom_out)
         zoom_in_button = self._tool_button(build_zoom_in_icon(), "Aumentar zoom")
         zoom_in_button.clicked.connect(self._zoom_in)
+        self.zoom_button = QToolButton()
+        self.zoom_button.setObjectName("ZoomButton")
+        self.zoom_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.zoom_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.zoom_button.setText(f"{int(self._scale * 100)}%")
+        zoom_menu = QMenu(self.zoom_button)
+        for percent in (50, 75, 100, 125, 150, 200):
+            zoom_menu.addAction(f"{percent}%").triggered.connect(lambda _checked=False, p=percent: self._set_zoom(p))
+        zoom_menu.addSeparator()
+        self._zoom_fit_width_action = zoom_menu.addAction("")
+        self._zoom_fit_width_action.triggered.connect(self._fit_width)
+        self._zoom_fit_page_action = zoom_menu.addAction("")
+        self._zoom_fit_page_action.triggered.connect(self._fit_page)
+        self.zoom_button.setMenu(zoom_menu)
+        layout.addWidget(zoom_out_button)
+        layout.addWidget(self.zoom_button)
+        layout.addWidget(zoom_in_button)
+
         fit_width_button = self._tool_button(build_fit_width_icon(), "Ajustar à largura")
         fit_width_button.clicked.connect(self._fit_width)
         fit_page_button = self._tool_button(build_fit_page_icon(), "Ajustar à página (Ctrl+0)")
         fit_page_button.clicked.connect(self._fit_page)
         rotate_button = self._tool_button(build_rotate_icon(), "Girar a visualização (o arquivo não muda)")
         rotate_button.clicked.connect(self._rotate_view)
-        self._zoom_label = QLabel(f"{int(self._scale * 100)}%")
-        layout.addWidget(zoom_out_button)
-        layout.addWidget(self._zoom_label)
-        layout.addWidget(zoom_in_button)
+
+        # Os modos de exibição, só ícones, num segmentado: um marcado por vez.
+        modes = QWidget()
+        modes.setObjectName("Segmented")
+        modes.setFixedHeight(32)
+        modes_layout = QHBoxLayout(modes)
+        modes_layout.setContentsMargins(2, 2, 2, 2)
+        modes_layout.setSpacing(2)
+        self._mode_group = QButtonGroup(self)
+        self._mode_group.setExclusive(True)
+        self._mode_buttons = {}
+        for key, icon, tooltip in (
+            (SINGLE, build_single_page_icon(), "Página única"),
+            (CONTINUOUS, build_continuous_page_icon(), "Rolagem contínua"),
+            (DOUBLE, build_double_page_icon(), "Página dupla"),
+            (BOOK, build_book_icon(), "Livro (capa sozinha)"),
+        ):
+            button = QToolButton()
+            button.setIcon(icon)
+            button.setIconSize(QSize(16, 16))
+            button.setFixedSize(28, 26)
+            button.setCheckable(True)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setToolTip(tr(tooltip))
+            button.setAccessibleName(tr(tooltip))
+            self._translatable_tooltips.append((button, tooltip))
+            button.clicked.connect(lambda _checked=False, k=key: self.set_layout(k))
+            self._mode_group.addButton(button)
+            modes_layout.addWidget(button)
+            self._mode_buttons[key] = button
+        self.single_page_button = self._mode_buttons[SINGLE]
+        self.continuous_button = self._mode_buttons[CONTINUOUS]
+        self.double_page_button = self._mode_buttons[DOUBLE]
+        self.book_button = self._mode_buttons[BOOK]
+        self.single_page_button.setChecked(True)
+
+        view_separator = _separator()
+        layout.addWidget(view_separator)
         layout.addWidget(fit_width_button)
         layout.addWidget(fit_page_button)
         layout.addWidget(rotate_button)
         layout.addSpacing(4)
+        layout.addWidget(modes)
+        self._view_widgets = [view_separator, fit_width_button, fit_page_button, rotate_button, modes]
 
-        self.single_page_button = self._tool_button(build_single_page_icon(), "Página única")
-        self.single_page_button.setCheckable(True)
-        self.single_page_button.setChecked(True)
-        self.single_page_button.clicked.connect(lambda: self.set_layout(SINGLE))
-
-        self.continuous_button = self._tool_button(build_continuous_page_icon(), "Rolagem contínua")
-        self.continuous_button.setCheckable(True)
-        self.continuous_button.clicked.connect(lambda: self.set_layout(CONTINUOUS))
-
-        self.double_page_button = self._tool_button(build_double_page_icon(), "Página dupla")
-        self.double_page_button.setCheckable(True)
-        self.double_page_button.clicked.connect(lambda: self.set_layout(DOUBLE))
-
-        self._mode_group = QButtonGroup(self)
-        self._mode_group.setExclusive(True)
-        self._mode_group.addButton(self.single_page_button)
-        self._mode_group.addButton(self.continuous_button)
-        self._mode_group.addButton(self.double_page_button)
-        layout.addWidget(self.single_page_button)
-        layout.addWidget(self.continuous_button)
-        layout.addWidget(self.double_page_button)
-        layout.addSpacing(4)
+        # Janela estreita: o mesmo que os botões acima, num menu.
+        self.more_button = self._tool_button(build_more_icon(), "Mais opções de exibição")
+        self.more_button.setObjectName("MoreButton")
+        self.more_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        more_menu = QMenu(self.more_button)
+        self._more_actions = []
+        for handler, text in (
+            (self._fit_width, "Ajustar à largura"),
+            (self._fit_page, "Ajustar à página (Ctrl+0)"),
+            (self._rotate_view, "Girar a visualização (o arquivo não muda)"),
+        ):
+            action = more_menu.addAction("")
+            action.triggered.connect(handler)
+            self._more_actions.append((action, text))
+        more_menu.addSeparator()
+        for key, text in (
+            (SINGLE, "Página única"),
+            (CONTINUOUS, "Rolagem contínua"),
+            (DOUBLE, "Página dupla"),
+            (BOOK, "Livro (capa sozinha)"),
+        ):
+            action = more_menu.addAction("")
+            action.triggered.connect(lambda _checked=False, k=key: self.set_layout(k))
+            self._more_actions.append((action, text))
+        self.more_button.setMenu(more_menu)
+        self.more_button.hide()
+        layout.addWidget(self.more_button)
+        layout.addStretch()
 
         self.thumbnails_button = self._tool_button(build_thumbnails_icon(), "Painel lateral (miniaturas, marcadores, anexos)")
         self.thumbnails_button.setCheckable(True)
@@ -367,36 +477,50 @@ class PdfViewer(QWidget):
         self.thumbnails_button.clicked.connect(self._toggle_thumbnails)
         layout.addWidget(self.thumbnails_button)
 
-        search_button = self._tool_button(build_search_icon(), "Buscar")
+        search_button = self._tool_button(build_search_icon(), "Buscar (Ctrl+F)")
         search_button.clicked.connect(self._toggle_search)
         layout.addWidget(search_button)
-
-        layout.addStretch()
 
         self._document_dependent_widgets = [
             prev_button,
             next_button,
             zoom_out_button,
             zoom_in_button,
+            self.zoom_button,
             fit_width_button,
             fit_page_button,
             rotate_button,
-            self.page_indicator,
-            self.single_page_button,
-            self.continuous_button,
-            self.double_page_button,
+            self.page_field,
+            *self._mode_buttons.values(),
+            self.more_button,
             self.thumbnails_button,
             search_button,
         ]
+        self._retranslate_toolbar_menus()
         return toolbar
 
-    def _tool_button(self, icon, tooltip: str) -> QPushButton:
-        button = QPushButton()
-        button.setObjectName("viewerToolButton")
+    def _retranslate_toolbar_menus(self):
+        self._zoom_fit_width_action.setText(tr("Ajustar à largura"))
+        self._zoom_fit_page_action.setText(tr("Ajustar à página"))
+        self.zoom_button.setToolTip(tr("Zoom"))
+        self.zoom_button.setAccessibleName(tr("Zoom"))
+        for action, text in self._more_actions:
+            action.setText(tr(text))
+
+    def set_compact(self, compact: bool) -> None:
+        """Janela estreita: ajustes, girar e modos de exibição vão para o menu "..."."""
+        for widget in self._view_widgets:
+            widget.setVisible(not compact)
+        self.more_button.setVisible(compact)
+
+    def _tool_button(self, icon, tooltip: str) -> QToolButton:
+        button = QToolButton()
+        button.setProperty("ofRole", "icon")
         button.setIcon(icon)
         button.setIconSize(QSize(18, 18))
-        button.setFixedSize(30, 30)
+        button.setFixedSize(32, 32)
         button.setToolTip(tr(tooltip))
+        button.setAccessibleName(tr(tooltip))
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._translatable_tooltips.append((button, tooltip))
         return button
@@ -406,6 +530,22 @@ class PdfViewer(QWidget):
             widget.setEnabled(enabled)
 
     # -- carregamento do documento -----------------------------------------
+
+    def _retranslate_empty_state(self):
+        self._empty_label.setText(tr("Nenhum documento aberto"))
+        self._empty_hint.setText(tr("Arraste um PDF para cá ou escolha um arquivo no computador."))
+        self._empty_open_button.setText(tr("Abrir arquivo..."))
+        self._empty_recent_button.setText(tr("Recentes"))
+
+    def _fill_recent_menu(self, menu: QMenu):
+        menu.clear()
+        recent = preferences().recent_files()
+        for path in recent:
+            action = menu.addAction(Path(path).name)
+            action.setToolTip(path)
+            action.triggered.connect(lambda _checked=False, p=path: self.open_path(p))
+        if not recent:
+            menu.addAction(tr("Nenhum arquivo recente")).setEnabled(False)
 
     def _browse_open(self):
         path, _ = QFileDialog.getOpenFileName(self, tr("Selecionar arquivo"), "", "PDF (*.pdf)")
@@ -548,10 +688,10 @@ class PdfViewer(QWidget):
             container = QWidget()
             vlayout = QVBoxLayout(container)
             margin, spacing = 12, 12
-            vlayout.setContentsMargins(margin, margin, margin, margin)
+            vlayout.setContentsMargins(margin, margin + self._top_inset, margin, margin)
             vlayout.setSpacing(spacing)
 
-            offset = margin
+            offset = margin + self._top_inset
             for row in self._rows():
                 labels = [self._make_placeholder_label(index) for index in row]
                 if self._spread:
@@ -569,6 +709,7 @@ class PdfViewer(QWidget):
         else:
             label = PageCanvas()
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setContentsMargins(0, self._top_inset, 0, 0)
             label.mouse_pressed.connect(self._on_canvas_pressed)
             label.mouse_moved.connect(self._on_canvas_moved)
             label.mouse_released.connect(self._on_canvas_released)
@@ -767,7 +908,12 @@ class PdfViewer(QWidget):
             painter.setBrush(QColor("#ffffff"))
             painter.drawRect(rect)
             painter.setPen(color)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, spec.text)
+            font = painter.font()
+            font.setBold(True)
+            font.setPixelSize(max(1, round(STAMP_FONT_SIZE * spec.scale * self._scale)))  # cresce com a caixa
+            painter.setFont(font)
+            margin = 8 * spec.scale * self._scale  # como na aparência gravada (core/annotations.py)
+            painter.drawText(rect.adjusted(margin, 0, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, spec.text)
 
     def _with_pending_redactions(self, pixmap: QPixmap, page_index: int) -> QPixmap:
         rects = [r for r in self.redaction_state.pending() if r.page_index == page_index]
@@ -978,17 +1124,23 @@ class PdfViewer(QWidget):
     def _update_page_indicator(self):
         self.session.set_current_page(self._current_page)
         if self._document is None:
-            self.page_indicator.setText("")
+            self.page_field.setText("")
+            self.page_total.setText("")
             return
-        # Curto na barra ("3 / 12"), completo na dica: a barra precisa caber no visualizador
-        # mesmo com a janela em 1280 px.
-        text = f"{self._current_page + 1} / {self._page_count()}"
-        self.page_indicator.setText(text)
-        self.page_indicator.setToolTip(
+        self.page_field.setText(str(self._current_page + 1))
+        self.page_total.setText(tr("de {total}").format(total=self._page_count()))
+        tip = (
             tr("Página {current} de {total}").format(current=self._current_page + 1, total=self._page_count())
             + " — " + tr("Ir para a página... (Ctrl+G)")
         )
-        self.page_indicator.setFixedWidth(self.page_indicator.fontMetrics().horizontalAdvance(text) + 16)
+        self.page_field.setToolTip(tip)
+        self.page_field.setAccessibleName(tip)
+
+    def _go_to_typed_page(self):
+        text = self.page_field.text().strip()
+        if text.isdigit():
+            self._go_to_page(int(text) - 1)
+        self._update_page_indicator()  # campo vazio: volta ao número da página atual
 
     # -- navegação e zoom -----------------------------------------------------
 
@@ -1023,6 +1175,19 @@ class PdfViewer(QWidget):
     def _go_last(self):
         if self._document is not None:
             self._go_to_page(self._page_count() - 1)
+
+    def set_top_inset(self, inset: int) -> None:
+        """Margem extra acima da página, para a barra de marcação não cobri-la."""
+        if inset == self._top_inset:
+            return
+        self._top_inset = inset
+        if self._document is None or not self._page_labels:
+            return
+        if self._continuous:
+            self._apply_zoom()  # reconstrói mantendo a página e a posição
+        else:
+            self._page_labels[0].setContentsMargins(0, inset, 0, 0)
+            self._show_single_page(self._current_page)
 
     def _go_to_page(self, index: int):
         if self._document is None:
@@ -1083,8 +1248,12 @@ class PdfViewer(QWidget):
             return True
         return super().eventFilter(watched, event)
 
+    def _set_zoom(self, percent: int):
+        self._scale = max(_MIN_SCALE, min(_MAX_SCALE, percent / 100))
+        self._apply_zoom()
+
     def _apply_zoom(self):
-        self._zoom_label.setText(f"{int(self._scale * 100)}%")
+        self.zoom_button.setText(f"{int(self._scale * 100)}%")
         if self._document is None:
             return
         if self._continuous:
@@ -1148,9 +1317,8 @@ class PdfViewer(QWidget):
         if layout not in LAYOUTS:
             raise ValueError(f"Layout inválido: {layout}")
         continuous, spread = layout != SINGLE, layout if layout in (DOUBLE, BOOK) else None
-        if hasattr(self, "single_page_button"):
-            buttons = {SINGLE: self.single_page_button, CONTINUOUS: self.continuous_button}
-            buttons.get(layout, self.double_page_button).setChecked(True)
+        if hasattr(self, "_mode_buttons"):
+            self._mode_buttons[layout].setChecked(True)
         if (continuous, spread) == (self._continuous, self._spread):
             return
         page = self._current_page
@@ -1377,14 +1545,14 @@ class PdfViewer(QWidget):
             # re-renderizar a página inteira via pdfium a cada evento.
             self._ink_preview_base = QPixmap(self._page_labels[0].pixmap())
             return
-        if tool in ("highlight", "underline", "strikeout"):
+        if tool in ("highlight", "underline", "strikeout", "stamp"):
             self._drag_start_pdf = pdf_point
+            self._drag_preview_base = QPixmap(self._page_labels[0].pixmap())
+            if tool == "stamp":  # o carimbo aparece já no clique; arrastar muda o tamanho
+                self._show_drag_preview(self._stamp_spec(pdf_point))
             return
         if tool == "note":
             self._prompt_note(page_index, pdf_point)
-            return
-        if tool == "stamp":
-            self._place_stamp(page_index, pdf_point)
             return
 
     def _on_canvas_moved(self, x: float, y: float):
@@ -1436,6 +1604,13 @@ class PdfViewer(QWidget):
             self._paint_shape(painter, self._current_page, spec, QColor(f"#{spec.color}"))
             painter.end()
             self._page_labels[0].setPixmap(preview)
+            return
+        if self._drag_start_pdf is not None and self._drag_preview_base is not None:
+            end_pdf = self._widget_point_to_pdf(self._current_page, x, y)
+            if self.annotation_state.active_tool() == "stamp":
+                self._show_drag_preview(self._stamp_spec(end_pdf))
+            else:
+                self._show_drag_preview(self._markup_spec(self._drag_start_pdf, end_pdf))
             return
         if self.annotation_state.active_tool() != "ink" or not self._ink_points_pdf:
             return
@@ -1518,9 +1693,45 @@ class PdfViewer(QWidget):
             self._ink_preview_base = None
             return
 
-        if tool in ("highlight", "underline", "strikeout") and self._drag_start_pdf is not None:
-            self._finish_text_markup(page_index, self._drag_start_pdf, pdf_point, tool)
+        if self._drag_start_pdf is not None:
+            marked = self._stamp_spec(pdf_point) if tool == "stamp" else self._markup_spec(self._drag_start_pdf, pdf_point)
             self._drag_start_pdf = None
+            self._drag_preview_base = None
+            if marked is not None:
+                self.annotation_state.add_pending(marked)
+            else:
+                self._refresh_current_render()  # tira a prévia
+
+    def _show_drag_preview(self, spec: AnnotationSpec | None) -> None:
+        """A página como estava no clique, com a marcação do arrasto por cima."""
+        assert self._drag_preview_base is not None
+        preview = QPixmap(self._drag_preview_base)
+        if spec is not None:
+            painter = QPainter(preview)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            self._paint_pending_spec(painter, self._current_page, spec)
+            painter.end()
+        self._page_labels[0].setPixmap(preview)
+
+    def _stamp_spec(self, end_pdf) -> AnnotationSpec:
+        """O carimbo do clique em `_drag_start_pdf`: no tamanho padrão, ou do tamanho do
+        arrasto até `end_pdf`, sem distorcer."""
+        assert self._drag_start_pdf is not None
+        rotation = self._page_geometry(self._current_page).rotation
+        (x0, y0), (x1, y1) = self._drag_start_pdf, end_pdf
+        if max(abs(x1 - x0), abs(y1 - y0)) < 3:  # um clique sem arrastar: tamanho padrão
+            position, scale = self._drag_start_pdf, 1.0
+        else:
+            position, scale = stamp_box(self._drag_start_pdf, end_pdf, rotation)
+        return AnnotationSpec(
+            page_index=self._current_page,
+            kind="stamp",
+            color=self.annotation_state.active_color(),
+            position=position,
+            text=self.annotation_state.stamp_text(),
+            rotation=rotation,
+            scale=scale,
+        )
 
     def _shape_spec(self, end_pdf) -> AnnotationSpec:
         assert self._shape_start_pdf is not None
@@ -1627,19 +1838,17 @@ class PdfViewer(QWidget):
         if text:
             QApplication.clipboard().setText(text)
 
-    def _finish_text_markup(self, page_index: int, start_pdf, end_pdf, tool: str):
+    def _markup_spec(self, start_pdf, end_pdf) -> AnnotationSpec | None:
+        """Realce, sublinhado ou riscado do texto entre os dois pontos (None se não pegou texto)."""
         with PDFIUM_LOCK:
-            quads = self._text_quads(page_index, start_pdf, end_pdf)
-
+            quads = self._text_quads(self._current_page, start_pdf, end_pdf)
         if not quads:
-            return
-        self.annotation_state.add_pending(
-            AnnotationSpec(
-                page_index=page_index,
-                kind=tool,
-                color=self.annotation_state.active_color(),
-                quads=quads,
-            )
+            return None
+        return AnnotationSpec(
+            page_index=self._current_page,
+            kind=self.annotation_state.active_tool() or "highlight",
+            color=self.annotation_state.active_color(),
+            quads=quads,
         )
 
     def _text_quads(self, page_index: int, start_pdf, end_pdf) -> list:
@@ -1683,18 +1892,6 @@ class PdfViewer(QWidget):
                     rotation=self._page_geometry(page_index).rotation,
                 )
             )
-
-    def _place_stamp(self, page_index: int, pdf_point):
-        self.annotation_state.add_pending(
-            AnnotationSpec(
-                page_index=page_index,
-                kind="stamp",
-                color=self.annotation_state.active_color(),
-                position=pdf_point,
-                text=self.annotation_state.stamp_text(),
-                rotation=self._page_geometry(page_index).rotation,
-            )
-        )
 
     def _erase_pending_at(self, page_index: int, pdf_point):
         x, y = pdf_point

@@ -4,6 +4,87 @@ O OpenFolio PDF Suite não tem número de versão: há uma só, que recebe atual
 atualização é identificada pela data em que foi publicada e só é instalada se você aceitar,
 depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no aviso do app).
 
+## 2026-10-25
+
+### Visual
+
+- Cores novas nos temas escuro e claro, com contraste conferido para leitura, e a fonte Inter
+  embutida no app (licença livre OFL), igual em todos os sistemas.
+- O foco do teclado aparece em botões, campos, caixas de marcar e abas.
+- Exibir > Animações da interface liga ou desliga as transições da interface: o painel da
+  ferramenta abre e fecha deslizando, a gaveta entra pela direita e o rodapé do painel troca
+  de estado com um esmaecimento. Desligadas, tudo muda na hora.
+- Ícones redesenhados, com o mesmo traço e as mesmas proporções em todo o app.
+- F6 leva o foco à próxima região da janela (faixa do topo, barra do documento, documento,
+  painel da ferramenta e coluna da direita) e Shift+F6 à anterior; dá para trocar as teclas
+  em Editar > Atalhos de teclado.
+- Todo botão tem área de clique de pelo menos 28 px, os botões só com ícone têm nome para
+  leitores de tela e as dicas da coluna da direita mostram o atalho da ferramenta, se houver.
+- Com uma operação em andamento, a barra de status mostra "N tarefas": o painel que ele abre
+  lista as operações de todos os documentos, com o andamento e o resultado de cada uma.
+- A coluna de miniaturas ganha um título com o número de páginas (ou de marcadores e anexos),
+  e a página atual aparece com um contorno e o número em destaque.
+- Menus, abas, a busca de ferramentas e comandos e o idioma ficam numa só faixa no topo,
+  deixando mais altura para o documento. O idioma troca em "PT | EN".
+- As abas de documento se reordenam arrastando. Com alterações não salvas, um ponto aparece
+  no lugar do "x"; com uma operação em andamento, um arco gira no lugar do ícone.
+- A barra sobre a página tem o número da página editável (digite e Enter), o zoom com um menu
+  de tamanhos prontos e o modo Livro ao lado dos outros modos de exibição.
+- Numa janela estreita, as miniaturas se recolhem enquanto uma ferramenta está aberta (e voltam
+  quando ela fecha) e parte da barra do documento vai para o menu "...".
+- Todas as ferramentas seguem o mesmo painel: o documento de entrada no topo, as opções no
+  meio e, embaixo, onde gravar o resultado (no próprio documento ou num arquivo novo) e o
+  botão da ação, que também roda com Ctrl+Enter.
+- Enquanto a operação roda, o rodapé do painel mostra o andamento e o botão Cancelar. Ao
+  terminar, o resultado aparece ali mesmo, com Desfazer, em vez de uma janela de aviso; a
+  barra de status repete a mensagem. Um erro aparece no mesmo lugar, com Tentar de novo.
+- Numa janela estreita, o painel da ferramenta abre por cima do documento; Esc ou um clique
+  na página o recolhem.
+- Sem documento aberto, o centro mostra onde soltar um PDF, com Abrir arquivo e os recentes,
+  e o painel da ferramenta avisa que espera um documento.
+- O Início tem uma área para soltar o PDF (vale soltar em qualquer parte da aba), os atalhos
+  Criar, Mesclar, Converter e Comprimir e os recentes com a miniatura da primeira página, a
+  pasta, o número de páginas e quando o arquivo mudou; o "..." de cada um abre, mostra na
+  pasta ou tira da lista.
+- A aba Ferramentas busca também por sinônimos ("cpf" acha Redigir, "assinar" acha as duas
+  ferramentas de assinatura, "word" acha Converter), filtra por categoria e ajusta o número
+  de colunas à largura da janela. Um alfinete marca as que estão na coluna da direita; Enter
+  abre a primeira encontrada e as setas andam entre os cartões.
+- A paleta de comandos (Ctrl+K) aparece sobre a janela escurecida, com os comandos em grupos
+  (Ferramentas, Exibir, Navegar, Arquivos recentes, Ações), o atalho de cada um e Tab para
+  ficar só num grupo. Ela também leva aos documentos abertos e aos arquivos recentes.
+- Organizar páginas mostra a grade no lugar do documento, com uma barra para girar, duplicar,
+  inserir em branco e apagar, e um controle do tamanho das miniaturas. As páginas selecionadas
+  levam um ✓, as giradas e as em branco um selo, e uma barra mostra onde a página arrastada
+  vai entrar. O painel lista cada alteração pendente, que pode ser desfeita sozinha pelo "×";
+  "Aplicar N alterações" grava tudo num passo só. Com o foco na grade, Ctrl+[ e Ctrl+] giram.
+
+### Atualizações
+
+- O aviso de atualização mostra a data da edição nova e a da que você usa, as principais
+  novidades e "Ver notas completas"; nada é baixado antes de "Baixar e instalar". A opção de
+  avisar sobre novas edições fica no próprio aviso.
+
+### Anotações e redação
+
+- Com Anotações aberta, uma barra flutua sobre a página com as ferramentas de marcação, as
+  cores, a espessura, quantas marcações estão pendentes e "Gravar", que as grava no documento
+  num passo que Ctrl+Z desfaz ("Desfazer Gravar marcações"). A página desce um pouco para a
+  barra não cobri-la; lendo com Selecionar, a barra esmaece e volta quando o mouse passa nela.
+  Numa janela estreita, ela fica só com ícones e a cor e a espessura vão para um botão.
+- Com o foco no documento, uma tecla escolhe a ferramenta: V (selecionar), H (realce),
+  U (sublinhado), S (riscado), N (nota), P (caneta), R (retângulo), O (círculo), A (seta) e
+  K (carimbo). Não valem num campo de texto e podem ser trocadas em Editar > Atalhos de teclado.
+- O painel de Anotações lista as marcações pendentes e os comentários gravados, com o selo
+  "Pendente" ou "Gravado", a cor e o tipo de cada um, e filtra pela página atual; clicar numa
+  marcação mostra a página dela. O rodapé tem "Descartar" e "Gravar N marcações".
+- Ctrl+Z desfaz as anotações e as áreas de redação ainda não gravadas, uma a uma, e Ctrl+Y as
+  refaz; vale também para o que foi apagado e para "Descartar". Antes, o Ctrl+Z não fazia
+  nada com elas.
+- Realce, sublinhado e riscado aparecem sobre o texto enquanto você arrasta, antes de soltar.
+- O carimbo aparece já no clique; arrastando, ele cresce a partir do clique no tamanho que você
+  quiser, sempre na proporção certa, sem distorcer o texto, e é gravado desse tamanho.
+
 ## 2026-10-24
 
 ### Atualizações

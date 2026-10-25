@@ -110,6 +110,34 @@ def make_text_pdf(tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _no_animations(monkeypatch):
+    """Sem animações (o estado final na hora, como com Exibir > Animações da interface
+    desligada); os testes das animações as ligam de volta."""
+    monkeypatch.setattr("ui.motion.enabled", lambda: False)
+
+
+@pytest.fixture(autouse=True)
+def _free_windows():
+    """Apaga as janelas que o teste deixou: cada troca de tema reestiliza todos os widgets
+    vivos, e as sobras de centenas de testes deixavam os últimos lentos a ponto de parecerem
+    travados."""
+    yield
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    if app is None:
+        return
+    from ui.tasks import wait_for_tasks
+
+    wait_for_tasks(5000)  # nenhuma operação pela metade com a janela dela apagada
+    for widget in QApplication.topLevelWidgets():
+        if widget.parentWidget() is None:
+            widget.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+@pytest.fixture(autouse=True)
 def _no_modal_dialogs(monkeypatch):
     """Um diálogo modal aberto por `exec()` travaria a suíte (no modo offscreen ninguém o
     fecha): os testes que querem conferir um diálogo o substituem explicitamente."""

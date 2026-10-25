@@ -22,7 +22,7 @@ from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import QCoreApplication, QEventLoop, QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtWidgets import QMessageBox, QWidget
+from PySide6.QtWidgets import QWidget
 
 from core.base import EncryptedPDFError
 from core.progress import OperationCancelled, Progress
@@ -209,7 +209,9 @@ def run_task(
     """
     manager = task_manager(parent)
     if manager.is_busy():
-        QMessageBox.information(
+        from ui.tool_panel import notify_info  # o painel importa widgets que importam este módulo
+
+        notify_info(
             parent,
             title,
             tr('Aguarde "{task}" terminar, ou cancele essa operação.').format(task=manager.title()),

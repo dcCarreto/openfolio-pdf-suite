@@ -176,13 +176,15 @@ def test_tool_panel_is_locked_while_a_task_runs():
     window = MainWindow()
     release = threading.Event()
     try:
-        run_task(window.current_document(), "Lenta", lambda progress: release.wait(5))
+        page = window.open_tool(window._row_of["CompressPage"])
+        panel = window.document.current_panel()
+        run_task(page, "Lenta", lambda progress: release.wait(5))
         QApplication.processEvents()
-        assert not window.stack.isEnabled()
+        assert not panel.body.isEnabled() and panel.cancel_button.isEnabled()  # Cancelar fica livre
         assert window.task_status.isVisibleTo(window)
         release.set()
         wait_for_tasks()
-        assert window.stack.isEnabled()
+        assert panel.body.isEnabled()
     finally:
         release.set()
         window.close()
@@ -236,7 +238,7 @@ def test_language_change_keeps_the_open_document_and_viewer_state(make_text_pdf)
         assert window.viewer is viewer
         assert viewer._scale == scale
         assert viewer._document is not None
-        assert viewer.page_indicator.toolTip().startswith("Page 1 of 1")
+        assert viewer.page_field.toolTip().startswith("Page 1 of 1")
     finally:
         window.close()
 

@@ -5,7 +5,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -18,6 +17,7 @@ from ui.tasks import call, run_task
 from ui.widget_state import clear_passwords
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 
 class ProtectPage(QWidget):
@@ -26,6 +26,7 @@ class ProtectPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -63,6 +64,7 @@ class ProtectPage(QWidget):
 
         button_label = "Proteger" if kind == "Proteger" else "Remover senha"
         apply_button = QPushButton(tr(button_label))
+        self.action_buttons.append(apply_button)
 
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(output_picker)
@@ -145,6 +147,7 @@ class ProtectPage(QWidget):
         self.perm_fill_forms_checkbox.setChecked(True)
 
         apply_button = QPushButton(tr("Aplicar permissões"))
+        self.action_buttons.append(apply_button)
         apply_button.clicked.connect(self._apply_permissions)
 
         layout.addWidget(instructions)
@@ -176,16 +179,16 @@ class ProtectPage(QWidget):
         password = self.protect_password_edit.text()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Proteger"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Proteger"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Proteger"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Proteger"), tr("Escolha o arquivo de saída."))
             return
         if not password:
-            QMessageBox.warning(self, tr("Proteger"), tr("Digite uma senha."))
+            notify_error(self, tr("Proteger"), tr("Digite uma senha."))
             return
         if password != self.protect_confirm_password_edit.text():
-            QMessageBox.warning(self, tr("Proteger"), tr("As senhas não coincidem."))
+            notify_error(self, tr("Proteger"), tr("As senhas não coincidem."))
             return
 
         task = call(ProtectPDF().run, input_path, output_path, password=password)
@@ -193,7 +196,7 @@ class ProtectPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Proteger"), tr("PDF protegido com sucesso."))
+            notify_success(self, tr("Proteger"), tr("PDF protegido com sucesso."))
 
         run_task(
             self,
@@ -209,15 +212,15 @@ class ProtectPage(QWidget):
         owner_password = self.perm_owner_password_edit.text()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Permissões avançadas"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Permissões avançadas"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(
+            notify_error(
                 self, tr("Permissões avançadas"), tr("Escolha o arquivo de saída.")
             )
             return
         if not owner_password:
-            QMessageBox.warning(
+            notify_error(
                 self, tr("Permissões avançadas"), tr("Digite a senha de permissões.")
             )
             return
@@ -245,7 +248,7 @@ class ProtectPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(
+            notify_success(
                 self, tr("Permissões avançadas"), tr("Permissões aplicadas com sucesso.")
             )
 
@@ -263,13 +266,13 @@ class ProtectPage(QWidget):
         password = self.unlock_password_edit.text()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Remover senha"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Remover senha"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Remover senha"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Remover senha"), tr("Escolha o arquivo de saída."))
             return
         if not password:
-            QMessageBox.warning(self, tr("Remover senha"), tr("Digite a senha atual do PDF."))
+            notify_error(self, tr("Remover senha"), tr("Digite a senha atual do PDF."))
             return
 
         task = call(UnlockPDF().run, input_path, output_path, password=password)
@@ -277,7 +280,7 @@ class ProtectPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Remover senha"), tr("Senha removida com sucesso."))
+            notify_success(self, tr("Remover senha"), tr("Senha removida com sucesso."))
 
         run_task(
             self,
