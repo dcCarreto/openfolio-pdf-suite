@@ -71,7 +71,8 @@ def test_the_bar_shows_only_with_annotations_open_on_a_document(window, tmp_path
 def test_every_markup_tool_is_chosen_from_the_bar(window, tmp_path):
     doc, bar, state = _annotations(window, tmp_path)
     _show(window, 1440, 900)
-    assert not bar.is_compact()
+    room = doc.viewer.scroll_area.viewport().width()
+    assert not bar.is_compact(), f"barra {bar.full_width()} px, centro {room} px"
 
     for tool in TOOLS:
         bar.tool_buttons[tool].click()

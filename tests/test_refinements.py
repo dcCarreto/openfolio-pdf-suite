@@ -9,7 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from pypdf import PdfWriter
 from PySide6.QtCore import QAbstractAnimation, QSettings, QSize
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QKeySequence
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -258,5 +258,6 @@ def test_rail_tooltips_show_a_configured_shortcut(window, tmp_path, monkeypatch)
     doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
     window._preferences.set_shortcut("tool.CompressPage", "Ctrl+Alt+C")
     window._apply_shortcuts()
-    assert doc._quick_buttons[ROW_OF["CompressPage"]].toolTip() == "Comprimir (Ctrl+Alt+C)"
+    shown = QKeySequence("Ctrl+Alt+C").toString(QKeySequence.SequenceFormat.NativeText)  # "⌥⌘C" no macOS
+    assert doc._quick_buttons[ROW_OF["CompressPage"]].toolTip() == f"Comprimir ({shown})"
     assert doc._quick_buttons[ROW_OF["MergePage"]].toolTip() == "Mesclar"
