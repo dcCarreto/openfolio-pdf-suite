@@ -127,6 +127,7 @@ class PdfViewer(QWidget):
         self._view_rotation = 0  # "girar a visualização": só na tela, o arquivo não muda
         self._scale = _DEFAULT_SCALE
         self._continuous = False
+        self._top_inset = 0  # espaço da barra de marcação acima da primeira página
         self._spread: str | None = None  # DOUBLE ou BOOK (com `_continuous`)
         self._show_thumbnails = True
         self._current_page = 0
@@ -195,6 +196,7 @@ class PdfViewer(QWidget):
         annotation_state.tool_changed.connect(self._on_markup_state_changed)
         annotation_state.pending_changed.connect(self._refresh_current_render)
         annotation_state.selection_changed.connect(self._on_comment_selection_changed)
+        annotation_state.page_requested.connect(self._go_to_page)
         redaction_state.active_changed.connect(self._on_markup_state_changed)
         redaction_state.pending_changed.connect(self._refresh_current_render)
         redaction_state.selection_changed.connect(self._on_redaction_selection_changed)
@@ -686,10 +688,10 @@ class PdfViewer(QWidget):
             container = QWidget()
             vlayout = QVBoxLayout(container)
             margin, spacing = 12, 12
-            vlayout.setContentsMargins(margin, margin, margin, margin)
+            vlayout.setContentsMargins(margin, margin + self._top_inset, margin, margin)
             vlayout.setSpacing(spacing)
 
-            offset = margin
+            offset = margin + self._top_inset
             for row in self._rows():
                 labels = [self._make_placeholder_label(index) for index in row]
                 if self._spread:
@@ -707,6 +709,7 @@ class PdfViewer(QWidget):
         else:
             label = PageCanvas()
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setContentsMargins(0, self._top_inset, 0, 0)
             label.mouse_pressed.connect(self._on_canvas_pressed)
             label.mouse_moved.connect(self._on_canvas_moved)
             label.mouse_released.connect(self._on_canvas_released)
@@ -1172,6 +1175,19 @@ class PdfViewer(QWidget):
     def _go_last(self):
         if self._document is not None:
             self._go_to_page(self._page_count() - 1)
+
+    def set_top_inset(self, inset: int) -> None:
+        """Margem extra acima da página, para a barra de marcação não cobri-la."""
+        if inset == self._top_inset:
+            return
+        self._top_inset = inset
+        if self._document is None or not self._page_labels:
+            return
+        if self._continuous:
+            self._apply_zoom()  # reconstrói mantendo a página e a posição
+        else:
+            self._page_labels[0].setContentsMargins(0, inset, 0, 0)
+            self._show_single_page(self._current_page)
 
     def _go_to_page(self, index: int):
         if self._document is None:

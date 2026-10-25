@@ -167,7 +167,7 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | 🗂️ Camadas | Lista as camadas (Optional Content Groups) de um PDF, inclusive as desligadas por padrão, e alterna a visibilidade padrão de cada uma |
 | 📎 Anexos | Lista, adiciona, remove ou extrai os anexos embutidos de um PDF (a extração nunca grava fora da pasta escolhida, mesmo que o nome do anexo tente) |
 | 🧾 Campos de formulário | Adiciona campos de formulário **interativos** (texto, data, caixa de seleção, lista suspensa, lista de seleção ou grupo de opções) — o PDF resultante é preenchível em qualquer leitor. O campo de data pode aceitar só datas (opcional, usa JavaScript). Os campos já existentes podem ser renomeados, ganhar dica, virar somente leitura ou obrigatórios, ser removidos e ter a ordem de tabulação mudada (arrastando, por linhas ou por colunas). Também exporta/importa dados preenchidos (CSV, Excel ou FDF) e achata o formulário (Fill & Sign simplificado) |
-| 🖍️ Anotações | Realce, sublinhe, risque, adicione notas, desenhe à mão livre, retângulos, círculos e setas (com a espessura que quiser) ou carimbe direto sobre a página, no próprio visualizador — com uma biblioteca de carimbos customizados (nome, texto e cor) salva localmente. Realce, sublinhado e riscado aparecem enquanto você arrasta; o carimbo sai no tamanho padrão com um clique ou do tamanho que você arrastar, sem distorcer. Antes de salvar, Ctrl+Z desfaz cada anotação (também as apagadas e "Limpar pendentes") e Ctrl+Y refaz. Cada anotação leva autor (o nome escolhido, guardado para as próximas) e data. Lista os comentários já existentes no PDF (escolher um mostra onde ele está), edita texto e autor, troca a cor, move e redimensiona arrastando no visualizador e remove com popups e respostas; exporta para CSV, Excel ou XFDF e importa XFDF de outros leitores, sem duplicar ao reimportar |
+| 🖍️ Anotações | Realce, sublinhe, risque, adicione notas, desenhe à mão livre, retângulos, círculos e setas (com a espessura que quiser) ou carimbe direto sobre a página, no próprio visualizador, pela barra de marcação que flutua sobre ela (ou por uma tecla: V, H, U, S, N, P, R, O, A, K) — com uma biblioteca de carimbos customizados (nome, texto e cor) salva localmente. Realce, sublinhado e riscado aparecem enquanto você arrasta; o carimbo sai no tamanho padrão com um clique ou do tamanho que você arrastar, sem distorcer. A barra mostra quantas marcações estão pendentes e as grava no documento ("Gravar", que Ctrl+Z desfaz); antes disso, Ctrl+Z desfaz cada anotação (também as apagadas e "Descartar") e Ctrl+Y refaz. Cada anotação leva autor (o nome escolhido, guardado para as próximas) e data. Lista os comentários já existentes no PDF (escolher um mostra onde ele está), edita texto e autor, troca a cor, move e redimensiona arrastando no visualizador e remove com popups e respostas; exporta para CSV, Excel ou XFDF e importa XFDF de outros leitores, sem duplicar ao reimportar |
 | 📏 Medição | Mede a distância entre dois pontos de um PDF, arrastando no visualizador central (mm, cm, polegadas ou pontos PDF) |
 | 🔍 OCR | Reconhece o texto de páginas escaneadas (via Tesseract, que já vem no instalador, com português, inglês e detecção de orientação) e gera um PDF pesquisável, com o texto invisível ajustado à largura de cada palavra reconhecida (inclusive em páginas giradas). Aceita vários idiomas ao mesmo tempo, DPI configurável, corrige páginas digitalizadas de lado e também reconhece escaneados que têm um carimbo de texto. Pode refazer um OCR anterior (tira o texto invisível dele antes, sem duplicar) e endireitar as páginas tortas ou de lado no próprio documento |
 | 🧹 Limpar escaneados | Remove páginas em branco, endireita páginas tortas (até 5°, girando o conteúdo sem perder qualidade) e corta as margens brancas do documento aberto, numa versão nova que Ctrl+Z desfaz; ao final, diz quais páginas mudaram |
@@ -241,7 +241,9 @@ campo pode ser clicado e preenchido normalmente.
 
 A ferramenta de realce está selecionada e o trecho "Cliente: Contoso Sistemas Ltda." foi
 marcado direto na página, arrastando o mouse sobre o visualizador — sem precisar de um editor
-separado:
+separado. Com Anotações aberta, a barra de marcação flutua sobre a página com as ferramentas,
+a cor, a espessura e "Gravar", e o painel lista as marcações pendentes e os comentários já
+gravados:
 
 <p align="center">
   <img src="assets/screenshots/08-anotacoes.png" alt="Aba Anotações com um realce amarelo aplicado sobre um trecho do documento" width="900">
@@ -422,6 +424,7 @@ ui/              Interface gráfica (PySide6)
                        (cada ferramenta é construída na primeira vez em que é aberta)
   tool_panel.py        Painel da ferramenta: Entrada, Opções, Saída e o rodapé com o andamento
                        e o resultado
+  motion.py            Animações da interface (respeitam Exibir > Animações da interface)
   home_page.py         Aba Início: abrir, ferramentas de partida e arquivos recentes
   tools_center.py      Aba Ferramentas: todas as ferramentas, por categoria
   tools.py             Catálogo das ferramentas (categorias e atalhos da coluna da direita)
@@ -443,7 +446,8 @@ ui/              Interface gráfica (PySide6)
   update_dialog.py     Aviso de atualização: o que mudou e o consentimento do usuário
   widget_state.py      Preserva o que foi preenchido nas abas ao trocar de idioma
   viewer/              Visualizador central: renderização, painel lateral (miniaturas,
-                       marcadores, anexos), busca, zoom, seleção de texto
+                       marcadores, anexos), busca, zoom, seleção de texto e a barra de
+                       marcação (markup_bar.py)
   pages/               Uma classe de página por ferramenta (MergePage, CompressPage, ...)
   widgets/             Widgets reutilizáveis (FilePicker, FileListEditor, DocumentSourceBar)
 

@@ -625,11 +625,13 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "O XMP não é um XML válido: {error}": "The XMP is not valid XML: {error}",
     # Anotações (M27)
     "Seta": "Arrow",
-    "Espessura (caneta e formas):": "Thickness (pen and shapes):",
     "O nome que os leitores mostram em cada comentário novo. Fica guardado.": (
         "The name readers show on each new comment. It is remembered."
     ),
-    "Trocar a cor dos selecionados pela cor escolhida": "Change the color of the selected ones to the chosen color",
+    "Trocar a cor dos selecionados": "Change the color of the selected ones",
+    "Aplica aos comentários selecionados a cor escolhida na barra de marcação.": (
+        "Applies the color chosen on the markup bar to the selected comments."
+    ),
     "Com Selecionar/Apagar, arraste o comentário escolhido no visualizador para movê-lo, "
     "ou o canto inferior direito dele para mudar o tamanho.": (
         "With Select/Erase, drag the chosen comment in the viewer to move it, "
@@ -733,6 +735,37 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Tentar de novo": "Try again",
     "Concluir": "Done",
     "Mostrar detalhes": "Show details",
+    # Barra de marcação e comentários (Anotações)
+    "Barra de marcação": "Markup bar",
+    "Marcação": "Markup",
+    "Cor: {name}": "Color: {name}",
+    "Mais cores...": "More colors...",
+    "Cor da marcação": "Markup color",
+    "Cor e espessura": "Color and thickness",
+    "Espessura": "Thickness",
+    "Espessura: {width}": "Thickness: {width}",
+    "Diminuir a espessura": "Decrease thickness",
+    "Aumentar a espessura": "Increase thickness",
+    "Realce, sublinhado e riscado seguem a linha do texto: a espessura vale para caneta, formas e seta.": (
+        "Highlight, underline and strikeout follow the text line: thickness applies to the pen, shapes and arrow."
+    ),
+    "pendentes": "pending",
+    "{count} pendentes": "{count} pending",
+    "Gravar": "Save",
+    "Gravar marcações": "Save markups",
+    "Gravar {count} marcações": "Save {count} markups",
+    "Gravar as marcações pendentes como uma versão do documento (Ctrl+Z desfaz)": (
+        "Save the pending markups as a version of the document (Ctrl+Z undoes)"
+    ),
+    "Descartar": "Discard",
+    "Descarta as marcações ainda não gravadas (Ctrl+Z traz de volta)": (
+        "Discards the markups not saved yet (Ctrl+Z brings them back)"
+    ),
+    "Pendente": "Pending",
+    "Gravado": "Saved",
+    "Comentários · {count}": "Comments · {count}",
+    "Todas as páginas": "All pages",
+    "Mostrar os comentários de": "Show the comments of",
     "Nenhum PDF escolhido": "No PDF chosen",
     "Trocar...": "Change...",
     "{count} página(s)": "{count} page(s)",
@@ -792,12 +825,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "REVISADO": "REVIEWED",
     "URGENTE": "URGENT",
     # Annotations: page UI
-    "Ferramenta:": "Tool:",
     "Cor:": "Color:",
     "Texto do carimbo:": "Stamp text:",
-    "Limpar pendentes": "Clear pending",
-    "{count} anotação(ões) pendente(s)": "{count} pending annotation(s)",
-    "Salvar anotações": "Save annotations",
     "Adicione pelo menos uma anotação antes de salvar.": "Add at least one annotation before saving.",
     "Falha ao salvar anotações: {error}": "Failed to save annotations: {error}",
     "Anotações salvas com sucesso.": "Annotations saved successfully.",
@@ -1739,12 +1768,12 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Imagens, formatação e cabeçalhos/rodapés repetidos em todas as páginas não entram na comparação; para eles, use "Comparar visualmente".': 'Images, formatting and headers/footers repeated on every page are not compared; for them, use "Compare visually".',
     # A11 — comentários existentes e XFDF
     "Autor": "Author",
-    "Comentários do documento:": "Comments in the document:",
     "Salvar alteração do comentário": "Save comment change",
     "Remover comentários selecionados": "Remove selected comments",
     "Importar comentários (XFDF)...": "Import comments (XFDF)...",
     "Importar comentários (XFDF)": "Import comments (XFDF)",
-    "Exportar comentários (CSV, Excel ou XFDF)": "Export comments (CSV, Excel or XFDF)",
+    "Exportar comentários": "Export comments",
+    "Em CSV, Excel ou XFDF, conforme o tipo do arquivo de saída.": "As CSV, Excel or XFDF, by the type of the output file.",
     "Exportar comentários existentes:": "Export existing comments:",
     "Nenhum comentário no documento.": "No comments in the document.",
     "O texto deste comentário faz parte do desenho: remova-o e crie outro.": "This comment's text is part of its drawing: remove it and create another one.",

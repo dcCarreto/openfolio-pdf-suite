@@ -18,9 +18,7 @@ from pathlib import Path
 from typing import cast
 
 from PySide6.QtCore import QEvent, QSize, Qt, Signal
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QSplitter,
     QStackedWidget,
@@ -40,6 +38,7 @@ from ui.tasks import TaskManager
 from ui.tool_panel import ToolPanel
 from ui.top_bar import BusySpinner, TabCloseButton
 from ui.tools import AREA_PICK_PAGES, QUICK_TOOLS, ROW_OF, SECTIONS
+from ui.viewer.markup_bar import TOP_INSET, MarkupBar
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.viewer.viewer_icons import build_print_icon, build_save_icon, build_thumbnails_icon
 from ui.widget_state import capture_state, restore_state
@@ -58,6 +57,7 @@ CENTER_MIN_WIDTH = 640  # menos que isso com uma ferramenta aberta: as miniatura
 CROWDED_WIDTH = 1280  # abaixo disso, ferramenta aberta sempre recolhe as miniaturas
 NARROW_WIDTH = 1180  # abaixo disso, parte da barra do visualizador vai para o "..." e o painel vira gaveta
 DRAWER_WIDTH = 340
+MARKUP_WIDTH = 960  # o centro que a barra de marcação inteira precisa: as miniaturas cedem antes
 
 # Os botões da coluna da esquerda, na ordem das abas do painel lateral do visualizador.
 _LEFT_RAIL = [
@@ -117,6 +117,7 @@ class DocumentTab(QWidget):
         self.session.history_changed.connect(self.changed)
         self.session.path_changed.connect(self.changed)
         self.session.path_changed.connect(self._update_left_rail)
+        self.session.path_changed.connect(self._update_markup_bar)
 
     # -- montagem ------------------------------------------------------------
 
@@ -150,6 +151,11 @@ class DocumentTab(QWidget):
         self.stack.hide()
         self.tool_panel = self.stack
         self.viewer.scroll_area.viewport().installEventFilter(self)  # clique na página fecha a gaveta
+
+        # Com Anotações aberta, a barra de marcação flutua sobre a página.
+        self.markup_bar = MarkupBar(self.annotation_state, self.viewer.scroll_area.viewport())
+        self.markup_bar.save_requested.connect(lambda: self.page(ROW_OF["AnnotationsPage"]).save_to_document())
+        self.viewer.scroll_area.verticalScrollBar().valueChanged.connect(lambda _value: self.markup_bar.note_scroll())
 
         side_panel = self.viewer.side_panel
         side_panel.use_external_rail()
@@ -356,9 +362,13 @@ class DocumentTab(QWidget):
         # Pelas larguras padrão dos painéis: o divisor já espreme os dois quando falta espaço.
         tool_open = self._tool >= 0
         center = width - LEFT_RAIL_WIDTH - RIGHT_RAIL_WIDTH - SIDE_WIDTH - PANEL_WIDTH
-        # O centro precisa caber a barra do visualizador inteira (uns 700 px), não só 640.
+        # O centro precisa caber a barra do visualizador inteira (uns 700 px), não só 640, e a
+        # de marcação, com Anotações aberta.
         needed = max(CENTER_MIN_WIDTH, self.viewer.toolbar.minimumSizeHint().width())
+        if self.annotation_state.is_page_active():
+            needed = max(needed, MARKUP_WIDTH)
         crowded = tool_open and (width < CROWDED_WIDTH or center < needed)
+        self._update_markup_bar()
         if crowded == self._crowded:
             return
         self._crowded = crowded
@@ -384,11 +394,7 @@ class DocumentTab(QWidget):
         self.stack.setProperty("drawer", on)
         if on:
             self.stack.setParent(self)
-            shadow = QGraphicsDropShadowEffect(self.stack)
-            shadow.setBlurRadius(24)
-            shadow.setOffset(0, 8)
-            shadow.setColor(QColor(0, 0, 0, 128) if theme.current_theme() == theme.DARK else QColor(27, 28, 41, 46))
-            self.stack.setGraphicsEffect(shadow)
+            self.stack.setGraphicsEffect(theme.floating_shadow(self.stack))
             self._place_drawer()
         else:
             self.stack.setGraphicsEffect(None)  # type: ignore[arg-type]
@@ -412,10 +418,13 @@ class DocumentTab(QWidget):
         if self.is_drawer_open():
             self._drawer_hidden = True
             self.stack.hide()
+            self._update_markup_bar()
 
     def eventFilter(self, watched, event):
         if event.type() == QEvent.Type.MouseButtonPress and self.is_drawer_open():
             self.hide_drawer()
+        elif event.type() == QEvent.Type.Resize:
+            self._update_markup_bar()  # o centro mudou (miniaturas recolhidas, divisor)
         return False
 
     def keyPressEvent(self, event):
@@ -432,6 +441,7 @@ class DocumentTab(QWidget):
             self._drawer_hidden = False  # a gaveta estava fechada: volta
             self.stack.show()
             self.stack.raise_()
+            self._update_markup_bar()
         elif self._tool == row:
             self.close_tool()  # clicar na ferramenta aberta a fecha
         else:
@@ -446,6 +456,22 @@ class DocumentTab(QWidget):
         self.redaction_state.set_page_active(class_name == "RedactionPage")
         self.measure_state.set_page_active(class_name == "MeasurePage")
         self.area_pick_state.set_active_page(self._pages.get(row))
+        self._update_markup_bar()
+
+    def _update_markup_bar(self, *_args):
+        """A barra de marcação: só com Anotações aberta e um documento; compacta numa janela
+        estreita ou com o centro apertado, e centralizada à esquerda da gaveta aberta."""
+        show = self.annotation_state.is_page_active() and self.session.path() is not None
+        bar = self.markup_bar
+        if show:
+            inset = DRAWER_WIDTH if self.is_drawer_open() else 0
+            available = self.viewer.scroll_area.viewport().width() - inset - 4
+            bar.set_compact(self.width() < NARROW_WIDTH or bar.full_width() > available)
+            bar.set_right_inset(inset)
+            bar.appear()
+        else:
+            bar.hide()
+        self.viewer.set_top_inset(TOP_INSET if show else 0)
 
     def _update_quick_buttons(self):
         for row, button in self._quick_buttons.items():
@@ -497,6 +523,7 @@ class DocumentTab(QWidget):
             restore_state(self.panel(row).body, state)
         self.area_pick_state.set_active_page(self._pages.get(self._tool))
         self.viewer.retranslate()
+        self.markup_bar.retranslate()
         self.task_status.retranslate()
         for button, (_icon, tooltip) in zip(self._left_buttons, _LEFT_RAIL):
             button.setToolTip(tr(tooltip))

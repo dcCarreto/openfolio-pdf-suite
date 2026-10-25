@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QDir, QPointF, Qt, QTemporaryDir
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QGuiApplication, QIcon, QImage, QPainter, QPalette, QPen
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QGraphicsDropShadowEffect, QWidget
 
 DARK = "dark"
 LIGHT = "light"
@@ -86,6 +86,15 @@ _images: QTemporaryDir | None = None  # as setas e o "✓" que o QSS desenha, um
 def tokens(theme: str | None = None) -> dict:
     """Os tokens do tema aplicado (ou de `theme`, DARK ou LIGHT)."""
     return TOKENS[theme or _current]
+
+
+def floating_shadow(parent: QWidget) -> QGraphicsDropShadowEffect:
+    """Elevação das superfícies flutuantes (gaveta, barra de marcação, paleta)."""
+    shadow = QGraphicsDropShadowEffect(parent)
+    shadow.setBlurRadius(24)
+    shadow.setOffset(0, 8)
+    shadow.setColor(QColor(0, 0, 0, 128) if _current == DARK else QColor(27, 28, 41, 46))
+    return shadow
 
 
 def load_fonts() -> bool:
@@ -338,6 +347,57 @@ QToolButton#ZoomButton::menu-indicator {{
     right: 6px;
     width: 10px;
     height: 10px;
+}}
+
+/* -- barra de marcação (ui/viewer/markup_bar.py) ---------------------------------- */
+
+QFrame#MarkupBar {{
+    background-color: {t["panel"]};
+    border: 1px solid {t["border_strong"]};
+    border-radius: 14px;
+}}
+
+QFrame#MarkupPopover {{
+    background-color: {t["panel"]};
+    border: 1px solid {t["border_strong"]};
+    border-radius: 14px;
+}}
+
+QToolButton#MarkupTool {{
+    border-radius: 8px;
+    padding: 0 7px;
+    color: {t["text"]};
+    font-size: 12px;
+    font-weight: 600;
+}}
+
+QToolButton#MarkupTool:checked {{
+    color: {t["accent_strong"]};
+}}
+
+QLabel#Kbd[ofVariant="accent"] {{
+    color: {t["accent_strong"]};
+    border-color: {t["accent_line"]};
+    padding: 1px 4px;
+}}
+
+QFrame#PendingBadge {{
+    background-color: {t["accent_fill"]};
+    border-radius: 12px;
+}}
+
+QLabel#PendingCount {{
+    background-color: {t["accent"]};
+    color: {t["on_accent"]};
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 700;
+}}
+
+QLabel#PendingText {{
+    color: {t["accent_strong"]};
+    font-size: 12px;
+    font-weight: 600;
 }}
 
 QToolButton#MoreButton::menu-indicator {{

@@ -198,6 +198,11 @@ class ToolPanel(QFrame):
             page_layout.setContentsMargins(0, 0, 0, 0)
         if input_widget is not None:
             self.add_section(tr("Entrada"), input_widget)
+        # Uma seção própria da ferramenta, com título que ela mesma atualiza (os comentários
+        # de Anotações): entre a entrada e as opções.
+        extra = getattr(page, "extra_section", None)
+        if extra is not None:
+            self.add_section("", extra[1], label=extra[0])
         options_label = self.add_section(tr("Opções"), page)
         if output_widget is not None:
             self.add_section(tr("Saída"), output_widget)
@@ -220,6 +225,16 @@ class ToolPanel(QFrame):
             button.installEventFilter(self._watcher)
             if (mode := button.parentWidget()) is not None:
                 mode.installEventFilter(self._watcher)
+        # Botões a mais no rodapé, antes do principal ("Descartar" em Anotações).
+        for button in reversed(getattr(page, "footer_buttons", [])):
+            _take_out(page, button)
+            self._ready_row.insertWidget(0, button)
+            # Dividindo a linha, o botão não tem lugar para o atalho: ele vai para a dica.
+            self.primary_kbd.hide()
+            self.primary_button.setToolTip("Ctrl+Enter")
+        edits_changed = getattr(page, "edits_changed", None)
+        if edits_changed is not None:  # o texto do botão da ação muda com as edições
+            edits_changed.connect(self._refresh_ready)
         session.path_changed.connect(self._refresh_ready)
         session.history_changed.connect(self._refresh_ready)
         self._refresh_ready()
@@ -265,9 +280,10 @@ class ToolPanel(QFrame):
         layout.addWidget(self.close_button)
         return header
 
-    def add_section(self, title: str, widget: QWidget) -> QLabel:
-        label = QLabel(title.upper())
-        label.setProperty("ofRole", "section")
+    def add_section(self, title: str, widget: QWidget, label: QLabel | None = None) -> QLabel:
+        if label is None:
+            label = QLabel(title.upper())
+            label.setProperty("ofRole", "section")
         section = QVBoxLayout()
         section.setSpacing(8)
         section.addWidget(label)
@@ -284,17 +300,20 @@ class ToolPanel(QFrame):
         self.primary_button.setProperty("ofVariant", "primary")
         self.primary_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.primary_button.clicked.connect(self.run)
-        kbd = QLabel("Ctrl+Enter")
-        kbd.setProperty("ofRole", "secondary")
+        self.primary_kbd = QLabel("Ctrl+Enter")
+        self.primary_kbd.setProperty("ofRole", "secondary")
         kbd_layout = QHBoxLayout(self.primary_button)
         kbd_layout.setContentsMargins(0, 0, 12, 0)
         kbd_layout.addStretch()
-        kbd_layout.addWidget(kbd)
+        kbd_layout.addWidget(self.primary_kbd)
         self.empty_caption = QLabel(tr("Escolha um PDF de entrada para habilitar."))
         self.empty_caption.setProperty("ofRole", "secondary")
         self.empty_caption.setWordWrap(True)
         ready_layout = self._footer_layout(ready)
-        ready_layout.addWidget(self.primary_button)
+        self._ready_row = QHBoxLayout()
+        self._ready_row.setSpacing(8)
+        self._ready_row.addWidget(self.primary_button, 1)
+        ready_layout.addLayout(self._ready_row)
         ready_layout.addWidget(self.empty_caption)
 
         busy = QWidget()

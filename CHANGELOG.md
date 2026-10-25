@@ -33,8 +33,19 @@ depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no avi
 
 ### Anotações e redação
 
+- Com Anotações aberta, uma barra flutua sobre a página com as ferramentas de marcação, as
+  cores, a espessura, quantas marcações estão pendentes e "Gravar", que as grava no documento
+  num passo que Ctrl+Z desfaz ("Desfazer Gravar marcações"). A página desce um pouco para a
+  barra não cobri-la; lendo com Selecionar, a barra esmaece e volta quando o mouse passa nela.
+  Numa janela estreita, ela fica só com ícones e a cor e a espessura vão para um botão.
+- Com o foco no documento, uma tecla escolhe a ferramenta: V (selecionar), H (realce),
+  U (sublinhado), S (riscado), N (nota), P (caneta), R (retângulo), O (círculo), A (seta) e
+  K (carimbo). Não valem num campo de texto e podem ser trocadas em Editar > Atalhos de teclado.
+- O painel de Anotações lista as marcações pendentes e os comentários gravados, com o selo
+  "Pendente" ou "Gravado", a cor e o tipo de cada um, e filtra pela página atual; clicar numa
+  marcação mostra a página dela. O rodapé tem "Descartar" e "Gravar N marcações".
 - Ctrl+Z desfaz as anotações e as áreas de redação ainda não gravadas, uma a uma, e Ctrl+Y as
-  refaz; vale também para o que foi apagado e para "Limpar pendentes". Antes, o Ctrl+Z não fazia
+  refaz; vale também para o que foi apagado e para "Descartar". Antes, o Ctrl+Z não fazia
   nada com elas.
 - Realce, sublinhado e riscado aparecem sobre o texto enquanto você arrasta, antes de soltar.
 - O carimbo aparece já no clique; arrastando, ele cresce a partir do clique no tamanho que você

@@ -4,20 +4,21 @@ XFDF)."""
 
 import re
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QButtonGroup,
     QComboBox,
-    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
+    QStyle,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
@@ -34,7 +35,8 @@ from core.annotations import (
     default_author,
 )
 from core.xfdf import ExportAnnotationsXFDF, ImportAnnotationsXFDF
-from ui.annotation_state import AnnotationState, DEFAULT_COLOR
+from ui import theme
+from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
 from ui.errors import show_error
 from ui.i18n import tr
@@ -45,27 +47,8 @@ from ui.stamp_library import StampLibrary
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
 from ui.tool_panel import notify_error, notify_success
-
-_TOOLS = [
-    ("select", "Selecionar/Apagar"),
-    ("highlight", "Realce"),
-    ("underline", "Sublinhado"),
-    ("strikeout", "Riscado"),
-    ("note", "Nota adesiva"),
-    ("ink", "Caneta"),
-    ("square", "Retângulo"),
-    ("circle", "Círculo"),
-    ("arrow", "Seta"),
-    ("stamp", "Carimbo"),
-]
-
-_COLORS = [
-    ("ffeb3b", "Amarelo"),
-    ("f44336", "Vermelho"),
-    ("4caf50", "Verde"),
-    ("2196f3", "Azul"),
-    ("000000", "Preto"),
-]
+from ui.viewer.markup_bar import TOOL_LABELS
+from ui.viewer.viewer_icons import build_markup_icon
 
 _STAMP_TEXTS = ["APROVADO", "CONFIDENCIAL", "RASCUNHO", "REVISADO", "URGENTE"]
 
@@ -90,6 +73,24 @@ _KIND_LABELS = {
 # O texto desses faz parte do desenho (/AP): trocar /Contents não mudaria o que aparece.
 _DRAWN_TEXT_KINDS = {"FreeText", "Stamp"}
 
+# O ícone da ferramenta de marcação que faz cada tipo de anotação gravada.
+_KIND_TOOLS = {
+    "Text": "note",
+    "Highlight": "highlight",
+    "Underline": "underline",
+    "StrikeOut": "strikeout",
+    "Ink": "ink",
+    "Square": "square",
+    "Circle": "circle",
+    "Line": "arrow",
+    "Stamp": "stamp",
+}
+
+# Dados de cada linha da lista de comentários (o texto do item é o que o leitor de tela lê).
+ROW_REF = Qt.ItemDataRole.UserRole  # ("saved", índice em _comments) ou ("pending", índice)
+ROW_VIEW = Qt.ItemDataRole.UserRole + 1  # (ferramenta, tipo, página, cor, pendente, trecho)
+ROW_HEIGHT = 52
+
 
 def format_pdf_date(value: str) -> str:
     """"D:20261019143000-03'00'" -> "19/10/2026 14:30" (vazio se não for uma data do PDF)."""
@@ -112,6 +113,77 @@ def describe_comment(comment: AnnotationInfo) -> str:
     return f"{text}\n{first_line[:80]}" if first_line else text
 
 
+class CommentDelegate(QStyledItemDelegate):
+    """Uma linha da lista: quadrado na cor da marcação com o ícone do tipo, tipo, página, selo
+    "Pendente" ou "Gravado" (texto, não só cor) e o começo do texto."""
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        return QSize(size.width(), ROW_HEIGHT if index.data(ROW_VIEW) else size.height())
+
+    def paint(self, painter: QPainter, option, index):
+        view = index.data(ROW_VIEW)
+        if not view:
+            super().paint(painter, option, index)
+            return
+        tool, kind, page, color, pending, excerpt = view
+        t = theme.tokens()
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = option.rect.adjusted(4, 2, -4, -2)
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        if selected or option.state & QStyle.StateFlag.State_MouseOver:
+            painter.setPen(QPen(QColor(t["accent_line"]), 1) if selected else Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(t["accent_fill"] if selected else t["raised"]))
+            painter.drawRoundedRect(QRectF(rect), 6, 6)
+
+        square = QRect(rect.left() + 8, rect.top() + (rect.height() - 24) // 2, 24, 24)
+        painter.setPen(QPen(QColor(t["border_strong"]), 1))
+        painter.setBrush(QColor(f"#{color}") if color else QColor(t["raised"]))
+        painter.drawRoundedRect(QRectF(square), 5, 5)
+        if tool:
+            build_markup_icon(tool).paint(painter, square.adjusted(4, 4, -4, -4), mode=QIcon.Mode.Normal)
+
+        left = square.right() + 10
+        base = QFont(option.font)
+        title = QFont(base)
+        title.setPixelSize(12)
+        title.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(title)
+        painter.setPen(QColor(t["text"]))
+        top = QRect(left, rect.top() + 7, rect.right() - left - 8, 18)
+        kind_width = painter.fontMetrics().horizontalAdvance(kind)
+        painter.drawText(top, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, kind)
+
+        small = QFont(base)
+        small.setPixelSize(11)
+        painter.setFont(small)
+        painter.setPen(QColor(t["text3"]))
+        page_text = f"{tr('Página')} {page + 1}"
+        page_left = left + kind_width + 8
+        painter.drawText(QRect(page_left, top.top(), top.right() - page_left, 18), Qt.AlignmentFlag.AlignVCenter, page_text)
+
+        # Selo à direita: "Pendente" no acento, "Gravado" neutro.
+        badge_text = tr("Pendente") if pending else tr("Gravado")
+        badge_width = painter.fontMetrics().horizontalAdvance(badge_text) + 12
+        badge = QRectF(top.right() - badge_width, top.top() + 1, badge_width, 16)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor(t["accent_line" if pending else "border_strong"]), 1))
+        painter.drawRoundedRect(badge, 4, 4)
+        painter.setPen(QColor(t["accent_strong" if pending else "text2"]))
+        painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, badge_text)
+
+        if excerpt:
+            text = QFont(base)
+            text.setPixelSize(12)
+            painter.setFont(text)
+            painter.setPen(QColor(t["text2"]))
+            line = QRect(left, top.bottom() + 3, rect.right() - left - 8, 16)
+            shown = painter.fontMetrics().elidedText(excerpt, Qt.TextElideMode.ElideRight, line.width())
+            painter.drawText(line, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, shown)
+        painter.restore()
+
+
 class AnnotationsPage(QWidget):
     """Permite marcar o PDF aberto (realce, sublinhado, riscado, notas, caneta, carimbo)
     diretamente sobre o visualizador central, e gravar o resultado em um novo arquivo."""
@@ -129,53 +201,9 @@ class AnnotationsPage(QWidget):
         session.path_changed.connect(self._on_document_changed)
 
         self.source_bar = DocumentSourceBar(session)
-
-        self.tool_buttons: dict[str, QPushButton] = {}
-        tools_layout = QVBoxLayout()
-        tool_group = QButtonGroup(self)
-        tool_group.setExclusive(True)
-        self._tool_group = tool_group
-        for key, label in _TOOLS:
-            button = QPushButton(tr(label))
-            button.setCheckable(True)
-            button.clicked.connect(lambda _checked, k=key: self.annotation_state.set_tool(k))
-            tool_group.addButton(button)
-            tools_layout.addWidget(button)
-            self.tool_buttons[key] = button
-
-        current_tool = annotation_state.active_tool() or "select"
-        annotation_state.set_tool(current_tool)
-        self.tool_buttons[current_tool].setChecked(True)
-
-        self.color_buttons: dict[str, QPushButton] = {}
-        colors_layout = QHBoxLayout()
-        color_group = QButtonGroup(self)
-        color_group.setExclusive(True)
-        self._color_group = color_group
-        for color, name in _COLORS:
-            button = QPushButton()
-            button.setObjectName("colorSwatch")
-            button.setCheckable(True)
-            button.setFixedSize(26, 26)
-            button.setToolTip(tr(name))
-            button.setStyleSheet(
-                f"QPushButton {{ background-color: #{color}; border: 2px solid transparent; "
-                "border-radius: 4px; }"
-                "QPushButton:checked { border: 2px solid palette(window-text); }"
-            )
-            button.clicked.connect(lambda _checked, c=color: self.annotation_state.set_color(c))
-            color_group.addButton(button)
-            colors_layout.addWidget(button)
-            self.color_buttons[color] = button
-        colors_layout.addStretch()
-        self.color_buttons.get(annotation_state.active_color(), self.color_buttons[DEFAULT_COLOR]).setChecked(True)
-
-        self.width_spin = QDoubleSpinBox()
-        self.width_spin.setRange(0.5, 20)
-        self.width_spin.setSingleStep(0.5)
-        self.width_spin.setSuffix(" pt")
-        self.width_spin.setValue(annotation_state.width())
-        self.width_spin.valueChanged.connect(annotation_state.set_width)
+        # As ferramentas, a cor e a espessura ficam na barra de marcação sobre o visualizador
+        # (ui/viewer/markup_bar.py); aqui ficam os comentários, o autor e os carimbos.
+        annotation_state.set_tool(annotation_state.active_tool() or "select")
         self._preferences = preferences()
         self.author_edit = QLineEdit()
         author = self._preferences.annotation_author()
@@ -185,7 +213,6 @@ class AnnotationsPage(QWidget):
             lambda: self._preferences.set_annotation_author(self.author_edit.text().strip())
         )
         drawing_form = QFormLayout()
-        drawing_form.addRow(tr("Espessura (caneta e formas):"), self.width_spin)
         drawing_form.addRow(tr("Autor:"), self.author_edit)
 
         self.stamp_label = QLabel(tr("Texto do carimbo:"))
@@ -213,22 +240,33 @@ class AnnotationsPage(QWidget):
         annotation_state.tool_changed.connect(self._update_stamp_visibility)
         self._update_stamp_visibility()
 
-        self.pending_label = QLabel()
-        clear_button = QPushButton(tr("Limpar pendentes"))
-        clear_button.clicked.connect(self.annotation_state.clear_pending)
-        annotation_state.pending_changed.connect(self._on_pending_changed)
-        self._update_pending_label()
+        # Rodapé do painel: "Descartar" as pendentes e "Gravar N marcações".
+        self.discard_button = QPushButton(tr("Descartar"))
+        self.discard_button.setToolTip(tr("Descarta as marcações ainda não gravadas (Ctrl+Z traz de volta)"))
+        self.discard_button.clicked.connect(self.annotation_state.clear_pending)
+        self.footer_buttons = [self.discard_button]
 
         self.output_picker = FilePicker(
             mode="save", suggested_source=session.path, suggested_suffix="anotado"
         )
-        save_button = QPushButton(tr("Salvar anotações"))
-        self.action_buttons.append(save_button)
-        save_button.clicked.connect(self._save)
+        self.save_button = QPushButton()
+        self.action_buttons.append(self.save_button)
+        self.save_button.clicked.connect(self._save)
 
         self._comments: list[AnnotationInfo] = []
+        self.comments_title = QLabel()
+        self.comments_title.setObjectName("CommentsTitle")
+        self.comments_title.setProperty("ofRole", "section")
+        self.page_filter = QComboBox()
+        self.page_filter.addItems([tr("Todas as páginas"), tr("Página atual")])
+        self.page_filter.setAccessibleName(tr("Mostrar os comentários de"))
+        self.page_filter.currentIndexChanged.connect(self._apply_page_filter)
+        session.current_page_changed.connect(self._apply_page_filter)
         self.comments_list = QListWidget()
         self.comments_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.comments_list.setItemDelegate(CommentDelegate(self.comments_list))
+        self.comments_list.setMouseTracking(True)
+        self.comments_list.setMinimumHeight(4 * ROW_HEIGHT)
         self.comments_list.itemSelectionChanged.connect(self._on_comment_selected)
         self.comment_text_edit = QPlainTextEdit()
         self.comment_text_edit.setMaximumHeight(90)
@@ -238,7 +276,8 @@ class AnnotationsPage(QWidget):
         self.update_comment_button.clicked.connect(self._update_comment)
         self.remove_comments_button = QPushButton(tr("Remover comentários selecionados"))
         self.remove_comments_button.clicked.connect(self._remove_comments)
-        self.recolor_button = QPushButton(tr("Trocar a cor dos selecionados pela cor escolhida"))
+        self.recolor_button = QPushButton(tr("Trocar a cor dos selecionados"))
+        self.recolor_button.setToolTip(tr("Aplica aos comentários selecionados a cor escolhida na barra de marcação."))
         self.recolor_button.clicked.connect(self._recolor_comments)
         move_hint = QLabel(
             tr(
@@ -255,68 +294,108 @@ class AnnotationsPage(QWidget):
         self.export_csv_picker = FilePicker(
             mode="save", file_filter="CSV (*.csv);;Excel (*.xlsx);;XFDF (*.xfdf)"
         )
-        export_csv_button = QPushButton(tr("Exportar comentários (CSV, Excel ou XFDF)"))
+        export_csv_button = QPushButton(tr("Exportar comentários"))
+        export_csv_button.setToolTip(tr("Em CSV, Excel ou XFDF, conforme o tipo do arquivo de saída."))
         export_csv_button.clicked.connect(self._export_csv)
+
+        # Comentários (as pendentes e os gravados): uma seção própria do painel, antes das
+        # opções (`extra_section`, ver ui/tool_panel.py).
+        self.comments_section = QWidget()
+        comments = QVBoxLayout(self.comments_section)
+        comments.setContentsMargins(0, 0, 0, 0)
+        comments.addWidget(self.page_filter)
+        comments.addWidget(self.comments_list)
+        comments.addWidget(self.comment_text_edit)
+        comments.addWidget(self.comment_author_edit)
+        comments.addWidget(self.update_comment_button)
+        comments.addWidget(self.remove_comments_button)
+        comments.addWidget(self.recolor_button)
+        comments.addWidget(move_hint)
+        self.extra_section = (self.comments_title, self.comments_section)
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
         layout.addWidget(self.source_bar)
-        layout.addWidget(QLabel(tr("Ferramenta:")))
-        layout.addLayout(tools_layout)
-        layout.addWidget(QLabel(tr("Cor:")))
-        layout.addLayout(colors_layout)
         layout.addLayout(drawing_form)
         layout.addWidget(self.stamp_label)
         layout.addWidget(self.stamp_combo)
         layout.addWidget(self.new_stamp_name_edit)
         layout.addWidget(save_stamp_button)
         layout.addWidget(remove_stamp_button)
-        layout.addWidget(self.pending_label)
-        layout.addWidget(clear_button)
-        layout.addWidget(QLabel(tr("Arquivo de saída:")))
-        layout.addWidget(self.output_picker)
-        layout.addWidget(save_button)
-        layout.addWidget(QLabel(tr("Comentários do documento:")))
-        layout.addWidget(self.comments_list)
-        layout.addWidget(self.comment_text_edit)
-        layout.addWidget(self.comment_author_edit)
-        layout.addWidget(self.update_comment_button)
-        layout.addWidget(self.remove_comments_button)
-        layout.addWidget(self.recolor_button)
-        layout.addWidget(move_hint)
         layout.addWidget(import_xfdf_button)
         layout.addWidget(QLabel(tr("Exportar comentários existentes:")))
         layout.addWidget(self.export_csv_picker)
         layout.addWidget(export_csv_button)
+        layout.addWidget(QLabel(tr("Arquivo de saída:")))
+        layout.addWidget(self.output_picker)
+        layout.addWidget(self.save_button)
 
+        annotation_state.pending_changed.connect(self._on_pending_changed)
         self._load_comments()
+        self._update_pending()
 
     # ---- Comentários já gravados ----------------------------------------------------
 
     def _load_comments(self):
         """Relê a lista a cada versão do documento: as posições em /Annots que ela guarda
         só valem para o arquivo de onde foram lidas."""
-        selected = {(c.page_index, c.index) for c in self._selected_comments()}
         input_path = self.session.path()
         try:
-            self._comments = ListAnnotations().run(input_path) if input_path else []
+            comments = ListAnnotations().run(input_path) if input_path else []
         except Exception:
-            self._comments = []  # PDF protegido ou ilegível: as outras ferramentas avisam
+            comments = []  # PDF protegido ou ilegível: as outras ferramentas avisam
+        self._fill_list(comments)
+
+    def _fill_list(self, comments: list[AnnotationInfo] | None = None):
+        """Monta a lista: as marcações pendentes primeiro, depois os comentários gravados."""
+        selected = {(c.page_index, c.index) for c in self._selected_comments()}
+        if comments is not None:
+            self._comments = comments
+        pending = self.annotation_state.pending()
         self.comments_list.blockSignals(True)
         self.comments_list.clear()
-        for comment in self._comments:
-            self.comments_list.addItem(describe_comment(comment))
+        for number, spec in enumerate(pending):
+            tool = spec.kind if spec.kind in TOOL_LABELS else None
+            kind = tr(TOOL_LABELS[tool]) if tool else spec.kind
+            item = QListWidgetItem(f"{tr('Página')} {spec.page_index + 1} · {kind} · {tr('Pendente')}")
+            item.setData(ROW_REF, ("pending", number))
+            item.setData(ROW_VIEW, (tool, kind, spec.page_index, spec.color, True, spec.text or ""))
+            self.comments_list.addItem(item)
+        for number, comment in enumerate(self._comments):
+            kind = tr(_KIND_LABELS.get(comment.kind, comment.kind))
+            excerpt = comment.content.strip().splitlines()[0] if comment.content.strip() else ""
+            item = QListWidgetItem(describe_comment(comment))
+            item.setData(ROW_REF, ("saved", number))
+            item.setData(
+                ROW_VIEW, (_KIND_TOOLS.get(comment.kind), kind, comment.page_index, comment.color, False, excerpt)
+            )
+            self.comments_list.addItem(item)
             if (comment.page_index, comment.index) in selected:
-                self.comments_list.item(self.comments_list.count() - 1).setSelected(True)
-        if not self._comments:
+                item.setSelected(True)
+        if not pending and not self._comments:
             self.comments_list.addItem(tr("Nenhum comentário no documento."))
             self.comments_list.item(0).setFlags(self.comments_list.item(0).flags() & ~Qt.ItemFlag.ItemIsSelectable)
+        count = len(pending) + len(self._comments)
+        self.comments_title.setText(tr("Comentários · {count}").format(count=count).upper())
         self.comments_list.blockSignals(False)
+        self._apply_page_filter()
         self._on_comment_selected()
 
+    def _apply_page_filter(self):
+        """"Página atual": só as marcações da página que o visualizador mostra."""
+        only_current = self.page_filter.currentIndex() == 1
+        current = self.session.current_page()
+        for row in range(self.comments_list.count()):
+            view = self.comments_list.item(row).data(ROW_VIEW)
+            self.comments_list.setRowHidden(row, bool(only_current and view and view[2] != current))
+
+    def _selected_refs(self) -> list[tuple[str, int]]:
+        refs = [item.data(ROW_REF) for item in self.comments_list.selectedItems()]
+        return sorted(ref for ref in refs if ref)
+
     def _selected_comments(self) -> list[AnnotationInfo]:
-        rows = sorted(self.comments_list.row(item) for item in self.comments_list.selectedItems())
-        return [self._comments[row] for row in rows if row < len(self._comments)]
+        refs = self._selected_refs()
+        return [self._comments[n] for kind, n in refs if kind == "saved" and n < len(self._comments)]
 
     def _on_comment_selected(self):
         selected = self._selected_comments()
@@ -335,6 +414,11 @@ class AnnotationsPage(QWidget):
         self.annotation_state.set_selected_comment(
             (single.page_index, single.rect) if single is not None and single.rect else None
         )
+        refs = self._selected_refs()
+        if len(refs) == 1 and refs[0][0] == "pending":  # uma pendente: mostra a página dela
+            pending = self.annotation_state.pending()
+            if refs[0][1] < len(pending):
+                self.annotation_state.request_page(pending[refs[0][1]].page_index)
 
     def _apply_to_document(self, title: str, operation, message):
         """Roda `operation(entrada, saída)` numa versão nova do documento de trabalho
@@ -473,10 +557,7 @@ class AnnotationsPage(QWidget):
         text, color, _name = entry
         self.annotation_state.set_stamp_text(text)
         if color is not None:
-            self.annotation_state.set_color(color)
-            button = self.color_buttons.get(color)
-            if button is not None:
-                button.setChecked(True)
+            self.annotation_state.set_color(color)  # a barra de marcação acompanha
 
     def _on_stamp_index_changed(self, index: int):
         self._apply_stamp_entry(index)
@@ -521,14 +602,17 @@ class AnnotationsPage(QWidget):
         for widget in self._stamp_extra_widgets:
             widget.setVisible(is_stamp)
 
-    def _update_pending_label(self):
+    def _update_pending(self):
         count = len(self.annotation_state.pending())
-        self.pending_label.setText(tr("{count} anotação(ões) pendente(s)").format(count=count))
+        self.save_button.setText(tr("Gravar {count} marcações").format(count=count) if count else tr("Gravar marcações"))
+        self.save_button.setEnabled(count > 0)
+        self.discard_button.setEnabled(count > 0)
 
     def _on_pending_changed(self):
         self._history.changed()
-        self._update_pending_label()
-        self.edits_changed.emit()
+        self._update_pending()
+        self._fill_list()
+        self.edits_changed.emit()  # o painel atualiza o botão do rodapé
 
     def _on_document_changed(self):
         self._history.reset()
@@ -548,9 +632,13 @@ class AnnotationsPage(QWidget):
     def redo_edit(self) -> None:
         self._history.redo()
 
-    def _save(self):
+    def save_to_document(self):
+        """"Gravar" da barra de marcação: as pendentes viram uma versão do documento aberto."""
+        self._save(self.session.new_version_path() if self.session.path() else "")
+
+    def _save(self, output_path: str | None = None):
         input_path = self.session.path()
-        output_path = self.output_picker.path()
+        output_path = self.output_picker.path() if output_path is None else output_path
         pending = self.annotation_state.pending()
 
         if not input_path:
@@ -576,7 +664,7 @@ class AnnotationsPage(QWidget):
 
         run_task(
             self,
-            tr("Anotações"),
+            tr("Gravar marcações"),  # o nome do passo no Ctrl+Z
             task,
             on_success=done,
             error_message=tr("Falha ao salvar anotações: {error}"),

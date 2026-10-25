@@ -36,6 +36,7 @@ from core.properties import ReadDocumentProperties
 from core.version import APP_VERSION
 from ui import desktop_integration, i18n, sidebar_icons, theme
 from ui.about_dialog import AboutDialog
+from ui.annotation_state import TOOLS as MARKUP_TOOLS
 from ui.app_events import pdf_paths_from_mime
 from ui.diagnostics import log_path
 from ui.document_tab import PANEL_MIN_WIDTH, PANEL_WIDTH, SIDE_WIDTH, VIEWER_MIN_WIDTH, DocumentTab
@@ -54,7 +55,9 @@ from ui.tools_center import ToolsCenter
 from ui.top_bar import FIXED_TABS, CommandLauncher, DocumentTabs, LangSwitch, bar_separator
 from ui.update_dialog import UpdateDialog
 from ui.viewer import pdf_viewer as viewer_layouts
-from ui.viewer.viewer_icons import build_file_icon, build_home_icon, build_plus_icon
+from ui.viewer.markup_bar import DEFAULT_KEYS as MARKUP_KEYS
+from ui.viewer.markup_bar import TOOL_LABELS as MARKUP_LABELS
+from ui.viewer.viewer_icons import build_file_icon, build_home_icon, build_markup_icon, build_plus_icon
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +241,11 @@ class MainWindow(QMainWindow):
             button.clicked.connect(lambda _checked=False, d=doc: self._remember_page_layout(d))
         doc.tasks.finished.connect(lambda outcome, d=doc: self._on_task_finished(d, outcome))
         doc.save_button.clicked.connect(self.save_document)
+        markup_actions = getattr(self, "_markup_actions", {})
+        doc.viewer.scroll_area.addActions(list(markup_actions.values()))
+        doc.markup_bar.set_keys(
+            {tool: a.shortcut().toString(QKeySequence.SequenceFormat.NativeText) for tool, a in markup_actions.items()}
+        )
         doc.print_button.clicked.connect(self.print_document)
         doc.task_status.hide()
         self.statusBar().addPermanentWidget(doc.task_status)
@@ -510,6 +518,25 @@ class MainWindow(QMainWindow):
             self.addAction(action)
             self._tool_actions.append(action)
             self._commands.append((tr("Ferramentas"), action))
+
+        # Uma tecla por ferramenta de marcação (V, H, U...): só com o foco no visualizador e
+        # Anotações aberta, e nunca num campo de texto (que fica com a tecla).
+        for doc in self.documents():
+            for action in getattr(self, "_markup_actions", {}).values():
+                doc.viewer.scroll_area.removeAction(action)
+        for action in getattr(self, "_markup_actions", {}).values():
+            action.deleteLater()
+        self._markup_actions: dict[str, QAction] = {}
+        for tool in MARKUP_TOOLS:
+            action = QAction(build_markup_icon(tool), tr(MARKUP_LABELS[tool]), self)
+            action.setObjectName(f"markup.{tool}")
+            action.setShortcut(MARKUP_KEYS[tool])
+            action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            action.triggered.connect(lambda _checked=False, t=tool: self._choose_markup_tool(t))
+            self._markup_actions[tool] = action
+            self._commands.append((tr("Marcação"), action))
+        for doc in self.documents():
+            doc.viewer.scroll_area.addActions(list(self._markup_actions.values()))
         self._apply_shortcuts()
         self._update_document_actions()
         self._language_switcher.setEnabled(not self._any_busy())
@@ -528,6 +555,17 @@ class MainWindow(QMainWindow):
             defaults = self._default_shortcuts.setdefault(key, action.shortcuts())
             custom = self._preferences.shortcut(key)
             action.setShortcuts(defaults if custom is None else [QKeySequence(custom)])
+        keys = {
+            tool: action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
+            for tool, action in getattr(self, "_markup_actions", {}).items()
+        }
+        for doc in self.documents():
+            doc.markup_bar.set_keys(keys)
+
+    def _choose_markup_tool(self, tool: str):
+        doc = self.document
+        if doc is not None and doc.annotation_state.is_page_active():
+            doc.annotation_state.set_tool(tool)
 
     def show_command_palette(self):
         palette = CommandPalette([c for c in self.commands() if c[1] is not self._palette_action], self)
@@ -696,6 +734,9 @@ class MainWindow(QMainWindow):
         self._properties_action.setEnabled(has_document and not busy)
         self._presentation_action.setEnabled(has_document)
         self._close_tab_action.setEnabled(doc is not None)
+        marking = has_document and doc is not None and doc.annotation_state.is_page_active()
+        for action in getattr(self, "_markup_actions", {}).values():
+            action.setEnabled(marking)
         for each in self.documents():  # os botões da barra de cada documento seguem o menu
             each_session = each.session
             each_busy = each.tasks.is_busy()

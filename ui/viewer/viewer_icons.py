@@ -2,7 +2,7 @@
 usada em ui/sidebar_icons.py)."""
 
 from PySide6.QtCore import QPointF, QRectF
-from PySide6.QtGui import QIcon, QPolygonF
+from PySide6.QtGui import QFont, QIcon, QPolygonF
 
 from ui.icon_utils import build_icon as _build
 
@@ -214,5 +214,101 @@ def build_more_icon() -> QIcon:
     def draw(p):
         for x in (6, 11, 16):
             p.drawEllipse(QRectF(x - 1, 10, 2, 2))
+
+    return _build(draw)
+
+
+# -- barra de marcação (ui/viewer/markup_bar.py) ---------------------------------------
+
+
+def _letter(p, text: str, underline: bool = False, strike: bool = False):
+    font = QFont(p.font())
+    font.setPixelSize(13)
+    font.setWeight(QFont.Weight.DemiBold)
+    p.setFont(font)
+    p.drawText(QRectF(3, 2, 16, 15), 0x0084, text)  # AlignHCenter | AlignVCenter
+    if underline:
+        p.drawLine(QPointF(6, 18.5), QPointF(16, 18.5))
+    if strike:
+        p.drawLine(QPointF(4, 10), QPointF(18, 10))
+
+
+def _draw_select(p):
+    p.drawPolygon(QPolygonF([QPointF(6, 3), QPointF(16, 13), QPointF(11.5, 13.5), QPointF(14, 19), QPointF(12, 20), QPointF(9.5, 14.5), QPointF(6, 17)]))
+
+
+def _draw_highlight(p):
+    p.drawPolygon(QPolygonF([QPointF(13, 3), QPointF(18, 8), QPointF(10, 16), QPointF(5, 11)]))
+    p.drawLine(QPointF(5, 11), QPointF(3, 17))
+    p.drawLine(QPointF(3, 17), QPointF(7, 17))
+    p.drawLine(QPointF(10, 19.5), QPointF(19, 19.5))
+
+
+def _draw_note(p):
+    p.drawPolygon(QPolygonF([QPointF(4, 4), QPointF(18, 4), QPointF(18, 13), QPointF(13, 18), QPointF(4, 18)]))
+    p.drawLine(QPointF(13, 18), QPointF(13, 13))
+    p.drawLine(QPointF(13, 13), QPointF(18, 13))
+
+
+def _draw_ink(p):
+    p.drawLine(QPointF(5, 17), QPointF(15, 7))
+    p.drawLine(QPointF(15, 7), QPointF(17, 9))
+    p.drawLine(QPointF(17, 9), QPointF(7, 19))
+    p.drawLine(QPointF(7, 19), QPointF(4, 20))
+    p.drawLine(QPointF(4, 20), QPointF(5, 17))
+    p.drawLine(QPointF(16, 6), QPointF(18, 4))
+
+
+def _draw_square(p):
+    p.drawRoundedRect(QRectF(4, 5, 14, 12), 1.5, 1.5)
+
+
+def _draw_circle(p):
+    p.drawEllipse(QRectF(4, 4, 14, 14))
+
+
+def _draw_arrow(p):
+    p.drawLine(QPointF(5, 17), QPointF(17, 5))
+    p.drawLine(QPointF(17, 5), QPointF(10, 5))
+    p.drawLine(QPointF(17, 5), QPointF(17, 12))
+
+
+def _draw_stamp(p):
+    p.drawRoundedRect(QRectF(8.5, 3, 5, 6), 2, 2)
+    p.drawLine(QPointF(11, 9), QPointF(11, 12))
+    p.drawRoundedRect(QRectF(4, 12, 14, 4), 1, 1)
+    p.drawLine(QPointF(5, 19), QPointF(17, 19))
+
+
+_MARKUP_DRAW = {
+    "select": _draw_select,
+    "highlight": _draw_highlight,
+    "underline": lambda p: _letter(p, "U", underline=True),
+    "strikeout": lambda p: _letter(p, "S", strike=True),
+    "note": _draw_note,
+    "ink": _draw_ink,
+    "square": _draw_square,
+    "circle": _draw_circle,
+    "arrow": _draw_arrow,
+    "stamp": _draw_stamp,
+}
+
+
+def build_markup_icon(tool: str) -> QIcon:
+    """Ícone de uma ferramenta de marcação (`ui.annotation_state.TOOLS`)."""
+    return _build(_MARKUP_DRAW[tool])
+
+
+def build_check_icon() -> QIcon:
+    def draw(p):
+        p.drawLine(QPointF(5, 11.5), QPointF(9.5, 16))
+        p.drawLine(QPointF(9.5, 16), QPointF(17, 7))
+
+    return _build(draw)
+
+
+def build_minus_icon() -> QIcon:
+    def draw(p):
+        p.drawLine(QPointF(6, 11), QPointF(16, 11))
 
     return _build(draw)
