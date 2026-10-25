@@ -312,3 +312,59 @@ def build_minus_icon() -> QIcon:
         p.drawLine(QPointF(6, 11), QPointF(16, 11))
 
     return _build(draw)
+
+
+def build_pin_icon() -> QIcon:
+    """Alfinete: a ferramenta está no trilho rápido."""
+
+    def draw(p):
+        p.drawLine(QPointF(8, 4), QPointF(14, 4))
+        p.drawLine(QPointF(9, 4), QPointF(9, 10))
+        p.drawLine(QPointF(13, 4), QPointF(13, 10))
+        p.drawLine(QPointF(6, 13), QPointF(16, 13))
+        p.drawLine(QPointF(9, 10), QPointF(6, 13))
+        p.drawLine(QPointF(13, 10), QPointF(16, 13))
+        p.drawLine(QPointF(11, 13), QPointF(11, 19))
+
+    return _build(draw)
+
+
+def build_file_drop_icon() -> QIcon:
+    """Arquivo com a seta de soltar (Início)."""
+
+    def draw(p):
+        p.drawPolyline(QPolygonF([QPointF(13, 3), QPointF(6, 3), QPointF(6, 19), QPointF(17, 19), QPointF(17, 7), QPointF(13, 3)]))
+        p.drawLine(QPointF(11.5, 8), QPointF(11.5, 15))
+        p.drawPolyline(QPolygonF([QPointF(8.5, 12), QPointF(11.5, 15), QPointF(14.5, 12)]))
+
+    return _build(draw)
+
+
+def build_rotate_left_icon() -> QIcon:
+    """Girar à esquerda: o giro espelhado."""
+
+    def draw(p):
+        p.drawArc(QRectF(4, 4, 14, 14), 90 * 16, -270 * 16)
+        p.drawLine(QPointF(11, 4), QPointF(8, 2))
+        p.drawLine(QPointF(11, 4), QPointF(8, 7))
+
+    return _build(draw)
+
+
+def build_duplicate_icon() -> QIcon:
+    def draw(p):
+        p.drawRoundedRect(QRectF(8, 7, 10, 12), 1.5, 1.5)
+        p.drawPolyline(QPolygonF([QPointF(5, 15), QPointF(5, 4), QPointF(14, 4)]))
+
+    return _build(draw)
+
+
+def build_trash_icon() -> QIcon:
+    def draw(p):
+        p.drawLine(QPointF(4, 6), QPointF(18, 6))
+        p.drawPolyline(QPolygonF([QPointF(9, 6), QPointF(9, 4), QPointF(13, 4), QPointF(13, 6)]))
+        p.drawPolyline(QPolygonF([QPointF(6, 6), QPointF(7, 19), QPointF(15, 19), QPointF(16, 6)]))
+        p.drawLine(QPointF(9.5, 9), QPointF(9.5, 16))
+        p.drawLine(QPointF(12.5, 9), QPointF(12.5, 16))
+
+    return _build(draw)

@@ -30,6 +30,22 @@ depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no avi
   na página o recolhem.
 - Sem documento aberto, o centro mostra onde soltar um PDF, com Abrir arquivo e os recentes,
   e o painel da ferramenta avisa que espera um documento.
+- O Início tem uma área para soltar o PDF (vale soltar em qualquer parte da aba), os atalhos
+  Criar, Mesclar, Converter e Comprimir e os recentes com a miniatura da primeira página, a
+  pasta, o número de páginas e quando o arquivo mudou; o "..." de cada um abre, mostra na
+  pasta ou tira da lista.
+- A aba Ferramentas busca também por sinônimos ("cpf" acha Redigir, "assinar" acha as duas
+  ferramentas de assinatura, "word" acha Converter), filtra por categoria e ajusta o número
+  de colunas à largura da janela. Um alfinete marca as que estão na coluna da direita; Enter
+  abre a primeira encontrada e as setas andam entre os cartões.
+- A paleta de comandos (Ctrl+K) aparece sobre a janela escurecida, com os comandos em grupos
+  (Ferramentas, Exibir, Navegar, Arquivos recentes, Ações), o atalho de cada um e Tab para
+  ficar só num grupo. Ela também leva aos documentos abertos e aos arquivos recentes.
+- Organizar páginas mostra a grade no lugar do documento, com uma barra para girar, duplicar,
+  inserir em branco e apagar, e um controle do tamanho das miniaturas. As páginas selecionadas
+  levam um ✓, as giradas e as em branco um selo, e uma barra mostra onde a página arrastada
+  vai entrar. O painel lista cada alteração pendente, que pode ser desfeita sozinha pelo "×";
+  "Aplicar N alterações" grava tudo num passo só. Com o foco na grade, Ctrl+[ e Ctrl+] giram.
 
 ### Anotações e redação
 

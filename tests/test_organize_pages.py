@@ -172,3 +172,89 @@ def test_window_ctrl_z_undoes_grid_edits_first(make_pdf, tmp_path):
         assert not window._undo_action.isEnabled()
     finally:
         window.close()
+
+
+def test_each_pending_change_is_listed_and_can_be_undone_alone(organizer):
+    page = organizer
+    _select(page, 0)
+    page.rotate_selected(90)
+    _select(page, 1)
+    page.delete_selected()
+    page.insert_blank()  # sem seleção: no fim
+    assert page.changes() == ["Girou a página 1 à direita", "Apagou a página 2", "Inseriu uma página em branco"]
+    assert page.changes_title.text() == "ALTERAÇÕES PENDENTES · 3"
+    assert page.apply_button.text() == "Aplicar 3 alterações"
+
+    page.remove_change(1)  # o "×" do meio: a página 2 volta, o resto fica
+    assert page.layout_items() == [(0, 90), (1, 0), (2, 0), (None, 0)]
+    assert page.changes() == ["Girou a página 1 à direita", "Inseriu uma página em branco"]
+
+
+def test_dragging_records_a_move_that_undo_and_redo_follow(organizer):
+    page = organizer
+    page.grid.model().moveRow(QModelIndex(), 2, QModelIndex(), 0)
+    assert page.changes() == ["Moveu a página 3"]
+    page.undo_edit()
+    assert page.layout_items() == [(0, 0), (1, 0), (2, 0)]
+    page.redo_edit()
+    assert page.layout_items() == [(2, 0), (0, 0), (1, 0)]
+
+
+def test_the_drop_bar_and_the_drag_image(organizer):
+    page = organizer
+    page.grid.resize(800, 600)
+    rect = page.grid.visualRect(page.grid.model().index(1, 0))
+    page.grid._update_drop_bar(rect.center() - rect.center().__class__(10, 0))  # metade esquerda: antes
+    assert page.grid.drop_bar().left() == rect.left() - 1 and page.grid.drop_bar().width() == 3
+    _select(page, 0, 2)
+    image = page.grid.drag_pixmap()
+    assert not image.isNull() and image.width() > page.grid.tile_width // 2
+
+    page.size_slider.setValue(180)
+    assert page.grid.gridSize().width() == 180 + 34
+
+
+def test_the_grid_takes_the_place_of_the_viewer_and_applies_one_version(make_pdf, tmp_path, monkeypatch):
+    from PySide6.QtCore import QSettings, Qt
+    from PySide6.QtTest import QTest
+
+    from ui.main_window import MainWindow
+
+    _app()
+    window = MainWindow(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    try:
+        doc = window.open_document(str(make_pdf("doc.pdf", [(100, 300), (200, 300), (300, 300)])))
+        page = window.open_tool(window._row_of["OrganizePage"])
+        assert doc.center_widget() is page.center_widget and not doc.viewer.isVisibleTo(doc)
+        page.render_all()
+
+        window.resize(1440, 900)
+        window.show()
+        window.activateWindow()
+        QTest.qWaitForWindowActive(window)
+        page.grid.setFocus()
+        _select(page, 0)
+        QTest.keyClick(page.grid, Qt.Key.Key_BracketRight, Qt.KeyboardModifier.ControlModifier)  # Ctrl+]
+        assert page.layout_items()[0] == (0, 90)
+        commands = {action.objectName(): action for _label, action in window.commands()}
+        assert commands["organize.rotate_left"].shortcut().toString() == "Ctrl+["
+        assert commands["organize.duplicate"].shortcut().isEmpty()  # Ctrl+D é de Propriedades
+
+        page.grid.model().moveRow(QModelIndex(), 2, QModelIndex(), 0)  # arrastar
+        page.duplicate_selected()
+        _select(page, 3)
+        page.delete_selected()
+        page.insert_blank()
+        steps = len(window.session._versions)
+        page.apply_button.click()
+        assert wait_for_tasks()
+        assert len(window.session._versions) == steps + 1  # tudo numa versão só
+        assert window._undo_action.text() == "Desfazer Organizar páginas"
+
+        doc.close_tool()
+        assert doc.center_widget() is None and doc.viewer.isVisibleTo(doc)
+    finally:
+        from PySide6.QtWidgets import QMessageBox
+
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Discard)
+        window.close()

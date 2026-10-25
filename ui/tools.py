@@ -101,6 +101,41 @@ CATEGORIES = [
     ("Automatizar", ["BatchPage"]),
 ]  # fmt: skip
 
+# Outras palavras que levam à ferramenta na busca da aba Ferramentas (em português e em inglês,
+# sem acento: a busca ignora acentos e maiúsculas).
+SYNONYMS = {
+    "CreatePage": "novo em branco new blank",
+    "MergePage": "juntar unir combinar join combine",
+    "SplitPage": "separar quebrar dividir split separate",
+    "PagesPage": "girar rotacionar reordenar excluir rotate reorder delete",
+    "OrganizePage": "reordenar girar duplicar excluir extrair rotate reorder duplicate extract",
+    "CompressPage": "reduzir diminuir tamanho otimizar shrink reduce size optimize",
+    "ConvertPage": "word docx excel xlsx powerpoint pptx imagem jpg png html markdown texto image",
+    "WatermarkPage": "carimbo rascunho confidencial stamp draft",
+    "ProtectPage": "senha criptografar bloquear desbloquear password encrypt lock unlock",
+    "MetadataPage": "propriedades titulo autor xmp properties title author",
+    "PageNumbersPage": "numerar paginas bates rodape numbers footer",
+    "PDFAPage": "arquivamento pdfa archive",
+    "ExtractTextPage": "copiar texto txt copy text",
+    "ExtractImagesPage": "fotos imagens salvar photos images",
+    "CropPage": "margens recortar redimensionar margins trim resize",
+    "EditPage": "texto imagem link editar edit text image",
+    "BookmarksPage": "sumario indice outline toc",
+    "LayersPage": "ocg camadas layers",
+    "AttachmentsPage": "arquivos embutidos anexar attachments embedded",
+    "FormFieldsPage": "formulario campos form fields acroform",
+    "AnnotationsPage": "comentar realcar sublinhar nota caneta comment highlight note pen markup",
+    "MeasurePage": "distancia regua medir distance ruler measure",
+    "OCRPage": "reconhecer texto escaneado pesquisavel recognize scanned searchable tesseract",
+    "ScanCleanupPage": "escaneado paginas em branco endireitar scanned blank deskew",
+    "RedactionPage": "cpf cnpj tarjar ocultar censurar lgpd apagar sanitizar redact hide censor sanitize",
+    "FillSignPage": "assinar assinatura rubrica iniciais preencher sign signature initials fill",
+    "SignaturePage": "assinar assinatura certificado icp digital verificar sign signature certificate verify",
+    "AccessibilityPage": "pdfua leitor de tela acessivel screen reader accessible",
+    "ComparePage": "diferencas versoes diff differences versions",
+    "BatchPage": "lote pasta automatizar varios batch folder automate many",
+}
+
 # A coluna de ícones à direita de cada documento: as ferramentas mais usadas, um clique.
 QUICK_TOOLS = [
     "EditPage", "AnnotationsPage", "OrganizePage", "MergePage", "CompressPage", "ConvertPage",

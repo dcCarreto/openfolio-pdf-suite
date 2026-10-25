@@ -124,6 +124,7 @@ class MainWindow(QMainWindow):
         self.home = HomePage(self._preferences)
         self.home.open_requested.connect(self._on_home_open)
         self.home.tool_requested.connect(self.open_tool)
+        self.home.recent_changed.connect(lambda: self._recent_menu.setEnabled(bool(self._preferences.recent_files())))
         self.tools_center = ToolsCenter()
         self.tools_center.tool_requested.connect(self.open_tool)
         self.tabs.addTab(self.home, build_home_icon(), "")
@@ -537,6 +538,25 @@ class MainWindow(QMainWindow):
             self._commands.append((tr("Marcação"), action))
         for doc in self.documents():
             doc.viewer.scroll_area.addActions(list(self._markup_actions.values()))
+
+        # Organizar páginas: girar e duplicar pelo teclado, com o foco na grade. Ctrl+D já é
+        # Propriedades do documento: Duplicar fica sem tecla de fábrica (dá para escolher uma).
+        for action in getattr(self, "_organize_actions", {}).values():
+            action.deleteLater()
+        self._organize_actions: dict[str, QAction] = {}
+        for key, label, keys, run in (
+            ("rotate_left", tr("Girar à esquerda"), "Ctrl+[", lambda page: page.rotate_selected(270)),
+            ("rotate_right", tr("Girar à direita"), "Ctrl+]", lambda page: page.rotate_selected(90)),
+            ("duplicate", tr("Duplicar"), "", lambda page: page.duplicate_selected()),
+        ):
+            action = QAction(label, self)
+            action.setObjectName(f"organize.{key}")
+            if keys:
+                action.setShortcut(keys)
+            action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            action.triggered.connect(lambda _checked=False, r=run: self._run_on_organizer(r))
+            self._organize_actions[key] = action
+            self._commands.append((tr("Organizar páginas"), action))
         self._apply_shortcuts()
         self._update_document_actions()
         self._language_switcher.setEnabled(not self._any_busy())
@@ -562,15 +582,50 @@ class MainWindow(QMainWindow):
         for doc in self.documents():
             doc.markup_bar.set_keys(keys)
 
+    def _organizer(self):
+        """A Organizar páginas aberta no documento atual, ou None."""
+        doc = self.document
+        if doc is None or doc.current_tool() != ROW_OF["OrganizePage"]:
+            return None
+        return doc.page(ROW_OF["OrganizePage"])
+
+    def _run_on_organizer(self, run):
+        page = self._organizer()
+        if page is not None:
+            run(page)
+
     def _choose_markup_tool(self, tool: str):
         doc = self.document
         if doc is not None and doc.annotation_state.is_page_active():
             doc.annotation_state.set_tool(tool)
 
     def show_command_palette(self):
-        palette = CommandPalette([c for c in self.commands() if c[1] is not self._palette_action], self)
+        commands = [c for c in self.commands() if c[1] is not self._palette_action]
+        palette = CommandPalette(commands, self, extras=self._palette_extras())
         if palette.exec() and palette.chosen is not None:
             palette.chosen.trigger()
+
+    def _palette_extras(self) -> list[tuple[str, QAction]]:
+        """O que a paleta mostra além dos comandos: os documentos abertos (Navegar) e os
+        arquivos recentes. As ações vivem enquanto a janela não monta outra paleta."""
+        for action in getattr(self, "_palette_extra_actions", []):
+            action.deleteLater()
+        extras = []
+        for number, doc in enumerate(self.documents()):
+            if doc.is_empty():
+                continue
+            action = QAction(build_file_icon(), doc.title(), self)
+            action.setObjectName(f"navigate.document.{number}")
+            action.triggered.connect(lambda _checked=False, d=doc: self.tabs.setCurrentWidget(d))
+            extras.append((f"{tr('Documentos abertos')} › {doc.title()}", action))
+        for number, path in enumerate(self._preferences.recent_files()):
+            action = QAction(build_file_icon(), Path(path).name, self)
+            action.setObjectName(f"recent.{number}")
+            action.setStatusTip(str(Path(path).parent))
+            action.triggered.connect(lambda _checked=False, p=path: self.open_document(p))
+            extras.append((f"{tr('Recentes')} › {Path(path).name}", action))
+        self._palette_extra_actions = [action for _label, action in extras]
+        return extras
 
     def edit_shortcuts(self):
         dialog = ShortcutsDialog(self.commands(), self._default_shortcuts, self)
@@ -737,6 +792,11 @@ class MainWindow(QMainWindow):
         marking = has_document and doc is not None and doc.annotation_state.is_page_active()
         for action in getattr(self, "_markup_actions", {}).values():
             action.setEnabled(marking)
+        organizer = self._organizer() if has_document else None
+        for action in getattr(self, "_organize_actions", {}).values():
+            action.setEnabled(organizer is not None)
+            if organizer is not None:
+                organizer.center_widget.addAction(action)  # só valem com o foco na grade
         for each in self.documents():  # os botões da barra de cada documento seguem o menu
             each_session = each.session
             each_busy = each.tasks.is_busy()

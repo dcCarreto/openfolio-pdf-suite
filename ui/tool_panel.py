@@ -209,7 +209,7 @@ class ToolPanel(QFrame):
         if not any(child.isVisibleTo(page) and child not in self._actions for child in page.findChildren(QWidget)):
             options_label.hide()  # sem opções (Extrair texto): a seção não aparece vazia
             page.hide()
-        self._sections.addStretch()
+        self._sections.addStretch(1)  # a sobra fica embaixo, e não entre as seções
         scroll = QScrollArea()
         scroll.setObjectName("ToolScroll")
         scroll.setWidgetResizable(True)

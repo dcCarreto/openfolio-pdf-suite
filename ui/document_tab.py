@@ -102,6 +102,7 @@ class DocumentTab(QWidget):
         self._drawer = False  # janela estreita: o painel flutua sobre o documento
         self._drawer_hidden = False  # gaveta fechada com Esc ou clique na página (a ferramenta segue aberta)
         self._busy_panel: ToolPanel | None = None
+        self._center_widgets: list[QWidget] = []  # o que uma ferramenta põe no lugar do visualizador
 
         self._build_ui()
         self.task_status = TaskStatus(self.tasks)  # vai para a barra de status da janela
@@ -332,6 +333,7 @@ class DocumentTab(QWidget):
                 self.splitter.setSizes([sizes[0], max(VIEWER_MIN_WIDTH, total - sizes[0] - wanted), wanted])
         self._update_quick_buttons()
         self._activate_marking(row)
+        self._update_center()
         self._apply_width_rules()
         self.tool_changed.emit()
         return page
@@ -342,6 +344,7 @@ class DocumentTab(QWidget):
         self.stack.hide()
         self._update_quick_buttons()
         self._activate_marking(-1)
+        self._update_center()
         self._apply_width_rules()
         self.tool_changed.emit()
 
@@ -473,6 +476,30 @@ class DocumentTab(QWidget):
             bar.hide()
         self.viewer.set_top_inset(TOP_INSET if show else 0)
 
+    def _update_center(self):
+        """Uma ferramenta com `center_widget` (a grade de Organizar páginas) ocupa o lugar do
+        visualizador e da barra dele enquanto está aberta."""
+        page = self._pages.get(self._tool) if self._tool >= 0 else None
+        widget = getattr(page, "center_widget", None)
+        alive = {getattr(each, "center_widget", None) for each in self._pages.values()}
+        for other in list(self._center_widgets):
+            if other not in alive:  # a ferramenta foi refeita (troca de idioma)
+                self._center_widgets.remove(other)
+                other.deleteLater()
+            elif other is not widget:
+                other.hide()
+        if widget is not None:
+            if widget not in self._center_widgets:
+                self.center.layout().addWidget(widget, 1)
+                self._center_widgets.append(widget)
+            widget.show()
+        self.viewer.toolbar.setVisible(widget is None)
+        self.viewer.setVisible(widget is None)
+
+    def center_widget(self) -> QWidget | None:
+        """O que está no lugar do visualizador agora, ou None."""
+        return next((w for w in self._center_widgets if w.isVisibleTo(self)), None)
+
     def _update_quick_buttons(self):
         for row, button in self._quick_buttons.items():
             button.setChecked(row == self._tool)
@@ -522,6 +549,7 @@ class DocumentTab(QWidget):
             self.page(row)
             restore_state(self.panel(row).body, state)
         self.area_pick_state.set_active_page(self._pages.get(self._tool))
+        self._update_center()
         self.viewer.retranslate()
         self.markup_bar.retranslate()
         self.task_status.retranslate()

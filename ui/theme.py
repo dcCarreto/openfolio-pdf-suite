@@ -88,6 +88,15 @@ def tokens(theme: str | None = None) -> dict:
     return TOKENS[theme or _current]
 
 
+def color(key: str) -> QColor:
+    """A cor de um token do tema aplicado, também as escritas como "rgba(r, g, b, a)"."""
+    value = TOKENS[_current][key]
+    if value.startswith("rgba("):
+        red, green, blue, alpha = (part.strip() for part in value[5:-1].split(","))
+        return QColor(int(red), int(green), int(blue), round(float(alpha) * 255))
+    return QColor(value)
+
+
 def floating_shadow(parent: QWidget) -> QGraphicsDropShadowEffect:
     """Elevação das superfícies flutuantes (gaveta, barra de marcação, paleta)."""
     shadow = QGraphicsDropShadowEffect(parent)
@@ -160,7 +169,7 @@ QWidget {{
     color: {t["text"]};
 }}
 
-QMainWindow, #homePage, #toolsCenter, #toolsCenterContent, #documentTab, #CenterColumn {{
+QMainWindow, #homePage, #homeContent, #toolsCenter, #toolsCenterContent, #documentTab, #CenterColumn {{
     background-color: {t["bg"]};
 }}
 
@@ -766,20 +775,156 @@ QListWidget#thumbnailList {{
     border-radius: 0;
 }}
 
-QListWidget#recentList {{
+/* -- Início e Ferramentas (ui/home_page.py, ui/tools_center.py) ------------------- */
+
+QLabel#HomeTitle {{
+    font-size: 28px;
+    font-weight: 600;
+}}
+
+QFrame#RecentBox {{
     background-color: {t["panel"]};
     border: 1px solid {t["border"]};
     border-radius: 14px;
-    padding: 4px;
 }}
 
-QListWidget#recentList::item {{
-    padding: 9px 12px;
+QListWidget#RecentList, QListWidget#PaletteList {{
+    background: transparent;
+    border: none;
+    outline: none;
+}}
+
+QToolButton#ShortcutCard {{
+    border-radius: 14px;
+}}
+
+QLabel#ShortcutIconTile {{
+    background-color: {t["accent_fill"]};
     border-radius: 8px;
 }}
 
-QListWidget#recentList::item:hover {{
+QLabel#ToolIconTile {{
     background-color: {t["raised"]};
+    border-radius: 8px;
+}}
+
+QLabel#ToolCardName {{
+    font-size: 13px;
+    font-weight: 600;
+}}
+
+QLabel#ToolGroupTitle {{
+    font-size: 13px;
+    font-weight: 600;
+    color: {t["text2"]};
+}}
+
+QLineEdit#ToolSearch {{
+    min-height: 34px;
+}}
+
+QToolButton[ofRole="chip"] {{
+    min-height: 26px;
+    border-radius: 14px;
+    padding: 0 12px;
+    border: 1px solid {t["border"]};
+    background-color: {t["panel"]};
+    color: {t["text2"]};
+}}
+
+QToolButton[ofRole="chip"]:hover {{
+    background-color: {t["raised"]};
+    color: {t["text"]};
+}}
+
+QToolButton[ofRole="chip"]:checked {{
+    background-color: {t["accent_fill"]};
+    border-color: {t["accent_line"]};
+    color: {t["accent_strong"]};
+    font-weight: 600;
+}}
+
+QToolButton[ofRole="chip"]:focus {{
+    border: 2px solid {t["accent"]};
+}}
+
+/* -- Organizar páginas (ui/pages/organize_page.py) ------------------------------- */
+
+#OrganizerToolbar {{
+    background-color: {t["bg"]};
+    border-bottom: 1px solid {t["border"]};
+}}
+
+QListWidget#OrganizerView {{
+    background-color: {t["canvas"]};
+    border: none;
+    outline: none;
+}}
+
+QLabel#SelectionBadge {{
+    background-color: {t["accent_fill"]};
+    color: {t["accent_strong"]};
+    border-radius: 12px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}}
+
+QToolButton[ofRole="toolbar"] {{
+    min-height: 30px;
+    padding: 0 8px;
+    border-radius: 8px;
+    color: {t["text"]};
+}}
+
+QToolButton[ofRole="toolbar"]:disabled {{
+    color: {t["text3"]};
+}}
+
+QListWidget#ChangesList {{
+    background: transparent;
+    border: none;
+}}
+
+#ChangeRow {{
+    background-color: {t["raised"]};
+    border-radius: 8px;
+}}
+
+/* -- paleta de comandos (ui/shortcuts.py) ---------------------------------------- */
+
+QFrame#CommandPalette {{
+    background-color: {t["panel"]};
+    border: 1px solid {t["border_strong"]};
+    border-radius: 14px;
+}}
+
+#PaletteField {{
+    border-bottom: 1px solid {t["border"]};
+}}
+
+QLineEdit#PaletteSearch {{
+    font-size: 15px;
+    border: none;
+    background: transparent;
+}}
+
+QLineEdit#PaletteSearch:focus {{
+    border: none;
+}}
+
+QLabel#PaletteCategory {{
+    background-color: {t["accent_fill"]};
+    border: 1px solid {t["accent_line"]};
+    border-radius: 10px;
+    color: {t["accent_strong"]};
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 8px;
+}}
+
+#PaletteFooter {{
+    border-top: 1px solid {t["border"]};
 }}
 
 QListWidget#sidebar {{
