@@ -276,3 +276,20 @@ def test_switching_language_translates_the_bar(window, tmp_path):
     finally:
         i18n.set_language(i18n.PT_BR)
     assert bar.save_button.text() == "Gravar"
+
+
+def test_short_of_room_the_bar_tightens_before_going_compact(window, tmp_path):
+    doc, bar, state = _annotations(window, tmp_path)
+    state.add_pending(AnnotationSpec(page_index=0, kind="note", position=(50, 50), text="a"))
+    state.set_tool("highlight")
+    _show(window, 1400, 900)  # sem espaço para a inteira, mas maior que 1180 px
+
+    room = doc.viewer.scroll_area.viewport().width()
+    assert bar.full_width() > room - 4 >= bar.tight_width()
+    assert bar.is_tight() and not bar.is_compact()
+    assert not bar.pending_text.isVisibleTo(bar) and bar.pending_count.isVisibleTo(bar)  # fica o número
+    assert not bar._kbd["highlight"].isVisibleTo(bar) and bar.tool_buttons["highlight"].text()  # o nome fica
+    assert bar.geometry().right() <= room
+
+    _show(window, 1920, 1080)
+    assert not bar.is_tight() and bar.pending_text.isVisibleTo(bar)

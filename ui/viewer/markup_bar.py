@@ -136,6 +136,9 @@ class MarkupBar(QFrame):
         self.setFixedHeight(48)
         self._state = state
         self._compact: bool | None = None  # None até o primeiro set_compact
+        # Apertada: sem a palavra "pendentes" e sem o selo da tecla da ferramenta ativa, antes
+        # de ficar compacta (só ícones).
+        self._tight = False
         self._right_inset = 0
         self._keys = dict(DEFAULT_KEYS)
         self._faded = False
@@ -320,16 +323,18 @@ class MarkupBar(QFrame):
             button.setProperty("active", wide)
             button.style().unpolish(button)
             button.style().polish(button)
-            button.setText(tr(SHORT_LABELS.get(tool, TOOL_LABELS[tool])) if wide else "")
+            button.setText("")  # o texto entra depois do estilo: trocar o texto refaz a medida do botão
             button.setToolButtonStyle(
                 Qt.ToolButtonStyle.ToolButtonTextBesideIcon if wide else Qt.ToolButtonStyle.ToolButtonIconOnly
             )
-            kbd.setVisible(wide and bool(key))
+            show_key = wide and bool(key) and not self._tight
+            kbd.setVisible(show_key)
             kbd.adjustSize()
             # O selo da tecla fica à direita do nome, no espaço reservado pelo padding.
             # Com seletor: sem ele, o padding valeria também para o selo, que é filho do botão.
             padding = f"QToolButton#MarkupTool {{ padding-right: {kbd.width() + 14}px; }}"
-            button.setStyleSheet(padding if wide and key else "")
+            button.setStyleSheet(padding if show_key else "")
+            button.setText(tr(SHORT_LABELS.get(tool, TOOL_LABELS[tool])) if wide else "")
             if wide:
                 end = button.sizeHint().width()
                 kbd.move(end - kbd.width() - 8, (TOOL_SIZE - kbd.height()) // 2)
@@ -392,7 +397,7 @@ class MarkupBar(QFrame):
         text = tr("{count} pendentes").format(count=count)
         self.pending_count.setText(str(count))
         self.pending_text.setText(tr("pendentes"))
-        self.pending_text.setVisible(not self._compact)
+        self.pending_text.setVisible(not self._compact and not self._tight)
         self.pending_badge.setToolTip(text)
         self.pending_badge.setAccessibleName(text)
         self.pending_badge.setVisible(count > 0)
@@ -433,13 +438,28 @@ class MarkupBar(QFrame):
     def is_compact(self) -> bool:
         return bool(self._compact)
 
+    def set_tight(self, tight: bool) -> None:
+        if tight != self._tight:
+            self._tight = tight
+            self._update_tool()
+            self._update_pending()
+
+    def is_tight(self) -> bool:
+        return self._tight
+
+    def tight_width(self) -> int:
+        """A largura da barra apertada: a inteira sem "pendentes" e sem o selo da tecla."""
+        key = self._kbd[self._state.active_tool() or "select"]
+        return self.full_width() - (self.pending_text.sizeHint().width() + 4) - (key.sizeHint().width() + 7)
+
     def full_width(self) -> int:
         """A largura da barra inteira (fora do modo compacto) no pior caso: o nome mais longo
         na ferramenta ativa e o selo de pendentes à mostra. Quem a posiciona decide por ela se
         a barra cabe, e a barra não muda de modo ao trocar de ferramenta nem com a primeira
         pendente."""
         if self._full_width is None:
-            compact = self._compact
+            compact, tight = self._compact, self._tight
+            self.set_tight(False)
             if compact:
                 self.set_compact(False)
             tool = self._state.active_tool() or "select"
@@ -456,6 +476,7 @@ class MarkupBar(QFrame):
             width = self.sizeHint().width() + growing + longer + badge
             if compact:
                 self.set_compact(True)
+            self.set_tight(tight)
             self._full_width = width
         return self._full_width
 

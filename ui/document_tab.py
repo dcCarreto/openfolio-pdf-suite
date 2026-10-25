@@ -565,7 +565,13 @@ class DocumentTab(QWidget):
         if show:
             inset = DRAWER_WIDTH if self.is_drawer_open() else 0
             available = self.viewer.scroll_area.viewport().width() - inset - 4
-            bar.set_compact(self.width() < NARROW_WIDTH or bar.full_width() > available)
+            # Inteira se couber; senão apertada; e só ícones abaixo de 1180 px ou sem espaço nem
+            # para a apertada (a folga é pouca em 1440 px e a fonte muda um pouco de um sistema
+            # para outro).
+            full = bar.full_width()
+            compact = self.width() < NARROW_WIDTH or bar.tight_width() > available
+            bar.set_compact(compact)
+            bar.set_tight(not compact and full > available)
             bar.set_right_inset(inset)
             bar.appear()
         else:
