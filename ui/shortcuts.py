@@ -180,7 +180,7 @@ class CommandPalette(QDialog):
         self.search = QLineEdit()
         self.search.setObjectName("PaletteSearch")
         self.search.setPlaceholderText(tr("Buscar ferramentas e comandos"))
-        self.search.addAction(build_search_icon(), QLineEdit.ActionPosition.LeadingPosition)
+        self.search.addAction(build_search_icon(), QLineEdit.ActionPosition.LeadingPosition).setText(tr("Buscar"))
         self.search.installEventFilter(self)
         self.category_label = QLabel()
         self.category_label.setObjectName("PaletteCategory")

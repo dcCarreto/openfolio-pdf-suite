@@ -59,14 +59,14 @@ def format_width(width: float) -> str:
 
 
 class ColorSwatch(QToolButton):
-    """Uma cor (círculo de 18 px numa área de 24): a escolhida ganha anel e "✓", para não
-    depender só da cor. Sem cor, é o "+" que abre o seletor."""
+    """Uma cor (círculo de 16 px numa área de clique de 28): a escolhida ganha anel e "✓",
+    para não depender só da cor. Sem cor, é o "+" que abre o seletor."""
 
     def __init__(self, color: str | None, parent=None):
         super().__init__(parent)
         self.color = color
         self.setCheckable(True)
-        self.setFixedSize(24, 24)
+        self.setFixedSize(28, 28)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def paintEvent(self, event):
@@ -215,7 +215,7 @@ class MarkupBar(QFrame):
         self.width_up.setIcon(build_plus_icon())
         self.width_up.clicked.connect(lambda: self._step_width(WIDTH_STEP))
         for widget in (self.width_down, self.width_up):
-            widget.setFixedSize(26, 26)
+            widget.setFixedSize(28, 28)
             widget.setIconSize(QSize(18, 18))
             widget.setStyleSheet("QToolButton { padding: 0; }")  # o do segmentado espremia o ícone
         width_layout.addWidget(self.width_down)

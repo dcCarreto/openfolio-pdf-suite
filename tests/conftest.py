@@ -110,6 +110,13 @@ def make_text_pdf(tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _no_animations(monkeypatch):
+    """Sem animações (o estado final na hora, como com Exibir > Animações da interface
+    desligada); os testes das animações as ligam de volta."""
+    monkeypatch.setattr("ui.motion.enabled", lambda: False)
+
+
+@pytest.fixture(autouse=True)
 def _free_windows():
     """Apaga as janelas que o teste deixou: cada troca de tema reestiliza todos os widgets
     vivos, e as sobras de centenas de testes deixavam os últimos lentos a ponto de parecerem

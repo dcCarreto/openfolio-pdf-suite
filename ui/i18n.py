@@ -766,6 +766,28 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Comentários · {count}": "Comments · {count}",
     "Todas as páginas": "All pages",
     "Mostrar os comentários de": "Show the comments of",
+    # Tarefas, regiões (F6) e aviso de atualização
+    "Tarefas": "Tasks",
+    "Miniaturas": "Thumbnails",
+    "Buscar": "Search",
+    "1 tarefa": "1 task",
+    "{count} tarefas": "{count} tasks",
+    "Limpar concluídas": "Clear finished",
+    "Nenhuma tarefa.": "No tasks.",
+    "Em andamento": "Running",
+    "Concluída": "Finished",
+    "Falhou": "Failed",
+    "Cancelada": "Cancelled",
+    "Próxima região": "Next region",
+    "Região anterior": "Previous region",
+    "Novidades": "What's new",
+    "Edição de {data}.": "Edition of {data}.",
+    "Você usa a de {data}.": "You're on {data}.",
+    "Ver notas completas": "Full release notes",
+    "Avisar quando houver uma nova edição": "Notify me about new editions",
+    "Nada é baixado nem instalado sem a sua confirmação. Seus documentos abertos são preservados.": (
+        "Nothing is downloaded or installed without your confirmation. Your open documents are kept."
+    ),
     # Início, Ferramentas, paleta e Organizar páginas
     "Olá! Abra um PDF para começar.": "Hi! Open a PDF to get started.",
     "Tudo acontece neste computador. Nenhum arquivo sai daqui.": (
@@ -1930,7 +1952,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "O que mudou em cada atualização": "What changed in each update",
     # Atualizações sem número de versão, com consentimento
     "O OpenFolio PDF Suite já está atualizado.": "OpenFolio PDF Suite is up to date.",
-    "Há uma atualização do OpenFolio PDF Suite. O que mudou:": "An update to OpenFolio PDF Suite is available. What changed:",
     "(A atualização não traz descrição.)": "(The update has no description.)",
     "Se você aceitar, o app baixa a atualização, confere o arquivo e fecha para instalá-la; ao terminar, ele abre de novo. Seus documentos não são tocados.": (
         "If you accept, the app downloads the update, checks the file and closes to install it; when it is done, "

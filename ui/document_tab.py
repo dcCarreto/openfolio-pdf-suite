@@ -17,9 +17,10 @@ import importlib
 from pathlib import Path
 from typing import cast
 
-from PySide6.QtCore import QEvent, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QPoint, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QLabel,
     QSplitter,
     QStackedWidget,
     QToolButton,
@@ -27,7 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui import sidebar_icons, theme
+from ui import motion, sidebar_icons, theme
 from ui.annotation_state import AnnotationState
 from ui.area_pick_state import AreaPickState
 from ui.document_session import DocumentSession
@@ -101,6 +102,8 @@ class DocumentTab(QWidget):
         self._side_auto_hidden = False  # as miniaturas se recolheram sozinhas (voltam depois)
         self._drawer = False  # janela estreita: o painel flutua sobre o documento
         self._drawer_hidden = False  # gaveta fechada com Esc ou clique na página (a ferramenta segue aberta)
+        self._closing = False  # o painel está encolhendo até sumir
+        self._tool_keys: dict[int, str] = {}  # o atalho de cada ferramenta, para as dicas do trilho
         self._busy_panel: ToolPanel | None = None
         self._center_widgets: list[QWidget] = []  # o que uma ferramenta põe no lugar do visualizador
 
@@ -161,9 +164,38 @@ class DocumentTab(QWidget):
         side_panel = self.viewer.side_panel
         side_panel.use_external_rail()
         side_panel.tabs_changed.connect(self._update_left_rail)
-        side_panel.setMinimumWidth(SIDE_MIN_WIDTH)
+        side_panel.setMinimumWidth(0)
         side_panel.setMaximumWidth(SIDE_MAX_WIDTH)
-        side_panel.resize(SIDE_WIDTH, side_panel.height())
+        # A lateral ganha um cabeçalho de 44 px (o que ela mostra e quantos são): ela e o
+        # cabeçalho ficam num contêiner, que aparece e some junto com ela.
+        self.side_title = QLabel()
+        self.side_title.setObjectName("SideTitle")
+        self.side_count = QLabel()
+        self.side_count.setObjectName("SideCount")
+        side_header = QWidget()
+        side_header.setObjectName("SideHeader")
+        side_header.setFixedHeight(44)
+        header_layout = QHBoxLayout(side_header)
+        header_layout.setContentsMargins(12, 0, 12, 0)
+        header_layout.addWidget(self.side_title)
+        header_layout.addStretch()
+        header_layout.addWidget(self.side_count)
+        self.side_container = QWidget()
+        self.side_container.setObjectName("SidePanel")
+        self.side_container.setMinimumWidth(SIDE_MIN_WIDTH)
+        self.side_container.setMaximumWidth(SIDE_MAX_WIDTH)
+        side_layout = QVBoxLayout(self.side_container)
+        side_layout.setContentsMargins(0, 0, 0, 0)
+        side_layout.setSpacing(0)
+        side_layout.addWidget(side_header)
+        side_layout.addWidget(side_panel, 1)
+        self.side_container.resize(SIDE_WIDTH, self.side_container.height())
+        self.side_container.setVisible(not side_panel.isHidden())
+        side_panel.visibility_changed.connect(self.side_container.setVisible)
+        side_panel.currentChanged.connect(self._update_side_header)
+        side_panel.tabs_changed.connect(self._update_side_header)
+        self.viewer.thumbnail_list.model().rowsInserted.connect(self._update_side_header)
+        self.viewer.thumbnail_list.model().modelReset.connect(self._update_side_header)
 
         self.left_rail = QWidget()
         self.left_rail.setObjectName("LeftRail")
@@ -214,7 +246,7 @@ class DocumentTab(QWidget):
         self.splitter.setObjectName("documentSplitter")
         self.splitter.setChildrenCollapsible(False)
         self.splitter.setHandleWidth(1)
-        self.splitter.addWidget(side_panel)
+        self.splitter.addWidget(self.side_container)
         self.splitter.addWidget(self.center)
         self.splitter.addWidget(self.tool_panel)
         self.splitter.setStretchFactor(0, 0)
@@ -246,6 +278,26 @@ class DocumentTab(QWidget):
             side_panel.setCurrentIndex(index)
             self.viewer.show_side_panel(True)
         self._update_left_rail()
+
+    def set_tool_shortcuts(self, keys: dict[int, str]) -> None:
+        """As dicas do trilho da direita: o nome da ferramenta e o atalho dela, se houver."""
+        self._tool_keys = keys
+        for row, button in self._quick_buttons.items():
+            name = tr(SECTIONS[row][1])
+            button.setToolTip(f"{name} ({keys[row]})" if keys.get(row) else name)
+            button.setAccessibleName(name)
+
+    def _update_side_header(self, *_args):
+        side_panel = self.viewer.side_panel
+        index = side_panel.currentIndex()
+        titles = [tr("Miniaturas"), tr("Marcadores"), tr("Anexos")]
+        counts = [
+            self.viewer.thumbnail_list.count(),
+            side_panel.outline_tree.topLevelItemCount(),
+            side_panel.attachments_list.count(),
+        ]
+        self.side_title.setText(titles[index] if 0 <= index < 3 else "")
+        self.side_count.setText(str(counts[index]) if 0 <= index < 3 and counts[index] else "")
 
     def _update_left_rail(self, *_args):
         side_panel = self.viewer.side_panel
@@ -317,18 +369,24 @@ class DocumentTab(QWidget):
         """Abre a ferramenta no painel da direita, com a faixa do nome dela no topo."""
         page = self.page(row)
         first_time = self._tool < 0
+        appearing = not self.stack.isVisibleTo(self) or self._closing
+        self._closing = False
         self._tool = row
         self.stack.setCurrentIndex(row)
         self._drawer_hidden = False
         self.stack.show()
         if self._drawer:
             self.stack.raise_()
+            if appearing:
+                self._slide_drawer_in()
         else:
             # Formulário mais largo que os 344 px (uma lista, uma tabela): o painel alarga até 480.
             body = self.panel(row).body.minimumSizeHint().width()
             wanted = max(PANEL_WIDTH, min(PANEL_MAX_WIDTH, body))
             sizes = self.splitter.sizes()
-            if (first_time and sizes[2] < PANEL_MIN_WIDTH) or sizes[2] < wanted:
+            if appearing:
+                self._resize_panel(0, max(wanted, sizes[2] if sizes[2] >= PANEL_MIN_WIDTH else PANEL_WIDTH))
+            elif (first_time and sizes[2] < PANEL_MIN_WIDTH) or sizes[2] < wanted:
                 total = sum(sizes)
                 self.splitter.setSizes([sizes[0], max(VIEWER_MIN_WIDTH, total - sizes[0] - wanted), wanted])
         self._update_quick_buttons()
@@ -341,12 +399,49 @@ class DocumentTab(QWidget):
     def close_tool(self) -> None:
         """"Fechar" da faixa: o painel some e o documento ganha a largura."""
         self._tool = -1
-        self.stack.hide()
+        if self._drawer or not self.stack.isVisibleTo(self):
+            self.stack.hide()
+        else:  # o painel encolhe até sumir
+            self._closing = True
+            self._resize_panel(self.splitter.sizes()[2], 0, self._finish_closing)
         self._update_quick_buttons()
         self._activate_marking(-1)
         self._update_center()
         self._apply_width_rules()
         self.tool_changed.emit()
+
+    def _finish_closing(self):
+        if self._closing:
+            self._closing = False
+            self.stack.hide()
+
+    def _resize_panel(self, start: int, end: int, on_done=None) -> None:
+        """O painel abre (de 0 à largura) ou fecha (até 0) no divisor, em 160 ms."""
+        self.stack.setMinimumWidth(0)  # o divisor não deixaria passar de 300 no meio do caminho
+
+        def step(width):
+            sizes = self.splitter.sizes()
+            total = sum(sizes)
+            self.splitter.setSizes([sizes[0], max(0, total - sizes[0] - int(width)), int(width)])
+
+        def done():
+            self.stack.setMinimumWidth(PANEL_MIN_WIDTH)
+            if on_done is not None:
+                on_done()
+
+        motion.animate_value(self.splitter, start, end, motion.MEDIUM, step, done)
+
+    def _slide_drawer_in(self) -> None:
+        """A gaveta entra deslizando 24 px da direita, com a opacidade de 0 a 1 (200 ms); ao
+        terminar, o efeito de opacidade sai e a sombra volta."""
+        self._place_drawer()
+        end = self.stack.pos()
+        motion.animate(self.stack, b"pos", end + QPoint(24, 0), end, motion.SLOW)
+        motion.fade_in(self.stack, motion.SLOW, then=self._drawer_shadow)
+
+    def _drawer_shadow(self) -> None:
+        if self._drawer:
+            self.stack.setGraphicsEffect(theme.floating_shadow(self.stack))
 
     # -- larguras ---------------------------------------------------------------------
 
@@ -444,6 +539,7 @@ class DocumentTab(QWidget):
             self._drawer_hidden = False  # a gaveta estava fechada: volta
             self.stack.show()
             self.stack.raise_()
+            self._slide_drawer_in()
             self._update_markup_bar()
         elif self._tool == row:
             self.close_tool()  # clicar na ferramenta aberta a fecha
@@ -555,9 +651,9 @@ class DocumentTab(QWidget):
         self.task_status.retranslate()
         for button, (_icon, tooltip) in zip(self._left_buttons, _LEFT_RAIL):
             button.setToolTip(tr(tooltip))
-        for row, button in self._quick_buttons.items():
-            button.setToolTip(tr(SECTIONS[row][1]))
+        self.set_tool_shortcuts(self._tool_keys)
         self.all_tools_button.setToolTip(tr("Todas as ferramentas"))
+        self._update_side_header()
         self.save_button.setToolTip(tr("Salvar (Ctrl+S)"))
         self.print_button.setToolTip(tr("Imprimir... (Ctrl+P)"))
         self._update_quick_buttons()

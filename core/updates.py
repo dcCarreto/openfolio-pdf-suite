@@ -41,6 +41,7 @@ class Update:
     installer_url: str | None = None  # instalador do Windows, quando a release traz um com hash
     installer_sha256: str | None = None
     installer_size: int = 0
+    version: str = ""  # a tag da release ("v2026.10.22"): a data da edição
 
 
 def newest_update(releases, current: str) -> Update | None:
@@ -62,7 +63,11 @@ def newest_update(releases, current: str) -> Update | None:
 def _update(release: dict) -> Update:
     url = str(release.get("html_url") or "")
     # O app só abre páginas do próprio repositório, venha o que vier na resposta.
-    update = Update(page=url if url.startswith(RELEASES_PAGE + "/") else RELEASES_PAGE, notes=str(release.get("body") or ""))
+    update = Update(
+        page=url if url.startswith(RELEASES_PAGE + "/") else RELEASES_PAGE,
+        notes=str(release.get("body") or ""),
+        version=str(release.get("tag_name") or ""),
+    )
     for asset in release.get("assets") or []:
         if not isinstance(asset, dict) or asset.get("name") != INSTALLER_NAME:
             continue

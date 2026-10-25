@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 class DocumentSidePanel(QTabWidget):
     page_requested = Signal(int)
     tabs_changed = Signal()  # uma aba apareceu ou sumiu (o documento tem marcadores, anexos?)
+    visibility_changed = Signal(bool)  # mostrado ou escondido (o cabeçalho da aba acompanha)
 
     def __init__(self, thumbnail_list, parent=None):
         super().__init__(parent)
@@ -49,6 +50,10 @@ class DocumentSidePanel(QTabWidget):
         self.addTab(self.attachments_list, "")
         self.retranslate()
         self._update_tabs()
+
+    def setVisible(self, visible: bool) -> None:
+        super().setVisible(visible)
+        self.visibility_changed.emit(visible)
 
     def retranslate(self):
         self.setTabText(0, tr("Páginas"))

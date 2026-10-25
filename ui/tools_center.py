@@ -153,7 +153,7 @@ class ToolsCenter(QScrollArea):
         self.search.setFixedSize(340, 36)
         self.search.setPlaceholderText(tr("Buscar ferramenta (ex.: assinar, cpf, word)"))
         self.search.setClearButtonEnabled(True)
-        self.search.addAction(build_search_icon(), QLineEdit.ActionPosition.LeadingPosition)
+        self.search.addAction(build_search_icon(), QLineEdit.ActionPosition.LeadingPosition).setText(tr("Buscar"))
         self.search.setAccessibleName(tr("Buscar ferramenta"))
         self.search.textChanged.connect(self._apply_filter)
         self.search.returnPressed.connect(self._open_first)

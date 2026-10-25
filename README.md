@@ -346,6 +346,10 @@ mostra um grupo por vez. Em **Editar > Atalhos de teclado** cada comando e cada 
 ganhar outro atalho (ou nenhum); atalhos repetidos são recusados e "Restaurar padrões" volta os
 de fábrica.
 
+**F6** leva o foco de uma região da janela à próxima (a faixa do topo, a barra do documento, o
+documento, o painel da ferramenta e a coluna da direita) e **Shift+F6** volta. **Exibir >
+Animações da interface** desliga as transições, para quem prefere tudo instantâneo.
+
 ### Linha de comando
 
 O comando `openfolio` faz as mesmas operações sem abrir a janela (útil em scripts e automação).
@@ -437,6 +441,7 @@ ui/              Interface gráfica (PySide6)
   area_pick_state.py   Marcação de áreas no visualizador para as ferramentas
   preferences.py       Arquivos recentes, última pasta, idioma, tema, atualização e atalhos
   shortcuts.py         Paleta de comandos (Ctrl+K) e tela de atalhos de teclado
+  icon_utils.py        Motor dos ícones desenhados (grade de 24, cor do tema e do estado)
   app_events.py        Arquivos vindos da linha de comando, do "Abrir com" e de arrastar
   errors.py            Mensagens de erro para o usuário, com detalhes técnicos à parte
   printing.py          Impressão do documento (render do pdfium enviado à impressora)
@@ -453,7 +458,7 @@ ui/              Interface gráfica (PySide6)
                        marcação (markup_bar.py)
   pages/               Uma classe de página por ferramenta (MergePage, CompressPage, ...)
   widgets/             Widgets reutilizáveis (FilePicker, FileListEditor, DocumentSourceBar,
-                       FlowLayout)
+                       FlowLayout, o painel de tarefas)
 
 tests/           Testes pytest (um arquivo por operação de core, + teste de fumaça da UI)
 

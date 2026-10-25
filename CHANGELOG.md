@@ -11,7 +11,19 @@ depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no avi
 - Cores novas nos temas escuro e claro, com contraste conferido para leitura, e a fonte Inter
   embutida no app (licença livre OFL), igual em todos os sistemas.
 - O foco do teclado aparece em botões, campos, caixas de marcar e abas.
-- Exibir > Animações da interface liga ou desliga as transições da interface.
+- Exibir > Animações da interface liga ou desliga as transições da interface: o painel da
+  ferramenta abre e fecha deslizando, a gaveta entra pela direita e o rodapé do painel troca
+  de estado com um esmaecimento. Desligadas, tudo muda na hora.
+- Ícones redesenhados, com o mesmo traço e as mesmas proporções em todo o app.
+- F6 leva o foco à próxima região da janela (faixa do topo, barra do documento, documento,
+  painel da ferramenta e coluna da direita) e Shift+F6 à anterior; dá para trocar as teclas
+  em Editar > Atalhos de teclado.
+- Todo botão tem área de clique de pelo menos 28 px, os botões só com ícone têm nome para
+  leitores de tela e as dicas da coluna da direita mostram o atalho da ferramenta, se houver.
+- Com uma operação em andamento, a barra de status mostra "N tarefas": o painel que ele abre
+  lista as operações de todos os documentos, com o andamento e o resultado de cada uma.
+- A coluna de miniaturas ganha um título com o número de páginas (ou de marcadores e anexos),
+  e a página atual aparece com um contorno e o número em destaque.
 - Menus, abas, a busca de ferramentas e comandos e o idioma ficam numa só faixa no topo,
   deixando mais altura para o documento. O idioma troca em "PT | EN".
 - As abas de documento se reordenam arrastando. Com alterações não salvas, um ponto aparece
@@ -46,6 +58,12 @@ depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no avi
   levam um ✓, as giradas e as em branco um selo, e uma barra mostra onde a página arrastada
   vai entrar. O painel lista cada alteração pendente, que pode ser desfeita sozinha pelo "×";
   "Aplicar N alterações" grava tudo num passo só. Com o foco na grade, Ctrl+[ e Ctrl+] giram.
+
+### Atualizações
+
+- O aviso de atualização mostra a data da edição nova e a da que você usa, as principais
+  novidades e "Ver notas completas"; nada é baixado antes de "Baixar e instalar". A opção de
+  avisar sobre novas edições fica no próprio aviso.
 
 ### Anotações e redação
 

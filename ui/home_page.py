@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -336,7 +336,7 @@ class HomePage(QScrollArea):
         self.recent_box.setVisible(has_recent)
         self._clear_button.setVisible(has_recent)
         self._empty_label.setVisible(not has_recent)
-        QTimer.singleShot(0, self.recent_list.viewport().update)
+        self.recent_list.viewport().update()
 
     def _clear_recent(self):
         self._preferences.clear_recent_files()

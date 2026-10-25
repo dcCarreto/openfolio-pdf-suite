@@ -127,7 +127,7 @@ class TabCloseButton(QAbstractButton):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(20, 20)
+        self.setFixedSize(28, 28)  # a área de clique; o desenho fica no meio
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
@@ -141,7 +141,7 @@ class TabCloseButton(QAbstractButton):
         self.update()
 
     def sizeHint(self) -> QSize:
-        return QSize(20, 20)
+        return QSize(28, 28)
 
     def enterEvent(self, event):
         self.update()
@@ -156,10 +156,11 @@ class TabCloseButton(QAbstractButton):
         hover = self.underMouse()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.translate(4, 4)  # o desenho de 20 px no centro dos 28
         if hover:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(t["pressed"]))
-            painter.drawRoundedRect(QRectF(self.rect()), 5, 5)
+            painter.drawRoundedRect(QRectF(0, 0, 20, 20), 5, 5)
         if self._dirty and not hover:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(t["text2"]))
@@ -217,7 +218,7 @@ class LangSwitch(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("Segmented")
-        self.setFixedHeight(30)
+        self.setFixedHeight(32)  # 2 + 28 + 2: cada opção com 28 px de altura
         layout = QHBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(2)

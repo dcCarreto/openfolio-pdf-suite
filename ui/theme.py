@@ -181,6 +181,84 @@ QMessageBox QLabel {{
     color: {t["text"]};
 }}
 
+/* -- lateral (miniaturas, marcadores, anexos) ------------------------------------ */
+
+#SidePanel {{
+    background-color: {t["panel"]};
+}}
+
+#SideHeader {{
+    border-bottom: 1px solid {t["border"]};
+}}
+
+QLabel#SideTitle {{
+    font-size: 12px;
+    font-weight: 600;
+    color: {t["text2"]};
+}}
+
+QLabel#SideCount {{
+    font-size: 12px;
+    color: {t["text3"]};
+}}
+
+/* -- aviso de atualização (ui/update_dialog.py) ---------------------------------- */
+
+QLabel#DialogTitle {{
+    font-size: 17px;
+    font-weight: 600;
+}}
+
+QFrame#UpdateNews {{
+    background-color: {t["raised"]};
+    border-radius: 8px;
+}}
+
+QTextBrowser#UpdateNotes {{
+    background: transparent;
+    border: none;
+}}
+
+QPushButton#BorderedGhost {{
+    border: 1px solid {t["border_strong"]};
+}}
+
+/* -- tarefas (ui/widgets/task_popover.py) ----------------------------------------- */
+
+QToolButton#TasksButton {{
+    background-color: {t["accent_fill"]};
+    color: {t["accent_strong"]};
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 0 8px;
+    min-height: 22px;
+}}
+
+QFrame#TaskPopover {{
+    background-color: {t["panel"]};
+    border: 1px solid {t["border_strong"]};
+    border-radius: 14px;
+}}
+
+QLabel#TaskPopoverTitle, QLabel#TaskName {{
+    font-size: 13px;
+    font-weight: 600;
+}}
+
+QFrame#TaskRow {{
+    border-radius: 8px;
+}}
+
+QFrame#TaskRow[running="true"] {{
+    background-color: {t["raised"]};
+}}
+
+QProgressBar#TaskProgress {{
+    min-height: 4px;
+    max-height: 4px;
+    border-radius: 2px;
+}}
+
 QLabel {{
     background: transparent;
 }}
@@ -681,7 +759,7 @@ QRadioButton::indicator:checked:focus {{
 }}
 
 #Segmented QToolButton {{
-    min-height: 26px;
+    min-height: 28px;
     border-radius: 6px;
     border: 0;
     background: transparent;
@@ -1047,7 +1125,7 @@ QPushButton#CommandLauncher:focus {{
 #Segmented QToolButton[text="PT"], #Segmented QToolButton[text="EN"] {{
     font-size: 11px;
     font-weight: 600;
-    min-height: 24px;
+    min-height: 28px;
     padding: 0 8px;
 }}
 

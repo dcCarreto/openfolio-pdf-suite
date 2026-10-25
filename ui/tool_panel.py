@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui import theme
+from ui import motion, theme
 from ui.i18n import tr
 from ui.top_bar import BusySpinner
 from ui.viewer.viewer_icons import build_close_icon
@@ -359,8 +359,14 @@ class ToolPanel(QFrame):
         for page in (ready, busy, result):
             self.footer.addWidget(page)
         self.footer.currentChanged.connect(self._fit_footer)
+        self.footer.currentChanged.connect(self._fade_footer)
         self._fit_footer()
         return self.footer
+
+    def _fade_footer(self, *_args):
+        """Troca de estado do rodapé: cross-fade de 160 ms (o efeito sai ao terminar)."""
+        if self.footer.isVisible():
+            motion.fade_in(self.footer, motion.MEDIUM)
 
     def _fit_footer(self, *_args):
         """O rodapé tem a altura do estado atual, não a do mais alto (o QStackedWidget usaria

@@ -57,6 +57,7 @@ from ui.update_dialog import UpdateDialog
 from ui.viewer import pdf_viewer as viewer_layouts
 from ui.viewer.markup_bar import DEFAULT_KEYS as MARKUP_KEYS
 from ui.viewer.markup_bar import TOOL_LABELS as MARKUP_LABELS
+from ui.widgets.task_popover import TaskLog, TasksButton
 from ui.viewer.viewer_icons import build_file_icon, build_home_icon, build_markup_icon, build_plus_icon
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,22 @@ def _installs_updates() -> bool:
     """O app instalado no Windows baixa e instala a atualização; no Linux, no macOS e rodando
     do código-fonte, a página da atualização abre no navegador."""
     return sys.platform == "win32" and bool(getattr(sys, "frozen", False))
+
+
+def _first_focusable(region: QWidget) -> QWidget | None:
+    """O primeiro widget da região que o Tab alcança (ou a própria região)."""
+
+    def takes_tab(widget: QWidget) -> bool:
+        return bool(widget.focusPolicy() & Qt.FocusPolicy.TabFocus) and widget.isVisible() and widget.isEnabled()
+
+    if takes_tab(region):
+        return region
+    widget = region.nextInFocusChain()
+    while widget is not None and widget is not region:
+        if region.isAncestorOf(widget) and takes_tab(widget):
+            return widget
+        widget = widget.nextInFocusChain()
+    return None
 
 
 def _update_folder() -> Path:
@@ -139,6 +156,10 @@ class MainWindow(QMainWindow):
         status_bar.setSizeGripEnabled(False)
         status_bar.setFixedHeight(28)
         status_bar.showMessage("OpenFolio PDF Suite")
+        # As tarefas de todos os documentos, no canto direito da barra de status.
+        self.task_log = TaskLog(self)
+        self.tasks_button = TasksButton(self.task_log)
+        status_bar.addPermanentWidget(self.tasks_button)
 
     def _build_top_bar(self) -> QWidget:
         """Logo, menus, abas, "+" (abrir), a busca de comandos e o idioma, numa faixa só."""
@@ -242,6 +263,7 @@ class MainWindow(QMainWindow):
             button.clicked.connect(lambda _checked=False, d=doc: self._remember_page_layout(d))
         doc.tasks.finished.connect(lambda outcome, d=doc: self._on_task_finished(d, outcome))
         doc.save_button.clicked.connect(self.save_document)
+        doc.set_tool_shortcuts(self._tool_shortcut_texts())
         markup_actions = getattr(self, "_markup_actions", {})
         doc.viewer.scroll_area.addActions(list(markup_actions.values()))
         doc.markup_bar.set_keys(
@@ -249,7 +271,8 @@ class MainWindow(QMainWindow):
         )
         doc.print_button.clicked.connect(self.print_document)
         doc.task_status.hide()
-        self.statusBar().addPermanentWidget(doc.task_status)
+        self.statusBar().insertPermanentWidget(0, doc.task_status)  # o "N tarefas" fica na ponta
+        self.task_log.watch(doc.tasks, lambda d=doc: d.title(modified_mark=False))
         index = self.tabs.addTab(doc, build_file_icon(), doc.title(modified_mark=False))
         # O "x" nas cores do tema, no lugar do botão nativo; vira um ponto com alterações.
         doc.close_button.clicked.connect(lambda _checked=False, d=doc: self.close_document(d))
@@ -456,6 +479,10 @@ class MainWindow(QMainWindow):
         )
         self._palette_action = command(view_menu, "view.palette", tr("Paleta de comandos..."), "Ctrl+K")
         self._palette_action.triggered.connect(self.show_command_palette)
+        command(view_menu, "view.next_region", tr("Próxima região"), "F6").triggered.connect(lambda: self.focus_region(1))
+        command(view_menu, "view.previous_region", tr("Região anterior"), "Shift+F6").triggered.connect(
+            lambda: self.focus_region(-1)
+        )
         self._presentation_action = command(view_menu, "view.presentation", tr("Apresentação"), "F5", "Ctrl+L")
         self._presentation_action.triggered.connect(lambda: self.viewer.start_presentation())
         layout_menu = view_menu.addMenu(tr("Páginas"))
@@ -581,6 +608,16 @@ class MainWindow(QMainWindow):
         }
         for doc in self.documents():
             doc.markup_bar.set_keys(keys)
+        tool_keys = self._tool_shortcut_texts()
+        for doc in self.documents():
+            doc.set_tool_shortcuts(tool_keys)
+
+    def _tool_shortcut_texts(self) -> dict[int, str]:
+        return {
+            row: action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
+            for row, action in enumerate(getattr(self, "_tool_actions", []))
+            if not action.shortcut().isEmpty()
+        }
 
     def _organizer(self):
         """A Organizar páginas aberta no documento atual, ou None."""
@@ -598,6 +635,40 @@ class MainWindow(QMainWindow):
         doc = self.document
         if doc is not None and doc.annotation_state.is_page_active():
             doc.annotation_state.set_tool(tool)
+
+    # -- regiões (F6) -------------------------------------------------------------------
+
+    def regions(self) -> list[QWidget]:
+        """As regiões que F6 percorre, na ordem do Tab: a faixa do topo e, num documento, a
+        barra do visualizador, o documento (ou a grade de Organizar), o painel da ferramenta e
+        o trilho da direita; no Início e em Ferramentas, a página."""
+        regions: list[QWidget | None] = [self.menuWidget()]
+        current = self.tabs.currentWidget()
+        if isinstance(current, DocumentTab):
+            center = current.center_widget()
+            if center is None:
+                regions += [current.viewer.toolbar, current.viewer.scroll_area]
+            else:
+                regions.append(center)
+            regions += [current.stack, current.right_rail]
+        else:
+            regions.append(current)
+        return [region for region in regions if region is not None and region.isVisible()]
+
+    def focus_region(self, step: int) -> None:
+        """F6 (Shift+F6): o foco pula para a próxima (anterior) região."""
+        regions = self.regions()
+        if not regions:
+            return
+        focus = QApplication.focusWidget()
+        index = next((n for n, r in enumerate(regions) if focus is not None and (r is focus or r.isAncestorOf(focus))), -1)
+        if index < 0 and step < 0:
+            index = 0
+        for offset in range(1, len(regions) + 1):
+            target = _first_focusable(regions[(index + step * offset) % len(regions)])
+            if target is not None:
+                target.setFocus(Qt.FocusReason.TabFocusReason)
+                return
 
     def show_command_palette(self):
         commands = [c for c in self.commands() if c[1] is not self._palette_action]
