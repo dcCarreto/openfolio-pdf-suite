@@ -5,7 +5,6 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -17,6 +16,7 @@ from ui.i18n import tr
 from ui.tasks import call, run_task
 from ui.page_sizes import CUSTOM_SIZE_LABEL, PAGE_SIZES
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 _SIZE_LABELS = [*PAGE_SIZES.keys(), CUSTOM_SIZE_LABEL]
 
@@ -26,6 +26,7 @@ class CreatePage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.output_picker = FilePicker(mode="save")
@@ -51,6 +52,7 @@ class CreatePage(QWidget):
         options_layout.addRow(tr("Altura:"), self.height_spin)
 
         create_button = QPushButton(tr("Criar PDF"))
+        self.action_buttons.append(create_button)
         create_button.clicked.connect(self._create)
 
         layout = QVBoxLayout(self)
@@ -73,7 +75,7 @@ class CreatePage(QWidget):
         output_path = self.output_picker.path()
 
         if not output_path:
-            QMessageBox.warning(self, tr("Criar PDF"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Criar PDF"), tr("Escolha o arquivo de saída."))
             return
 
         task = call(
@@ -86,7 +88,7 @@ class CreatePage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Criar PDF"), tr("PDF criado com sucesso."))
+            notify_success(self, tr("Criar PDF"), tr("PDF criado com sucesso."))
 
         run_task(
             self,

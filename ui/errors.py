@@ -50,6 +50,11 @@ def show_error(parent, title: str, template: str, exc: BaseException) -> None:
     o texto técnico em "Mostrar detalhes" quando houver."""
     message, details = describe_error(exc)
     text = template.format(error=message)
+    from ui.tool_panel import find_panel, notify_error  # o painel importa widgets que importam este módulo
+
+    if find_panel(parent) is not None:  # numa ferramenta: no cartão de erro do painel dela
+        notify_error(parent, title, text, details or "")
+        return
     if not details:
         QMessageBox.critical(parent, title, text)
         return

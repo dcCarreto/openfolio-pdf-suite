@@ -1,6 +1,6 @@
 """Desfazer/refazer das marcações pendentes (anotações, áreas de redação) antes de gravá-las.
 
-Guarda a lista inteira a cada mudança, então desenhar, apagar uma e "Limpar pendentes" se
+Guarda a lista inteira a cada mudança, então desenhar, apagar uma e "Descartar" se
 desfazem do mesmo jeito. O Ctrl+Z da janela passa por aqui antes das versões do documento.
 """
 

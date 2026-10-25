@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -20,6 +19,7 @@ from ui.i18n import tr
 from ui.tasks import call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_info, notify_success
 
 _LANGUAGE_NAMES = {
     "eng": "Inglês",
@@ -49,6 +49,7 @@ class OCRPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -99,6 +100,7 @@ class OCRPage(QWidget):
             mode="save", suggested_source=session.path, suggested_suffix="ocr"
         )
         self.apply_button = QPushButton(tr("Reconhecer texto"))
+        self.action_buttons.append(self.apply_button)
         self.apply_button.clicked.connect(self._apply)
         self.apply_button.setEnabled(self._tesseract is not None and bool(self._languages))
 
@@ -157,14 +159,14 @@ class OCRPage(QWidget):
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("OCR"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("OCR"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("OCR"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("OCR"), tr("Escolha o arquivo de saída."))
             return
         languages = self.selected_languages()
         if not languages:
-            QMessageBox.warning(self, tr("OCR"), tr("Marque pelo menos um idioma do texto."))
+            notify_error(self, tr("OCR"), tr("Marque pelo menos um idioma do texto."))
             return
 
         task = call_with_progress(
@@ -181,13 +183,13 @@ class OCRPage(QWidget):
         def done(pages_ocred):
             self.session.open(output_path)
             if pages_ocred:
-                QMessageBox.information(
+                notify_success(
                     self,
                     tr("OCR"),
                     tr("Texto reconhecido em {count} página(s).").format(count=pages_ocred),
                 )
             else:
-                QMessageBox.information(
+                notify_info(
                     self,
                     tr("OCR"),
                     tr("Nenhuma página precisou de OCR (o PDF já tinha texto)."),

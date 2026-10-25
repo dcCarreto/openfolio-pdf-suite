@@ -59,6 +59,7 @@ def _breakable(path: str) -> str:
 class BatchPage(QWidget):
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.input_picker = FilePicker(mode="directory")
@@ -122,6 +123,7 @@ class BatchPage(QWidget):
             combo.setMinimumContentsLength(12)
 
         self.process_button = QPushButton(tr("Processar"))
+        self.action_buttons.append(self.process_button)
         self.process_button.clicked.connect(self._process)
         self.operation_combo.currentIndexChanged.connect(
             lambda index: self.process_button.setEnabled(index != _OCR or self._ocr_available)

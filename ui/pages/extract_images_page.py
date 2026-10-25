@@ -1,12 +1,13 @@
 """Aba de extração de imagens de PDFs."""
 
-from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from core.extract_images import ExtractImages
 from ui.i18n import tr
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_info, notify_success
 
 
 class ExtractImagesPage(QWidget):
@@ -14,12 +15,14 @@ class ExtractImagesPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
         self.output_picker = FilePicker(mode="directory")
 
         extract_button = QPushButton(tr("Extrair imagens"))
+        self.action_buttons.append(extract_button)
         extract_button.clicked.connect(self._extract)
 
         layout = QVBoxLayout(self)
@@ -34,22 +37,22 @@ class ExtractImagesPage(QWidget):
         output_dir = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Extrair imagens"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Extrair imagens"), tr("Abra um PDF para começar."))
             return
         if not output_dir:
-            QMessageBox.warning(self, tr("Extrair imagens"), tr("Escolha a pasta de saída."))
+            notify_error(self, tr("Extrair imagens"), tr("Escolha a pasta de saída."))
             return
 
         task = call(ExtractImages().run, input_path, output_dir)
 
         def done(output_paths):
             if not output_paths:
-                QMessageBox.information(
+                notify_info(
                     self, tr("Extrair imagens"), tr("Nenhuma imagem encontrada no PDF.")
                 )
                 return
 
-            QMessageBox.information(
+            notify_success(
                 self,
                 tr("Extrair imagens"),
                 tr("{count} imagem(ns) extraída(s) com sucesso.").format(count=len(output_paths)),

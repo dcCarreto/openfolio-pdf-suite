@@ -168,6 +168,7 @@ class SignatureDialog(QDialog):
 class FillSignPage(QWidget):
     def __init__(self, session, area_pick_state: AreaPickState | None = None, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
         self.area_pick_state = area_pick_state or AreaPickState()
         self._items: list[FillItem] = []
@@ -212,6 +213,7 @@ class FillSignPage(QWidget):
         self.remove_button = QPushButton(tr("Remover"))
         self.remove_button.clicked.connect(self.remove_selected)
         self.apply_button = QPushButton(tr("Aplicar"))
+        self.action_buttons.append(self.apply_button)
         self.apply_button.clicked.connect(self._apply)
         item_buttons = QHBoxLayout()
         item_buttons.addWidget(self.remove_button)

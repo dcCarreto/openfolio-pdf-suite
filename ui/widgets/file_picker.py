@@ -5,7 +5,17 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLineEdit, QPushButton, QWidget
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ui.i18n import tr
 from ui.preferences import remember_folder_of, start_folder
@@ -29,13 +39,14 @@ class FilePicker(QWidget):
     No modo "save" com a sessão do documento como `suggested_source` (`session.path`), a
     ferramenta altera o documento aberto:
 
-    - Por padrão, o resultado é aplicado ao próprio documento, como um passo que Ctrl+Z
-      desfaz (ver `ui/document_session.py`): `path()` devolve o caminho de uma versão nova
-      do documento de trabalho, e a aba, ao chamar `session.open()` com ele, empilha o
-      passo no histórico. Nenhum arquivo intermediário vai para a pasta do usuário.
-    - "Procurar..." escolhe gravar o resultado em outro arquivo; o botão "No documento"
-      volta ao padrão. `working_copy=False` desliga o padrão (ferramentas cujo resultado é
-      um arquivo final, como proteger com senha ou assinar).
+    - Um segmentado escolhe "No documento aberto" ou "Arquivo novo".
+    - "No documento aberto" (o padrão) aplica o resultado ao próprio documento, como um
+      passo que Ctrl+Z desfaz (ver `ui/document_session.py`): `path()` devolve o caminho de
+      uma versão nova do documento de trabalho, e a aba, ao chamar `session.open()` com ele,
+      empilha o passo no histórico. Nenhum arquivo intermediário vai para a pasta do usuário.
+    - "Arquivo novo" mostra o caminho sugerido e "Procurar..." para escolher outro.
+      `working_copy=False` desliga o padrão (ferramentas cujo resultado é um arquivo final,
+      como proteger com senha ou assinar): fica só o caminho.
 
     Fora desse caso (ou em "salvar em outro arquivo"), o destino nunca fica "grudado" num
     arquivo de entrada antigo:
@@ -80,16 +91,41 @@ class FilePicker(QWidget):
         browse_button = QPushButton(tr("Procurar..."))
         browse_button.setToolTip(tr(_TOOLTIPS[mode]))
         browse_button.clicked.connect(self._browse)
-        self.document_button = QPushButton(tr("No documento"))
+        self._file_row = QWidget()
+        row = QHBoxLayout(self._file_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(self.path_edit)
+        row.addWidget(browse_button)
+
+        # Onde vai o resultado: no documento aberto (Ctrl+Z desfaz) ou num arquivo novo.
+        self.target_switch = QWidget()
+        self.target_switch.setObjectName("Segmented")
+        switch_layout = QHBoxLayout(self.target_switch)
+        switch_layout.setContentsMargins(2, 2, 2, 2)
+        switch_layout.setSpacing(2)
+        group = QButtonGroup(self)
+        self.document_button = QToolButton()
+        self.document_button.setText(tr("No documento aberto"))
         self.document_button.setToolTip(tr("Aplicar o resultado ao documento aberto (Ctrl+Z desfaz)"))
         self.document_button.clicked.connect(self.use_document)
-        self.document_button.setVisible(False)
+        self.new_file_button = QToolButton()
+        self.new_file_button.setText(tr("Arquivo novo"))
+        self.new_file_button.setToolTip(tr("Gravar o resultado num arquivo novo"))
+        self.new_file_button.clicked.connect(self.use_new_file)
+        for button in (self.document_button, self.new_file_button):
+            button.setCheckable(True)
+            group.addButton(button)
+            switch_layout.addWidget(button, 1)
+        self._undo_hint = QLabel(tr("Ctrl+Z desfaz a operação inteira."))
+        self._undo_hint.setProperty("ofRole", "secondary")
+        self.target_switch.setVisible(self._can_apply)
 
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.path_edit)
-        layout.addWidget(self.document_button)
-        layout.addWidget(browse_button)
+        layout.setSpacing(8)
+        layout.addWidget(self.target_switch)
+        layout.addWidget(self._file_row)
+        layout.addWidget(self._undo_hint)
 
         # Se a sugestão vem da sessão do documento aberto, acompanha a troca de documento
         # na hora (com a página visível); nos demais casos, `showEvent` atualiza.
@@ -108,6 +144,11 @@ class FilePicker(QWidget):
         self._apply_to_document = True
         self._path = ""
         self._path_source = None
+        self._refresh_display()
+
+    def use_new_file(self) -> None:
+        """"Arquivo novo": grava no caminho sugerido, ou no escolhido em "Procurar..."."""
+        self._apply_to_document = False
         self._refresh_display()
 
     def _browse(self):
@@ -198,7 +239,10 @@ class FilePicker(QWidget):
             current = self._file_path()
             self.path_edit.setText(current)
             self.path_edit.setToolTip(current)
-        self.document_button.setVisible(self._can_apply and not self._apply_to_document)
+        self.document_button.setChecked(self._apply_to_document)
+        self.new_file_button.setChecked(not self._apply_to_document)
+        self._file_row.setVisible(not self._apply_to_document)
+        self._undo_hint.setVisible(self._apply_to_document)
 
     def showEvent(self, event):
         super().showEvent(event)

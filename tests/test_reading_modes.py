@@ -91,7 +91,7 @@ def test_a_drawing_tool_goes_back_to_single_page(viewer):
     changes = []
     viewer.layout_changed.connect(changes.append)
     viewer.set_layout(BOOK)
-    assert viewer.double_page_button.isChecked()
+    assert viewer.book_button.isChecked()
 
     viewer.annotation_state.set_page_active(True)
     viewer.annotation_state.set_tool("highlight")

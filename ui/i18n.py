@@ -625,11 +625,13 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "O XMP não é um XML válido: {error}": "The XMP is not valid XML: {error}",
     # Anotações (M27)
     "Seta": "Arrow",
-    "Espessura (caneta e formas):": "Thickness (pen and shapes):",
     "O nome que os leitores mostram em cada comentário novo. Fica guardado.": (
         "The name readers show on each new comment. It is remembered."
     ),
-    "Trocar a cor dos selecionados pela cor escolhida": "Change the color of the selected ones to the chosen color",
+    "Trocar a cor dos selecionados": "Change the color of the selected ones",
+    "Aplica aos comentários selecionados a cor escolhida na barra de marcação.": (
+        "Applies the color chosen on the markup bar to the selected comments."
+    ),
     "Com Selecionar/Apagar, arraste o comentário escolhido no visualizador para movê-lo, "
     "ou o canto inferior direito dele para mudar o tamanho.": (
         "With Select/Erase, drag the chosen comment in the viewer to move it, "
@@ -711,7 +713,132 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Ajustar à largura": "Fit to width",
     "Página única": "Single page",
     "Rolagem contínua": "Continuous scroll",
+    "Buscar (Ctrl+F)": "Search (Ctrl+F)",
+    "Ajustar à página": "Fit page",
+    "Zoom": "Zoom",
+    "de {total}": "of {total}",
+    "Mais opções de exibição": "More view options",
+    # Top bar and document tabs
+    "Buscar ferramentas e comandos": "Search tools and commands",
+    "Idioma da interface": "Interface language",
+    "alterações não salvas": "unsaved changes",
+    "Executar a ação da ferramenta": "Run the tool's action",
+    # Tool panel (ui/tool_panel.py) and its input/output widgets
+    "Entrada": "Input",
+    "Opções": "Options",
+    "Saída": "Output",
+    "Fechar ferramenta (Esc)": "Close tool (Esc)",
+    "Escolha um PDF de entrada para habilitar.": "Choose an input PDF to enable.",
+    "Você pode continuar lendo enquanto isso.": "You can keep reading meanwhile.",
+    "Operação cancelada.": "Operation cancelled.",
+    "Nada foi gravado.": "Nothing was saved.",
+    "Tentar de novo": "Try again",
+    "Concluir": "Done",
+    "Mostrar detalhes": "Show details",
+    # Barra de marcação e comentários (Anotações)
+    "Barra de marcação": "Markup bar",
+    "Marcação": "Markup",
+    "Cor: {name}": "Color: {name}",
+    "Mais cores...": "More colors...",
+    "Cor da marcação": "Markup color",
+    "Cor e espessura": "Color and thickness",
+    "Espessura": "Thickness",
+    "Espessura: {width}": "Thickness: {width}",
+    "Diminuir a espessura": "Decrease thickness",
+    "Aumentar a espessura": "Increase thickness",
+    "Realce, sublinhado e riscado seguem a linha do texto: a espessura vale para caneta, formas e seta.": (
+        "Highlight, underline and strikeout follow the text line: thickness applies to the pen, shapes and arrow."
+    ),
+    "pendentes": "pending",
+    "{count} pendentes": "{count} pending",
+    "Gravar": "Save",
+    "Gravar marcações": "Save markups",
+    "Gravar {count} marcações": "Save {count} markups",
+    "Gravar as marcações pendentes como uma versão do documento (Ctrl+Z desfaz)": (
+        "Save the pending markups as a version of the document (Ctrl+Z undoes)"
+    ),
+    "Descartar": "Discard",
+    "Descarta as marcações ainda não gravadas (Ctrl+Z traz de volta)": (
+        "Discards the markups not saved yet (Ctrl+Z brings them back)"
+    ),
+    "Pendente": "Pending",
+    "Gravado": "Saved",
+    "Comentários · {count}": "Comments · {count}",
+    "Todas as páginas": "All pages",
+    "Mostrar os comentários de": "Show the comments of",
+    # Tarefas, regiões (F6) e aviso de atualização
+    "Tarefas": "Tasks",
+    "Miniaturas": "Thumbnails",
     "Buscar": "Search",
+    "1 tarefa": "1 task",
+    "{count} tarefas": "{count} tasks",
+    "Limpar concluídas": "Clear finished",
+    "Nenhuma tarefa.": "No tasks.",
+    "Em andamento": "Running",
+    "Concluída": "Finished",
+    "Falhou": "Failed",
+    "Cancelada": "Cancelled",
+    "Próxima região": "Next region",
+    "Região anterior": "Previous region",
+    "Novidades": "What's new",
+    "Edição de {data}.": "Edition of {data}.",
+    "Você usa a de {data}.": "You're on {data}.",
+    "Ver notas completas": "Full release notes",
+    "Avisar quando houver uma nova edição": "Notify me about new editions",
+    "Nada é baixado nem instalado sem a sua confirmação. Seus documentos abertos são preservados.": (
+        "Nothing is downloaded or installed without your confirmation. Your open documents are kept."
+    ),
+    # Início, Ferramentas, paleta e Organizar páginas
+    "Olá! Abra um PDF para começar.": "Hi! Open a PDF to get started.",
+    "Tudo acontece neste computador. Nenhum arquivo sai daqui.": (
+        "Everything happens on this computer. No file ever leaves it."
+    ),
+    "Arraste um PDF para cá": "Drop a PDF here",
+    "ou escolha um arquivo no computador": "or choose a file on your computer",
+    "Abrir": "Open",
+    "Mostrar na pasta": "Show in folder",
+    "Remover da lista": "Remove from list",
+    "hoje, {hora}": "today, {hora}",
+    "ontem": "yesterday",
+    "há {n} dias": "{n} days ago",
+    "Tudo o que o OpenFolio faz com um PDF, por categoria.": "Everything OpenFolio does with a PDF, by category.",
+    "Buscar ferramenta": "Search tools",
+    "Buscar ferramenta (ex.: assinar, cpf, word)": "Search tools (e.g. sign, redact, word)",
+    "Todas": "All",
+    "No trilho rápido": "In the quick rail",
+    "Documentos abertos": "Open documents",
+    "↑ ↓ navegar · Enter executar · Tab filtrar por categoria": "↑ ↓ navigate · Enter run · Tab filter by category",
+    "Atalhos em Editar › Atalhos de teclado": "Shortcuts in Edit › Keyboard shortcuts",
+    "{count} selecionadas": "{count} selected",
+    "Em branco": "Blank",
+    "Apagar": "Delete",
+    "Apaga as páginas selecionadas (Delete)": "Deletes the selected pages (Delete)",
+    "Tamanho das miniaturas": "Thumbnail size",
+    "Alterações pendentes · {count}": "Pending changes · {count}",
+    "Nenhuma alteração ainda.": "No changes yet.",
+    "Aplicar {count} alterações": "Apply {count} changes",
+    "Volta a grade para o documento como está": "Puts the grid back the way the document is",
+    "Desfazer só esta alteração": "Undo just this change",
+    "Desfazer: {change}": "Undo: {change}",
+    "Girou {pages} à direita": "Rotated {pages} right",
+    "Girou {pages} à esquerda": "Rotated {pages} left",
+    "Apagou {pages}": "Deleted {pages}",
+    "Duplicou {pages}": "Duplicated {pages}",
+    "Moveu {pages}": "Moved {pages}",
+    "Inseriu uma página em branco": "Inserted a blank page",
+    "a página {number}": "page {number}",
+    "a página em branco": "the blank page",
+    "{count} páginas": "{count} pages",
+    "Nenhum PDF escolhido": "No PDF chosen",
+    "Trocar...": "Change...",
+    "{count} página(s)": "{count} page(s)",
+    "No documento aberto": "In the open document",
+    "Arquivo novo": "New file",
+    "Gravar o resultado num arquivo novo": "Save the result to a new file",
+    "Ctrl+Z desfaz a operação inteira.": "Ctrl+Z undoes the whole operation.",
+    "Nenhum documento aberto": "No document open",
+    "Arraste um PDF para cá ou escolha um arquivo no computador.": "Drop a PDF here or choose a file on your computer.",
+    "Abrir arquivo...": "Open file...",
     "Página {current} de {total}": "Page {current} of {total}",
     "Página {number}": "Page {number}",
     # PDF viewer: opening documents
@@ -761,12 +888,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "REVISADO": "REVIEWED",
     "URGENTE": "URGENT",
     # Annotations: page UI
-    "Ferramenta:": "Tool:",
     "Cor:": "Color:",
     "Texto do carimbo:": "Stamp text:",
-    "Limpar pendentes": "Clear pending",
-    "{count} anotação(ões) pendente(s)": "{count} pending annotation(s)",
-    "Salvar anotações": "Save annotations",
     "Adicione pelo menos uma anotação antes de salvar.": "Add at least one annotation before saving.",
     "Falha ao salvar anotações: {error}": "Failed to save annotations: {error}",
     "Anotações salvas com sucesso.": "Annotations saved successfully.",
@@ -1503,7 +1626,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
         '"{name}" has unsaved changes. Save first?'
     ),
     'Não foi possível salvar o arquivo: {error}': 'Could not save the file: {error}',
-    'No documento': 'In the document',
     'Aplicar o resultado ao documento aberto (Ctrl+Z desfaz)': (
         'Apply the result to the open document (Ctrl+Z undoes)'
     ),
@@ -1599,15 +1721,14 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Mover para trás': 'Move back',
     'Mover para a frente': 'Move forward',
     'Duplicar': 'Duplicate',
-    'Excluir': 'Delete',
     'Insere uma página em branco depois da última selecionada, ou no fim.': (
         'Inserts a blank page after the last selected one, or at the end.'
     ),
     'Extrair...': 'Extract...',
     'Salva as páginas selecionadas em outro arquivo.': 'Saves the selected pages to another file.',
-    'Descartar alterações': 'Discard changes',
-    'Arraste as miniaturas para mudar a ordem; Ctrl ou Shift + clique seleciona várias.': (
-        'Drag the thumbnails to change the order; Ctrl or Shift + click selects several.'
+    'Arraste as miniaturas para mudar a ordem; Ctrl ou Shift + clique seleciona várias. Nada muda no documento até Aplicar.': (
+        'Drag the thumbnails to change the order; Ctrl or Shift + click selects several. Nothing changes in '
+        'the document until Apply.'
     ),
     'Página em branco': 'Blank page',
     'edição na grade': 'grid edit',
@@ -1709,12 +1830,12 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Imagens, formatação e cabeçalhos/rodapés repetidos em todas as páginas não entram na comparação; para eles, use "Comparar visualmente".': 'Images, formatting and headers/footers repeated on every page are not compared; for them, use "Compare visually".',
     # A11 — comentários existentes e XFDF
     "Autor": "Author",
-    "Comentários do documento:": "Comments in the document:",
     "Salvar alteração do comentário": "Save comment change",
     "Remover comentários selecionados": "Remove selected comments",
     "Importar comentários (XFDF)...": "Import comments (XFDF)...",
     "Importar comentários (XFDF)": "Import comments (XFDF)",
-    "Exportar comentários (CSV, Excel ou XFDF)": "Export comments (CSV, Excel or XFDF)",
+    "Exportar comentários": "Export comments",
+    "Em CSV, Excel ou XFDF, conforme o tipo do arquivo de saída.": "As CSV, Excel or XFDF, by the type of the output file.",
     "Exportar comentários existentes:": "Export existing comments:",
     "Nenhum comentário no documento.": "No comments in the document.",
     "O texto deste comentário faz parte do desenho: remova-o e crie outro.": "This comment's text is part of its drawing: remove it and create another one.",
@@ -1795,6 +1916,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Escuro": "Dark",
     "Claro": "Light",
     "Seguir o sistema": "Follow the system",
+    "Animações da interface": "Interface animations",
     # A15 — apresentação e página dupla
     "Apresentação": "Presentation",
     "Página dupla": "Two pages",
@@ -1817,7 +1939,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Paleta de comandos...": "Command palette...",
     "Ferramentas": "Tools",
     "Paleta de comandos": "Command palette",
-    "Digite o nome de uma ferramenta ou comando": "Type the name of a tool or command",
     "Atalhos de teclado": "Keyboard shortcuts",
     "Comando": "Command",
     "Atalho": "Shortcut",
@@ -1831,7 +1952,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "O que mudou em cada atualização": "What changed in each update",
     # Atualizações sem número de versão, com consentimento
     "O OpenFolio PDF Suite já está atualizado.": "OpenFolio PDF Suite is up to date.",
-    "Há uma atualização do OpenFolio PDF Suite. O que mudou:": "An update to OpenFolio PDF Suite is available. What changed:",
     "(A atualização não traz descrição.)": "(The update has no description.)",
     "Se você aceitar, o app baixa a atualização, confere o arquivo e fecha para instalá-la; ao terminar, ele abre de novo. Seus documentos não são tocados.": (
         "If you accept, the app downloads the update, checks the file and closes to install it; when it is done, "
@@ -1889,10 +2009,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Converter e otimizar": "Convert and optimize",
     "Documento": "Document",
     "Automatizar": "Automate",
-    "Bem-vindo ao OpenFolio PDF Suite": "Welcome to OpenFolio PDF Suite",
-    "Abra um PDF para ler e trabalhar nele, ou comece por uma ferramenta.": (
-        "Open a PDF to read and work on it, or start with a tool."
-    ),
     "Recentes": "Recent",
     "Os PDFs abertos aparecem aqui.": "The PDFs you open show up here.",
     "Salvar (Ctrl+S)": "Save (Ctrl+S)",

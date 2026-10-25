@@ -23,6 +23,7 @@ from ui.tasks import call_with_progress, run_task
 from ui.widgets.current_page import with_current_page_button
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_info, notify_success
 
 _TITLE, _PAGE = 0, 1
 _ITEM_FLAGS = (
@@ -41,6 +42,7 @@ class BookmarksPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -95,6 +97,7 @@ class BookmarksPage(QWidget):
         source_row.addWidget(detect_button)
 
         save_button = QPushButton(tr("Salvar"))
+        self.action_buttons.append(save_button)
         save_button.clicked.connect(self._save)
 
         layout = QVBoxLayout(self)
@@ -204,7 +207,7 @@ class BookmarksPage(QWidget):
     def _add_bookmark(self):
         title = self.title_edit.text().strip()
         if not title:
-            QMessageBox.warning(self, tr("Marcadores"), tr("Digite um título para o marcador."))
+            notify_error(self, tr("Marcadores"), tr("Digite um título para o marcador."))
             return
         item = self._new_item(title, self.page_spin.value() - 1)  # o core conta a partir de 0
         self.tree.addTopLevelItem(item)
@@ -214,12 +217,12 @@ class BookmarksPage(QWidget):
     def _detect_headings(self):
         input_path = self.session.path()
         if not input_path:
-            QMessageBox.warning(self, tr("Marcadores"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Marcadores"), tr("Abra um PDF para começar."))
             return
 
         def done(items):
             if not items:
-                QMessageBox.information(
+                notify_info(
                     self, tr("Marcadores"), tr("Nenhum título encontrado: o texto todo tem o mesmo tamanho.")
                 )
                 return
@@ -248,15 +251,15 @@ class BookmarksPage(QWidget):
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Marcadores"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Marcadores"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Marcadores"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Marcadores"), tr("Escolha o arquivo de saída."))
             return
 
         rows = self.items()
         if any(not title.strip() for _level, title, _page in rows):
-            QMessageBox.warning(self, tr("Marcadores"), tr("Há um marcador sem título."))
+            notify_error(self, tr("Marcadores"), tr("Há um marcador sem título."))
             return
 
         def task(_progress):
@@ -275,7 +278,7 @@ class BookmarksPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(self, tr("Marcadores"), tr("Marcadores salvos com sucesso."))
+            notify_success(self, tr("Marcadores"), tr("Marcadores salvos com sucesso."))
 
         run_task(
             self,

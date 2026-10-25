@@ -1,15 +1,55 @@
 """Painel de miniaturas de página do visualizador."""
 
-from PySide6.QtCore import QItemSelectionModel, QPoint, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QIcon, QPixmap
-from PySide6.QtWidgets import QAbstractItemView, QListView, QListWidget, QListWidgetItem
+from PySide6.QtCore import QItemSelectionModel, QPoint, QRect, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import QAbstractItemView, QListView, QListWidget, QListWidgetItem, QStyle, QStyledItemDelegate
 
 from core.progress import PDFIUM_LOCK
+from ui import theme
 from ui.i18n import tr
-from ui.viewer.render import framed, render_page
+from ui.viewer.render import render_page
 
 _THUMBNAIL_SCALE = 0.2
-_ICON_SIZE = QSize(96, 128)
+_ICON_SIZE = QSize(104, 134)
+
+
+class _ThumbnailDelegate(QStyledItemDelegate):
+    """A página com sombra pintada e o número embaixo; a atual (e as selecionadas) com o
+    contorno no acento e o número em negrito, para não depender só da cor."""
+
+    def paint(self, painter: QPainter, option, index):
+        t = theme.tokens()
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cell = option.rect
+        icon = index.data(Qt.ItemDataRole.DecorationRole)
+        pixmap = icon.pixmap(_ICON_SIZE) if isinstance(icon, QIcon) else None
+        size = pixmap.deviceIndependentSize().toSize() if pixmap is not None and not pixmap.isNull() else _ICON_SIZE
+        size = size.scaled(_ICON_SIZE, Qt.AspectRatioMode.KeepAspectRatio)
+        page = QRectF(cell.center().x() - size.width() / 2, cell.top() + 8, size.width(), size.height())
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 55))
+        painter.drawRoundedRect(page.translated(0, 2).adjusted(-1, 0, 1, 1), 2, 2)  # sombra
+        painter.setBrush(QColor("#ffffff"))
+        painter.drawRect(page)
+        if pixmap is not None and not pixmap.isNull():
+            painter.drawPixmap(page, pixmap, QRectF(pixmap.rect()))
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        if selected:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(t["accent"]), 2))
+            painter.drawRoundedRect(page.adjusted(-3, -3, 3, 3), 4, 4)
+        font = QFont(option.font)
+        font.setPixelSize(11)
+        font.setWeight(QFont.Weight.DemiBold if selected else QFont.Weight.Normal)
+        painter.setFont(font)
+        painter.setPen(QColor(t["accent_strong" if selected else "text2"]))
+        label = QRect(cell.left(), int(page.bottom()) + 6, cell.width(), 16)
+        painter.drawText(label, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, str(index.row() + 1))
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        return QSize(_ICON_SIZE.width() + 24, _ICON_SIZE.height() + 34)
 
 
 class ThumbnailList(QListWidget):
@@ -34,9 +74,10 @@ class ThumbnailList(QListWidget):
         self.setWrapping(False)
         self.setMovement(QListView.Movement.Static)
         self.setUniformItemSizes(True)
-        self.setSpacing(6)
+        self.setSpacing(0)
         self.setIconSize(_ICON_SIZE)
-        self.setGridSize(QSize(120, 156))
+        self.setGridSize(QSize(_ICON_SIZE.width() + 24, _ICON_SIZE.height() + 34))
+        self.setItemDelegate(_ThumbnailDelegate(self))
         # A largura vem do painel lateral (ui/viewer/side_panel.py); a coluna é uma só.
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.currentRowChanged.connect(self._on_row_changed)
@@ -112,7 +153,7 @@ class ThumbnailList(QListWidget):
             page.close()
         item = self.item(index)
         if item is not None:
-            item.setIcon(QIcon(framed(pixmap)))
+            item.setIcon(QIcon(pixmap))
         if not self._pending:
             self._timer.stop()
 

@@ -31,6 +31,7 @@ from ui.pending_history import PendingHistory
 from ui.tasks import call, call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 _PATTERN_CHECKBOX_LABELS = [
     ("cpf", "CPF"),
@@ -98,6 +99,7 @@ class RedactionPage(QWidget):
 
     def __init__(self, session, redaction_state, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
         self.redaction_state = redaction_state
 
@@ -197,6 +199,7 @@ class RedactionPage(QWidget):
             mode="save", suggested_source=self.session.path, suggested_suffix="redigido"
         )
         redact_button = QPushButton(tr("Aplicar redação"))
+        self.action_buttons.append(redact_button)
         redact_button.clicked.connect(self._apply_redaction)
 
         layout.addWidget(instructions)
@@ -239,6 +242,7 @@ class RedactionPage(QWidget):
             mode="save", suggested_source=self.session.path, suggested_suffix="sanitizado"
         )
         sanitize_button = QPushButton(tr("Sanitizar"))
+        self.action_buttons.append(sanitize_button)
         sanitize_button.clicked.connect(self._apply_sanitize)
 
         layout.addWidget(self.remove_metadata_checkbox)
@@ -300,7 +304,7 @@ class RedactionPage(QWidget):
     def _remove_selected_pending(self):
         rects = [item.data(Qt.ItemDataRole.UserRole) for item in self.pending_list.selectedItems()]
         if not rects:
-            QMessageBox.warning(self, tr("Redigir"), tr("Selecione na lista as áreas a remover."))
+            notify_error(self, tr("Redigir"), tr("Selecione na lista as áreas a remover."))
             return
         self.redaction_state.remove_many(rects)
 
@@ -309,14 +313,14 @@ class RedactionPage(QWidget):
     def _detect_patterns(self):
         input_path = self.session.path()
         if not input_path:
-            QMessageBox.warning(self, tr("Redigir"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Redigir"), tr("Abra um PDF para começar."))
             return
 
         kinds = [kind for kind, checkbox in self.pattern_checkboxes.items() if checkbox.isChecked()]
         custom_pattern = self.custom_pattern_edit.text().strip()
         search_text = self.search_text_edit.text().strip()
         if not kinds and not custom_pattern and not search_text.strip(";"):
-            QMessageBox.warning(
+            notify_error(
                 self,
                 tr("Redigir"),
                 tr("Digite um texto a procurar, marque um padrão ou digite uma expressão regular."),
@@ -333,7 +337,7 @@ class RedactionPage(QWidget):
 
         def done(rects):
             added = self.redaction_state.add_many(rects)
-            QMessageBox.information(
+            notify_success(
                 self,
                 tr("Redigir"),
                 tr(
@@ -356,13 +360,13 @@ class RedactionPage(QWidget):
         rects = self.redaction_state.pending()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Redigir"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Redigir"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Redigir"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Redigir"), tr("Escolha o arquivo de saída."))
             return
         if not rects:
-            QMessageBox.warning(
+            notify_error(
                 self, tr("Redigir"), tr("Marque pelo menos uma área no visualizador antes de aplicar.")
             )
             return
@@ -395,7 +399,7 @@ class RedactionPage(QWidget):
             message = tr("{count} página(s) redigida(s) com sucesso.").format(count=pages_redacted)
             if report is not None:
                 message += "\n\n" + format_sanitize_report(report)
-            QMessageBox.information(self, tr("Redigir"), message)
+            notify_success(self, tr("Redigir"), message)
 
         run_task(
             self, tr("Redigir"), redact, on_success=done, error_message=tr("Falha ao redigir: {error}")
@@ -406,10 +410,10 @@ class RedactionPage(QWidget):
         output_path = self.sanitize_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Sanitizar"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Sanitizar"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Sanitizar"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Sanitizar"), tr("Escolha o arquivo de saída."))
             return
 
         task = call(
@@ -422,7 +426,7 @@ class RedactionPage(QWidget):
 
         def done(report):
             self.session.open(output_path)
-            QMessageBox.information(
+            notify_success(
                 self,
                 tr("Sanitizar"),
                 tr("PDF sanitizado com sucesso.") + "\n\n" + format_sanitize_report(report),

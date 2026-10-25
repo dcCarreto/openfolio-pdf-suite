@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QLabel,
     QListWidget,
-    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -20,6 +19,7 @@ from ui.tasks import call_with_progress, run_task
 from ui.viewer.compare_view import CompareWindow
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error
 
 
 class ComparePage(QWidget):
@@ -29,6 +29,7 @@ class ComparePage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
         self.compare_window: CompareWindow | None = None
 
@@ -61,6 +62,7 @@ class ComparePage(QWidget):
         hint.setWordWrap(True)
         self.side_b_picker = FilePicker(mode="open", file_filter="PDF (*.pdf)")
         compare_button = QPushButton(tr("Comparar lado a lado"))
+        self.action_buttons.append(compare_button)
         compare_button.clicked.connect(self._compare_side_by_side)
 
         layout.addWidget(hint)
@@ -80,6 +82,7 @@ class ComparePage(QWidget):
         self.text_a_picker = FilePicker(mode="open", file_filter="PDF (*.pdf)")
         self.text_b_picker = FilePicker(mode="open", file_filter="PDF (*.pdf)")
         compare_button = QPushButton(tr("Comparar"))
+        self.action_buttons.append(compare_button)
         compare_button.clicked.connect(self._compare_text)
         self.text_results_list = QListWidget()
 
@@ -100,6 +103,7 @@ class ComparePage(QWidget):
         self.visual_b_picker = FilePicker(mode="open", file_filter="PDF (*.pdf)")
         self.visual_output_picker = FilePicker(mode="directory")
         compare_button = QPushButton(tr("Comparar"))
+        self.action_buttons.append(compare_button)
         compare_button.clicked.connect(self._compare_visual)
         self.visual_results_list = QListWidget()
 
@@ -120,7 +124,7 @@ class ComparePage(QWidget):
         path_a = self.session.path()
         path_b = self.side_b_picker.path()
         if not path_a or not path_b:
-            QMessageBox.warning(self, tr("Comparar"), tr("Abra o documento A e escolha o PDF B a comparar."))
+            notify_error(self, tr("Comparar"), tr("Abra o documento A e escolha o PDF B a comparar."))
             return
 
         source = self.session.source_path() or path_a
@@ -153,7 +157,7 @@ class ComparePage(QWidget):
         self.text_results_list.clear()
 
         if not path_a or not path_b:
-            QMessageBox.warning(self, tr("Comparar"), tr("Escolha os dois arquivos PDF a comparar."))
+            notify_error(self, tr("Comparar"), tr("Escolha os dois arquivos PDF a comparar."))
             return
 
         task = call_with_progress(CompareText().run, path_a, path_b)
@@ -187,10 +191,10 @@ class ComparePage(QWidget):
         self.visual_results_list.clear()
 
         if not path_a or not path_b:
-            QMessageBox.warning(self, tr("Comparar"), tr("Escolha os dois arquivos PDF a comparar."))
+            notify_error(self, tr("Comparar"), tr("Escolha os dois arquivos PDF a comparar."))
             return
         if not output_dir:
-            QMessageBox.warning(self, tr("Comparar"), tr("Escolha a pasta de saída."))
+            notify_error(self, tr("Comparar"), tr("Escolha a pasta de saída."))
             return
 
         task = call_with_progress(CompareVisual().run, path_a, path_b, output_dir)

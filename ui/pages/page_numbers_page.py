@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QStackedWidget,
@@ -23,6 +22,7 @@ from ui.page_ranges import format_page_ranges, parse_page_ranges
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 _BATES_POSITION_LABELS = [
     ("Inferior direito", "bottom-right"),
@@ -56,6 +56,7 @@ class PageNumbersPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -140,6 +141,7 @@ class PageNumbersPage(QWidget):
         options.addRow(tr("Tamanho da fonte:"), self.number_font_size_spin)
 
         apply_button = QPushButton(tr("Adicionar numeração"))
+        self.action_buttons.append(apply_button)
         apply_button.clicked.connect(self._apply)
 
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
@@ -177,6 +179,7 @@ class PageNumbersPage(QWidget):
             self.bates_position_combo.addItem(tr(label))
 
         apply_button = QPushButton(tr("Adicionar numeração Bates"))
+        self.action_buttons.append(apply_button)
         apply_button.clicked.connect(self._apply_bates)
 
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
@@ -213,6 +216,7 @@ class PageNumbersPage(QWidget):
             self.hf_position_combo.addItem(tr(label))
 
         apply_button = QPushButton(tr("Adicionar cabeçalho/rodapé"))
+        self.action_buttons.append(apply_button)
         apply_button.clicked.connect(self._apply_header_footer)
 
         layout.addWidget(note)
@@ -233,10 +237,10 @@ class PageNumbersPage(QWidget):
         output_path = self.output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Numeração de páginas"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Numeração de páginas"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Numeração de páginas"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Numeração de páginas"), tr("Escolha o arquivo de saída."))
             return
 
         text = self.number_pages_edit.text()
@@ -258,7 +262,7 @@ class PageNumbersPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(
+            notify_success(
                 self, tr("Numeração de páginas"), tr("Numeração adicionada com sucesso.")
             )
 
@@ -275,10 +279,10 @@ class PageNumbersPage(QWidget):
         output_path = self.bates_output_picker.path()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Numeração Bates"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Numeração Bates"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Numeração Bates"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Numeração Bates"), tr("Escolha o arquivo de saída."))
             return
 
         position = _BATES_POSITION_LABELS[self.bates_position_combo.currentIndex()][1]
@@ -295,7 +299,7 @@ class PageNumbersPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(
+            notify_success(
                 self, tr("Numeração Bates"), tr("Numeração Bates adicionada com sucesso.")
             )
 
@@ -313,13 +317,13 @@ class PageNumbersPage(QWidget):
         text = self.hf_text_edit.text()
 
         if not input_path:
-            QMessageBox.warning(self, tr("Cabeçalho/Rodapé"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Cabeçalho/Rodapé"), tr("Abra um PDF para começar."))
             return
         if not output_path:
-            QMessageBox.warning(self, tr("Cabeçalho/Rodapé"), tr("Escolha o arquivo de saída."))
+            notify_error(self, tr("Cabeçalho/Rodapé"), tr("Escolha o arquivo de saída."))
             return
         if not text:
-            QMessageBox.warning(self, tr("Cabeçalho/Rodapé"), tr("Digite o texto do cabeçalho/rodapé."))
+            notify_error(self, tr("Cabeçalho/Rodapé"), tr("Digite o texto do cabeçalho/rodapé."))
             return
 
         position = _HF_POSITION_LABELS[self.hf_position_combo.currentIndex()][1]
@@ -328,7 +332,7 @@ class PageNumbersPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            QMessageBox.information(
+            notify_success(
                 self, tr("Cabeçalho/Rodapé"), tr("Cabeçalho/rodapé adicionado com sucesso.")
             )
 

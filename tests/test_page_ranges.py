@@ -6,12 +6,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from pypdf import PdfReader
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 
 from ui.document_session import DocumentSession
 from ui.tasks import wait_for_tasks
 from ui.page_ranges import parse_page_ranges
-from ui.pages import pages_page
 from ui.pages.pages_page import PagesPage
 from ui.widgets.file_picker import FilePicker
 
@@ -52,7 +51,7 @@ class _Messages:
         self.shown: list[tuple[str, str]] = []
         for kind in ("information", "warning", "critical"):
             monkeypatch.setattr(
-                pages_page.QMessageBox,
+                QMessageBox,
                 kind,
                 lambda _parent, _title, text, _kind=kind: self.shown.append((_kind, text)),
             )

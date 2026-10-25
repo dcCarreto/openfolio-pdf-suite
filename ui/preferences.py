@@ -43,6 +43,10 @@ class Preferences:
         self._set("files/recent", [path, *recent][:_MAX_RECENT])
         self.set_last_folder(str(Path(path).parent))
 
+    def remove_recent_file(self, path: str) -> None:
+        key = os.path.normcase(os.path.abspath(path))
+        self._set("files/recent", [p for p in self.recent_files() if os.path.normcase(p) != key])
+
     def clear_recent_files(self) -> None:
         self._set("files/recent", [])
 
@@ -74,6 +78,13 @@ class Preferences:
 
     def set_theme(self, theme: str) -> None:
         self._set("ui/theme", theme)
+
+    def animations(self) -> bool:
+        """Exibir > Animações da interface: ligadas até o usuário desligar."""
+        return str(self._get("ui/animations", "true")).lower() != "false"
+
+    def set_animations(self, enabled: bool) -> None:
+        self._set("ui/animations", "true" if enabled else "false")
 
     # -- visualizador ---------------------------------------------------------------
 

@@ -58,12 +58,22 @@ confere o arquivo e instala sozinho. Tudo o que mudou fica em [CHANGELOG.md](CHA
   <img src="assets/screenshots/01-visao-geral.png" alt="Janela principal do OpenFolio PDF Suite: abas de documento, miniaturas à esquerda, um PDF aberto e a ferramenta Anotações à direita" width="900">
 </p>
 
-A janela é organizada em abas: **Início** (abrir um PDF, as ferramentas de partida e os
-arquivos recentes), **Ferramentas** (todas as ferramentas, por categoria) e uma aba por
-documento aberto, com o próprio desfazer e a própria fila de operações. Em cada documento, a
-barra do topo tem abrir, salvar, imprimir, páginas, zoom e modos de exibição; a coluna de
-ícones da esquerda mostra miniaturas, marcadores e anexos; a da direita abre as ferramentas
-mais usadas num painel ao lado do documento, com o nome da ferramenta e **Fechar** no topo. No
+A janela é organizada em abas: **Início** (abrir um PDF ou soltá-lo em qualquer parte da aba,
+as ferramentas de partida e os arquivos recentes, com miniatura, pasta e número de páginas),
+**Ferramentas** (todas as ferramentas, por categoria, com busca que entende sinônimos como
+"cpf", "assinar" e "word") e uma aba por
+documento aberto, com o próprio desfazer e a própria fila de operações. Uma só faixa no topo
+junta os menus, as abas (as de documento se reordenam arrastando; com alterações não salvas,
+um ponto aparece no lugar do "x"), o **+** para abrir um PDF, a busca de ferramentas e
+comandos (Ctrl+K) e o idioma (**PT | EN**). Em cada documento, a barra sobre a página tem
+abrir, salvar, imprimir, o número da página (digite outro e Enter), zoom e modos de exibição;
+a coluna de ícones da esquerda mostra miniaturas, marcadores e anexos; a da direita abre as
+ferramentas mais usadas num painel ao lado do documento. Todo painel segue a mesma ordem:
+**Entrada** (o documento), **Opções** e **Saída** (no próprio documento ou num arquivo
+novo), com o botão da ação no rodapé (também Ctrl+Enter); ali mesmo aparecem o andamento, o
+**Cancelar** e o resultado, com **Desfazer**. Numa janela estreita, as miniaturas se
+recolhem enquanto uma ferramenta está aberta, o painel abre por cima do documento (Esc o
+recolhe) e parte da barra vai para o menu **...**. No
 centro fica o visualizador — sempre visível, com zoom (também com Ctrl + roda do mouse), ajuste à largura ou à página, rotação da visualização,
 rolagem contínua, página única, página dupla ou livro (capa sozinha), busca que destaca todas
 as ocorrências e seleção de texto com Ctrl+C; **Exibir > Apresentação** (F5) mostra o
@@ -143,7 +153,7 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | 📄 Mesclar | Combina vários PDFs em um único arquivo, na ordem que você definir, com as páginas escolhidas de cada um, um marcador por arquivo ou intercalando frentes e versos escaneados à parte |
 | ✂️ Dividir | Separa um PDF em vários arquivos menores: N páginas por arquivo, um arquivo por marcador de nível superior do sumário, por intervalos (ou as páginas selecionadas nas miniaturas), por tamanho máximo de arquivo ou a cada página em branco de um lote escaneado |
 | 🔃 Páginas | Rotaciona, reordena, remove, insere ou substitui páginas de um PDF (inserção/substituição usando páginas de outro PDF). As páginas são contadas a partir de 1, como no visualizador, e aceitam intervalos como `1-3, 5, 8-` |
-| 🔲 Organizar páginas | Grade de miniaturas do documento: arraste para reordenar, gire, duplique, exclua, insira páginas em branco ou extraia as selecionadas para outro arquivo. Antes de aplicar, Ctrl+Z desfaz cada mudança na grade; ao clicar em Aplicar, tudo entra no documento num passo só, que Ctrl+Z também desfaz |
+| 🔲 Organizar páginas | Grade de miniaturas no lugar do documento: arraste para reordenar, gire (também Ctrl+[ e Ctrl+]), duplique, apague, insira páginas em branco ou extraia as selecionadas para outro arquivo, com o tamanho das miniaturas ajustável. O painel lista cada alteração pendente, e qualquer uma se desfaz sozinha pelo "×"; Ctrl+Z desfaz a última. Ao clicar em Aplicar, tudo entra no documento num passo só, que Ctrl+Z também desfaz |
 | 🗜️ Comprimir | Reduz o tamanho de um PDF em três níveis: leve (sem perda), médio e forte (imagens reamostradas para 150 ou 100 DPI, pelo tamanho com que aparecem na página, e regravadas em JPEG; imagens sem cor passam a escala de cinza). Não grava nada se o arquivo não ficar menor |
 | 🖼️ Converter | Converte entre PDF e imagens (PNG ou JPEG, uma por página, ou um TIFF multipágina, de todas as páginas ou só das escolhidas; no sentido contrário, com tamanho de página A4, Carta, Ofício ou o da imagem, margem, orientação da câmera e fundo branco em imagens transparentes), Word/Excel/PowerPoint (.docx, .xlsx, .pptx) e PDF, e XML e PDF (linhas longas quebradas com recuo). Também leva o texto de um PDF para Word (parágrafos reunidos), Excel (uma planilha por página, com as colunas no lugar e números como números) ou texto com layout, e gera PDF a partir de HTML, Markdown ou texto puro, com texto pesquisável |
 | 💧 Marca d'água | Adiciona um texto (com cor e tamanho) ou uma imagem, como um logotipo, com opacidade e rotação, no centro, num canto ou em mosaico, por cima ou atrás do conteúdo, em todas as páginas ou só nas escolhidas, com pré-visualização da página atual |
@@ -159,7 +169,7 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 | 🗂️ Camadas | Lista as camadas (Optional Content Groups) de um PDF, inclusive as desligadas por padrão, e alterna a visibilidade padrão de cada uma |
 | 📎 Anexos | Lista, adiciona, remove ou extrai os anexos embutidos de um PDF (a extração nunca grava fora da pasta escolhida, mesmo que o nome do anexo tente) |
 | 🧾 Campos de formulário | Adiciona campos de formulário **interativos** (texto, data, caixa de seleção, lista suspensa, lista de seleção ou grupo de opções) — o PDF resultante é preenchível em qualquer leitor. O campo de data pode aceitar só datas (opcional, usa JavaScript). Os campos já existentes podem ser renomeados, ganhar dica, virar somente leitura ou obrigatórios, ser removidos e ter a ordem de tabulação mudada (arrastando, por linhas ou por colunas). Também exporta/importa dados preenchidos (CSV, Excel ou FDF) e achata o formulário (Fill & Sign simplificado) |
-| 🖍️ Anotações | Realce, sublinhe, risque, adicione notas, desenhe à mão livre, retângulos, círculos e setas (com a espessura que quiser) ou carimbe direto sobre a página, no próprio visualizador — com uma biblioteca de carimbos customizados (nome, texto e cor) salva localmente. Realce, sublinhado e riscado aparecem enquanto você arrasta; o carimbo sai no tamanho padrão com um clique ou do tamanho que você arrastar, sem distorcer. Antes de salvar, Ctrl+Z desfaz cada anotação (também as apagadas e "Limpar pendentes") e Ctrl+Y refaz. Cada anotação leva autor (o nome escolhido, guardado para as próximas) e data. Lista os comentários já existentes no PDF (escolher um mostra onde ele está), edita texto e autor, troca a cor, move e redimensiona arrastando no visualizador e remove com popups e respostas; exporta para CSV, Excel ou XFDF e importa XFDF de outros leitores, sem duplicar ao reimportar |
+| 🖍️ Anotações | Realce, sublinhe, risque, adicione notas, desenhe à mão livre, retângulos, círculos e setas (com a espessura que quiser) ou carimbe direto sobre a página, no próprio visualizador, pela barra de marcação que flutua sobre ela (ou por uma tecla: V, H, U, S, N, P, R, O, A, K) — com uma biblioteca de carimbos customizados (nome, texto e cor) salva localmente. Realce, sublinhado e riscado aparecem enquanto você arrasta; o carimbo sai no tamanho padrão com um clique ou do tamanho que você arrastar, sem distorcer. A barra mostra quantas marcações estão pendentes e as grava no documento ("Gravar", que Ctrl+Z desfaz); antes disso, Ctrl+Z desfaz cada anotação (também as apagadas e "Descartar") e Ctrl+Y refaz. Cada anotação leva autor (o nome escolhido, guardado para as próximas) e data. Lista os comentários já existentes no PDF (escolher um mostra onde ele está), edita texto e autor, troca a cor, move e redimensiona arrastando no visualizador e remove com popups e respostas; exporta para CSV, Excel ou XFDF e importa XFDF de outros leitores, sem duplicar ao reimportar |
 | 📏 Medição | Mede a distância entre dois pontos de um PDF, arrastando no visualizador central (mm, cm, polegadas ou pontos PDF) |
 | 🔍 OCR | Reconhece o texto de páginas escaneadas (via Tesseract, que já vem no instalador, com português, inglês e detecção de orientação) e gera um PDF pesquisável, com o texto invisível ajustado à largura de cada palavra reconhecida (inclusive em páginas giradas). Aceita vários idiomas ao mesmo tempo, DPI configurável, corrige páginas digitalizadas de lado e também reconhece escaneados que têm um carimbo de texto. Pode refazer um OCR anterior (tira o texto invisível dele antes, sem duplicar) e endireitar as páginas tortas ou de lado no próprio documento |
 | 🧹 Limpar escaneados | Remove páginas em branco, endireita páginas tortas (até 5°, girando o conteúdo sem perder qualidade) e corta as margens brancas do documento aberto, numa versão nova que Ctrl+Z desfaz; ao final, diz quais páginas mudaram |
@@ -233,7 +243,9 @@ campo pode ser clicado e preenchido normalmente.
 
 A ferramenta de realce está selecionada e o trecho "Cliente: Contoso Sistemas Ltda." foi
 marcado direto na página, arrastando o mouse sobre o visualizador — sem precisar de um editor
-separado:
+separado. Com Anotações aberta, a barra de marcação flutua sobre a página com as ferramentas,
+a cor, a espessura e "Gravar", e o painel lista as marcações pendentes e os comentários já
+gravados:
 
 <p align="center">
   <img src="assets/screenshots/08-anotacoes.png" alt="Aba Anotações com um realce amarelo aplicado sobre um trecho do documento" width="900">
@@ -328,10 +340,15 @@ ferramenta na aba **Ferramentas** (ou na coluna de ícones à direita do documen
 segue o do sistema (inclusive quando ele muda com o app aberto); a escolha é lembrada.
 
 **Ctrl+K** (Exibir > Paleta de comandos) abre uma busca por todas as ferramentas e comandos dos
-menus: digite parte do nome ou do que a ferramenta faz ("senha", "lote"), sem se preocupar com
-acentos, e Enter abre. Em **Editar > Atalhos de teclado** cada comando e cada ferramenta pode
+menus, pelos documentos abertos e pelos arquivos recentes, em grupos: digite parte do nome ou
+do que a ferramenta faz ("senha", "lote"), sem se preocupar com acentos, e Enter abre; Tab
+mostra um grupo por vez. Em **Editar > Atalhos de teclado** cada comando e cada ferramenta pode
 ganhar outro atalho (ou nenhum); atalhos repetidos são recusados e "Restaurar padrões" volta os
 de fábrica.
+
+**F6** leva o foco de uma região da janela à próxima (a faixa do topo, a barra do documento, o
+documento, o painel da ferramenta e a coluna da direita) e **Shift+F6** volta. **Exibir >
+Animações da interface** desliga as transições, para quem prefere tudo instantâneo.
 
 ### Linha de comando
 
@@ -409,10 +426,14 @@ core/            Lógica de manipulação de PDF, sem nenhuma dependência de UI
 
 ui/              Interface gráfica (PySide6)
   main_window.py       Janela principal: as abas Início, Ferramentas e uma por documento
+  top_bar.py           A faixa do topo: menus, abas, busca de comandos e idioma
   document_tab.py      Aba de documento: visualizador, colunas de ícones e painel da ferramenta
                        (cada ferramenta é construída na primeira vez em que é aberta)
-  home_page.py         Aba Início: abrir, ferramentas de partida e arquivos recentes
-  tools_center.py      Aba Ferramentas: todas as ferramentas, por categoria
+  tool_panel.py        Painel da ferramenta: Entrada, Opções, Saída e o rodapé com o andamento
+                       e o resultado
+  motion.py            Animações da interface (respeitam Exibir > Animações da interface)
+  home_page.py         Aba Início: abrir ou soltar um PDF, ferramentas de partida e recentes
+  tools_center.py      Aba Ferramentas: busca com sinônimos, categorias e a grade de cartões
   tools.py             Catálogo das ferramentas (categorias e atalhos da coluna da direita)
   theme.py             Temas escuro e claro (ou o do sistema), inspirados no macOS
   icon.py              Ícone da aplicação (renderizado a partir de assets/logo.svg)
@@ -420,6 +441,7 @@ ui/              Interface gráfica (PySide6)
   area_pick_state.py   Marcação de áreas no visualizador para as ferramentas
   preferences.py       Arquivos recentes, última pasta, idioma, tema, atualização e atalhos
   shortcuts.py         Paleta de comandos (Ctrl+K) e tela de atalhos de teclado
+  icon_utils.py        Motor dos ícones desenhados (grade de 24, cor do tema e do estado)
   app_events.py        Arquivos vindos da linha de comando, do "Abrir com" e de arrastar
   errors.py            Mensagens de erro para o usuário, com detalhes técnicos à parte
   printing.py          Impressão do documento (render do pdfium enviado à impressora)
@@ -432,9 +454,11 @@ ui/              Interface gráfica (PySide6)
   update_dialog.py     Aviso de atualização: o que mudou e o consentimento do usuário
   widget_state.py      Preserva o que foi preenchido nas abas ao trocar de idioma
   viewer/              Visualizador central: renderização, painel lateral (miniaturas,
-                       marcadores, anexos), busca, zoom, seleção de texto
+                       marcadores, anexos), busca, zoom, seleção de texto e a barra de
+                       marcação (markup_bar.py)
   pages/               Uma classe de página por ferramenta (MergePage, CompressPage, ...)
-  widgets/             Widgets reutilizáveis (FilePicker, FileListEditor, PageContainer)
+  widgets/             Widgets reutilizáveis (FilePicker, FileListEditor, DocumentSourceBar,
+                       FlowLayout, o painel de tarefas)
 
 tests/           Testes pytest (um arquivo por operação de core, + teste de fumaça da UI)
 

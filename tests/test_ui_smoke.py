@@ -49,12 +49,12 @@ def test_opening_annotations_activates_annotation_state_and_closing_deactivates(
     window.open_tool(annotations_row)
     doc = window.document
     assert window.annotation_state.is_page_active() is True
-    assert doc.tool_header.isVisibleTo(doc) and doc._tool_title.text() == "Anotações"
+    assert doc.current_panel().isVisibleTo(doc) and doc.current_panel().title_label.text() == "Anotações"
     assert doc._quick_buttons[annotations_row].isChecked()
 
     doc.close_tool()
     assert window.annotation_state.is_page_active() is False
-    assert not doc.tool_header.isVisibleTo(doc) and not doc.stack.isVisibleTo(doc)
+    assert not doc.stack.isVisibleTo(doc)
 
     window.close()
 

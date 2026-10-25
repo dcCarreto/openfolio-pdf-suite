@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QStackedWidget,
@@ -23,6 +22,7 @@ from ui.page_ranges import format_page_ranges, parse_page_ranges
 from ui.tasks import run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
+from ui.tool_panel import notify_error, notify_success
 
 _MB = 1024 * 1024
 
@@ -34,6 +34,7 @@ class SplitPage(QWidget):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
+        self.action_buttons: list[QPushButton] = []  # a ação de cada modo, no rodapé do painel
         self.session = session
 
         self.source_bar = DocumentSourceBar(session)
@@ -75,6 +76,7 @@ class SplitPage(QWidget):
             else:
                 layout.addLayout(row)
         button = QPushButton(button_text)
+        self.action_buttons.append(button)
         button.clicked.connect(action)
         layout.addWidget(button)
         return widget
@@ -155,16 +157,16 @@ class SplitPage(QWidget):
         input_path = self.session.path()
         output_dir = self.output_picker.path()
         if not input_path:
-            QMessageBox.warning(self, tr("Dividir"), tr("Abra um PDF para começar."))
+            notify_error(self, tr("Dividir"), tr("Abra um PDF para começar."))
             return
         if not output_dir:
-            QMessageBox.warning(self, tr("Dividir"), tr("Escolha a pasta de saída."))
+            notify_error(self, tr("Dividir"), tr("Escolha a pasta de saída."))
             return
 
         def done(output_paths):
             message = tr("PDF dividido em {count} arquivo(s).").format(count=len(output_paths))
             extra = describe(output_paths) if describe else ""
-            QMessageBox.information(self, tr("Dividir"), f"{message}\n\n{extra}" if extra else message)
+            notify_success(self, tr("Dividir"), f"{message}\n\n{extra}" if extra else message)
 
         run_task(
             self,
@@ -184,7 +186,7 @@ class SplitPage(QWidget):
     def _split_by_ranges(self):
         text = self.ranges_edit.text()
         if not text.strip(";, "):
-            QMessageBox.warning(self, tr("Dividir"), tr("Informe as páginas de cada arquivo."))
+            notify_error(self, tr("Dividir"), tr("Informe as páginas de cada arquivo."))
             return
 
         def task(path, folder):

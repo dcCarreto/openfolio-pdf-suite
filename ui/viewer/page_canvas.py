@@ -20,7 +20,11 @@ class PageCanvas(QLabel):
         if pixmap is None or pixmap.isNull():
             return QPointF(0, 0)
         size = pixmap.deviceIndependentSize()
-        return QPointF(max(0.0, (self.width() - size.width()) / 2), max(0.0, (self.height() - size.height()) / 2))
+        area = self.contentsRect()  # a margem de cima, com a barra de marcação aberta
+        return QPointF(
+            area.x() + max(0.0, (area.width() - size.width()) / 2),
+            area.y() + max(0.0, (area.height() - size.height()) / 2),
+        )
 
     def _page_position(self, event) -> QPointF:
         return event.position() - self.pixmap_offset()

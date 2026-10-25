@@ -127,8 +127,8 @@ def _viewer_with(tmp_path, monkeypatch):
 
 def test_dragging_draws_a_shape_with_the_chosen_width(tmp_path, monkeypatch):
     viewer, page, _session, state = _viewer_with(tmp_path, monkeypatch)
-    page.tool_buttons["arrow"].click()
-    page.width_spin.setValue(5)
+    state.set_tool("arrow")  # pela barra de marcação (tests/test_markup_bar.py)
+    state.set_width(5)
 
     viewer._on_canvas_pressed(20, 20)
     viewer._on_canvas_moved(80, 60)
@@ -143,7 +143,7 @@ def test_dragging_draws_a_shape_with_the_chosen_width(tmp_path, monkeypatch):
 
 def test_dragging_the_selected_comment_moves_and_resizes_it(tmp_path, monkeypatch):
     viewer, page, session, state = _viewer_with(tmp_path, monkeypatch)
-    page.tool_buttons["select"].click()
+    state.set_tool("select")
     _select(page, 1)  # o realce
     before = ListAnnotations().run(session.path())[1].rect
     screen = viewer._user_rect_to_screen(0, before)
@@ -183,7 +183,7 @@ def test_recolor_and_author_of_new_annotations(tmp_path, monkeypatch):
     page, session, state = _page_with_comments(tmp_path, monkeypatch)
     monkeypatch.setattr(QMessageBox, "information", lambda _p, _t, text, *a: shown.append(text))
     stamp_color = ListAnnotations().run(session.path())[2].color
-    page.color_buttons["2196f3"].click()
+    state.set_color("2196f3")
     _select(page, 0, 1, 2)
     page._recolor_comments()
     wait_for_tasks()
@@ -228,7 +228,7 @@ def test_window_ctrl_z_undoes_and_redoes_pending_marks(tmp_path):
 
         state.add_pending(second)  # anotação nova apaga o "refazer"
         assert not window._redo_action.isEnabled()
-        state.clear_pending()  # "Limpar pendentes" também se desfaz
+        state.clear_pending()  # "Descartar" também se desfaz
         window.undo()
         assert state.pending() == [first, second]
 
