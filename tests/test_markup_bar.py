@@ -293,3 +293,17 @@ def test_short_of_room_the_bar_tightens_before_going_compact(window, tmp_path):
 
     _show(window, 1920, 1080)
     assert not bar.is_tight() and bar.pending_text.isVisibleTo(bar)
+
+
+def test_comment_rows_fit_the_list_width(window, tmp_path):
+    plain = _pdf(tmp_path / "plain.pdf")
+    annotated = str(tmp_path / "anotado.pdf")
+    long_text = "Um comentário bem comprido que passaria da largura do painel " * 3
+    AddAnnotations().run(plain, annotated, [AnnotationSpec(page_index=0, kind="note", position=(9, 9), text=long_text)],
+                         author="Revisora com um nome longo")
+    window.open_document(annotated)
+    page = window.open_tool(window._row_of["AnnotationsPage"])
+    _show(window, 1440, 900)
+    rows = page.comments_list
+    rect = rows.visualRect(rows.model().index(0, 0))
+    assert rect.right() <= rows.viewport().width() and rows.horizontalScrollBar().maximum() == 0

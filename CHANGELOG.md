@@ -4,6 +4,14 @@ O OpenFolio PDF Suite não tem número de versão: há uma só, que recebe atual
 atualização é identificada pela data em que foi publicada e só é instalada se você aceitar,
 depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no aviso do app).
 
+## Próxima atualização
+
+### Anotações
+
+- Na lista de comentários de Anotações, um comentário longo (ou com um autor de nome comprido)
+  não empurra mais o selo "Gravado" para fora do painel, nem faz aparecer uma barra de rolagem
+  de lado.
+
 ## 2026-10-25
 
 ### Visual
