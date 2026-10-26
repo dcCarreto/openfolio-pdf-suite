@@ -119,7 +119,9 @@ class CommentDelegate(QStyledItemDelegate):
 
     def sizeHint(self, option, index):
         size = super().sizeHint(option, index)
-        return QSize(size.width(), ROW_HEIGHT if index.data(ROW_VIEW) else size.height())
+        # A largura é a da lista, não a do texto do item (o do leitor de tela, longo): sem isso a
+        # linha passava da lista e o selo "Gravado" ficava cortado.
+        return QSize(0, ROW_HEIGHT) if index.data(ROW_VIEW) else size
 
     def paint(self, painter: QPainter, option, index):
         view = index.data(ROW_VIEW)
@@ -266,6 +268,7 @@ class AnnotationsPage(QWidget):
         self.comments_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.comments_list.setItemDelegate(CommentDelegate(self.comments_list))
         self.comments_list.setMouseTracking(True)
+        self.comments_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.comments_list.setMinimumHeight(4 * ROW_HEIGHT)
         self.comments_list.itemSelectionChanged.connect(self._on_comment_selected)
         self.comment_text_edit = QPlainTextEdit()
