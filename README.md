@@ -55,7 +55,7 @@ coisa, ele mostra o que a atualização traz e pergunta; no Windows, se você ac
 confere o arquivo e instala sozinho. Tudo o que mudou fica em [CHANGELOG.md](CHANGELOG.md).
 
 <p align="center">
-  <img src="assets/screenshots/01-visao-geral.png" alt="Janela principal do OpenFolio PDF Suite: abas de documento, miniaturas à esquerda, um PDF aberto e a ferramenta Anotações à direita" width="900">
+  <img src="assets/screenshots/01-visao-geral.png" alt="Janela principal do OpenFolio PDF Suite: a faixa do topo com menus, abas e busca, um PDF aberto com a barra de marcação sobre a página e a ferramenta Anotações à direita" width="900">
 </p>
 
 A janela é organizada em abas: **Início** (abrir um PDF ou soltá-lo em qualquer parte da aba,
@@ -87,7 +87,7 @@ camadas. Se o PDF estiver protegido por senha, o próprio
 visualizador pede a senha na hora de abrir.
 
 <p align="center">
-  <img src="assets/screenshots/12-ferramentas.png" alt="Aba Ferramentas com todas as ferramentas em cartões, agrupadas por categoria" width="900">
+  <img src="assets/screenshots/12-ferramentas.png" alt="Aba Ferramentas com a busca, os filtros por categoria e todas as ferramentas em cartões, agrupadas por categoria" width="900">
 </p>
 
 O documento aberto é um documento de trabalho: as ferramentas aplicam o resultado nele, cada
@@ -183,8 +183,8 @@ o Tesseract, em vez de eu tentar resolver na unha algo onde um bug silencioso po
 ## Demonstração
 
 As capturas abaixo foram feitas rodando a aplicação de verdade: arquivos de exemplo reais são
-mesclados, comprimidos e processados, e os resultados (tamanho de arquivo, mensagens de sucesso)
-vêm da execução real das operações — não são mockups.
+mesclados, comprimidos e processados, e os resultados (tamanho de arquivo, o cartão de resultado
+no painel) vêm da execução real das operações — não são mockups.
 
 ### Mesclando arquivos
 
@@ -195,10 +195,11 @@ um arquivo de saída é escolhido:
   <img src="assets/screenshots/02-mesclar-arquivos.png" alt="Aba Mesclar com três relatórios mensais na lista, um marcador por arquivo e o arquivo de saída definido" width="900">
 </p>
 
-Ao clicar em **Mesclar**, os três arquivos são combinados em um único PDF de verdade:
+Ao clicar em **Mesclar** (ou Ctrl+Enter), os três arquivos são combinados em um único PDF de
+verdade, que abre numa aba; o resultado aparece no rodapé do próprio painel:
 
 <p align="center">
-  <img src="assets/screenshots/03-mesclar-sucesso.png" alt="Mensagem de sucesso após mesclar os PDFs">
+  <img src="assets/screenshots/03-mesclar-sucesso.png" alt="Painel Mesclar com o cartão de sucesso no rodapé e o PDF mesclado, de seis páginas, aberto" width="900">
 </p>
 
 ### Comprimindo um PDF
@@ -209,11 +210,11 @@ Um contrato de 25 páginas, com uma foto na primeira, está aberto no visualizad
   <img src="assets/screenshots/04-comprimir-config.png" alt="Aba Comprimir com o contrato de 25 páginas aberto e o nível médio escolhido" width="900">
 </p>
 
-O resultado mostra o tamanho real antes e depois da compressão (a foto é recomprimida a
-150 DPI) e fica no documento aberto, com Ctrl+Z para desfazer:
+O cartão de resultado mostra o tamanho real antes e depois da compressão (a foto é recomprimida
+a 150 DPI), e o resultado fica no documento aberto, com Desfazer ali mesmo ou Ctrl+Z:
 
 <p align="center">
-  <img src="assets/screenshots/05-comprimir-sucesso.png" alt="Mensagem de sucesso mostrando a redução de 2646 KB para 64 KB, com uma imagem recomprimida">
+  <img src="assets/screenshots/05-comprimir-sucesso.png" alt="Cartão de resultado no painel Comprimir mostrando a redução de 2646 KB para 64 KB, com uma imagem recomprimida, e os botões Desfazer e Concluir" width="900">
 </p>
 
 ### Marca d'água
@@ -248,7 +249,7 @@ a cor, a espessura e "Gravar", e o painel lista as marcações pendentes e os co
 gravados:
 
 <p align="center">
-  <img src="assets/screenshots/08-anotacoes.png" alt="Aba Anotações com um realce amarelo aplicado sobre um trecho do documento" width="900">
+  <img src="assets/screenshots/08-anotacoes.png" alt="Anotações com a barra de marcação sobre a página e o Realce escolhido, um realce amarelo sobre um trecho do documento e a lista de comentários gravados no painel" width="900">
 </p>
 
 ### OCR (texto pesquisável)
