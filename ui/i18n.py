@@ -1166,6 +1166,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "{count} streams com compressão LZW recodificados.": "{count} LZW-compressed streams re-encoded.",
     "1 anotação sem aparência definida (/AP).": "1 annotation without a defined appearance (/AP).",
     "{count} anotações sem aparência definida (/AP).": "{count} annotations without a defined appearance (/AP).",
+    "Assinatura com validade criptográfica: quem receber o PDF consegue conferir quem assinou e se ele mudou depois.": "A signature with cryptographic validity: whoever gets the PDF can check who signed it and whether it changed afterwards.",
     # Annotations: tools
     "Selecionar": "Select",
     "Realce": "Highlight",

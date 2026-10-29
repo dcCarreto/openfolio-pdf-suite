@@ -244,6 +244,14 @@ class SignaturePage(QWidget):
 
         layout.addWidget(QLabel(tr("Arquivo PDF de entrada:")))
         layout.addWidget(self.source_bar)
+        # O que diferencia este modo do "Assinar à mão" (que não usa certificado).
+        validity = QLabel(
+            tr("Assinatura com validade criptográfica: quem receber o PDF consegue conferir quem assinou e se ele mudou depois.")
+        )
+        validity.setObjectName("SignatureValidity")
+        validity.setProperty("ofRole", "help")
+        validity.setWordWrap(True)
+        layout.addWidget(validity)
         layout.addWidget(QLabel(tr("Certificado:")))
         layout.addWidget(self.cert_mode_combo)
         layout.addWidget(self.cert_stack)

@@ -162,9 +162,11 @@ def _containing_layout(layout: QLayout, widget: QWidget) -> QLayout | None:
 
 
 def _take_out(page: QWidget, widget: QWidget) -> None:
-    """Tira `widget` do formulário da página, com o rótulo simples logo antes dele."""
-    page_layout = page.layout()
-    layout = _containing_layout(page_layout, widget) if page_layout is not None else None
+    """Tira `widget` do formulário da página, com o rótulo simples logo antes dele. O
+    formulário pode ser o de um modo (um widget dentro da página): procura no layout do pai dele."""
+    parent = widget.parentWidget()
+    root = parent.layout() if parent is not None and parent is not page else page.layout()
+    layout = _containing_layout(root, widget) if root is not None else None
     if layout is None:
         return
     index = layout.indexOf(widget)
