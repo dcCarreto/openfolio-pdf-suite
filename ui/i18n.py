@@ -724,9 +724,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "alterações não salvas": "unsaved changes",
     "Executar a ação da ferramenta": "Run the tool's action",
     # Tool panel (ui/tool_panel.py) and its input/output widgets
-    "Entrada": "Input",
     "Opções": "Options",
-    "Saída": "Output",
+    "Onde fica o resultado": "Where the result goes",
     "Fechar ferramenta (Esc)": "Close tool (Esc)",
     "Escolha um PDF de entrada para habilitar.": "Choose an input PDF to enable.",
     "Você pode continuar lendo enquanto isso.": "You can keep reading meanwhile.",

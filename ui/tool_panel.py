@@ -197,7 +197,7 @@ class ToolPanel(QFrame):
         if (page_layout := page.layout()) is not None:
             page_layout.setContentsMargins(0, 0, 0, 0)
         if input_widget is not None:
-            self.add_section(tr("Entrada"), input_widget)
+            self.add_section(tr("Arquivo"), input_widget)
         # Uma seção própria da ferramenta, com título que ela mesma atualiza (os comentários
         # de Anotações): entre a entrada e as opções.
         extra = getattr(page, "extra_section", None)
@@ -205,7 +205,7 @@ class ToolPanel(QFrame):
             self.add_section("", extra[1], label=extra[0])
         options_label = self.add_section(tr("Opções"), page)
         if output_widget is not None:
-            self.add_section(tr("Saída"), output_widget)
+            self.add_section(tr("Onde fica o resultado"), output_widget)
         if not any(child.isVisibleTo(page) and child not in self._actions for child in page.findChildren(QWidget)):
             options_label.hide()  # sem opções (Extrair texto): a seção não aparece vazia
             page.hide()
@@ -282,7 +282,7 @@ class ToolPanel(QFrame):
 
     def add_section(self, title: str, widget: QWidget, label: QLabel | None = None) -> QLabel:
         if label is None:
-            label = QLabel(title.upper())
+            label = QLabel(title)
             label.setProperty("ofRole", "section")
         section = QVBoxLayout()
         section.setSpacing(8)

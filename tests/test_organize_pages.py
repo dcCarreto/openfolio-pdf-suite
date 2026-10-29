@@ -182,7 +182,7 @@ def test_each_pending_change_is_listed_and_can_be_undone_alone(organizer):
     page.delete_selected()
     page.insert_blank()  # sem seleção: no fim
     assert page.changes() == ["Girou a página 1 à direita", "Apagou a página 2", "Inseriu uma página em branco"]
-    assert page.changes_title.text() == "ALTERAÇÕES PENDENTES · 3"
+    assert page.changes_title.text() == "Alterações pendentes · 3"
     assert page.apply_button.text() == "Aplicar 3 alterações"
 
     page.remove_change(1)  # o "×" do meio: a página 2 volta, o resto fica

@@ -106,7 +106,7 @@ class _PaletteDelegate(QStyledItemDelegate):
             painter.setFont(header)
             painter.setPen(QColor(t["text3"]))
             title = dict(GROUPS)[index.data(_GROUP)]
-            painter.drawText(rect.adjusted(14, 8, -14, 0).topLeft() + QPoint(0, 11), tr(title).upper())
+            painter.drawText(rect.adjusted(14, 8, -14, 0).topLeft() + QPoint(0, 11), tr(title))
             rect.setTop(rect.top() + HEADER_HEIGHT)
         row = rect.adjusted(6, 2, -6, -2)
         current = bool(option.state & QStyle.StateFlag.State_Selected)
@@ -221,7 +221,7 @@ class CommandPalette(QDialog):
         layout.addWidget(field)
         layout.addWidget(self.list, 1)
         layout.addWidget(footer)
-        self.frame.setGraphicsEffect(theme.floating_shadow(self.frame))
+        self.frame.setGraphicsEffect(theme.floating_shadow(self.frame, modal=True))
 
         self._actions = []
         self._haystacks = []

@@ -49,10 +49,10 @@ def test_every_tool_follows_the_panel_pattern(window, tmp_path, row):
     page = doc.open_tool(row)
     panel = doc.panel(row)
 
-    expected = ["ENTRADA"] if hasattr(page, "source_bar") else []
+    expected = ["Arquivo"] if hasattr(page, "source_bar") else []
     expected += [page.extra_section[0].text()] if hasattr(page, "extra_section") else []  # Comentários
-    expected += [] if SECTIONS[row][4] in _WITHOUT_OPTIONS else ["OPÇÕES"]
-    expected += ["SAÍDA"] if hasattr(page, "output_picker") else []
+    expected += [] if SECTIONS[row][4] in _WITHOUT_OPTIONS else ["Opções"]
+    expected += ["Onde fica o resultado"] if hasattr(page, "output_picker") else []
     assert _section_titles(panel) == expected
     assert panel.title_label.text() == SECTIONS[row][1] and panel.close_button.isVisibleTo(panel)
     if getattr(page, "action_buttons", []):

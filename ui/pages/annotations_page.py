@@ -379,7 +379,7 @@ class AnnotationsPage(QWidget):
             self.comments_list.addItem(tr("Nenhum comentário no documento."))
             self.comments_list.item(0).setFlags(self.comments_list.item(0).flags() & ~Qt.ItemFlag.ItemIsSelectable)
         count = len(pending) + len(self._comments)
-        self.comments_title.setText(tr("Comentários · {count}").format(count=count).upper())
+        self.comments_title.setText(tr("Comentários · {count}").format(count=count))
         self.comments_list.blockSignals(False)
         self._apply_page_filter()
         self._on_comment_selected()

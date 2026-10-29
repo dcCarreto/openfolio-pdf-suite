@@ -235,7 +235,7 @@ def test_the_comments_list_marks_pending_and_saved(window, tmp_path):
     state.add_pending(AnnotationSpec(page_index=0, kind="highlight", quads=[(10, 10, 90, 30)], color="ffeb3b"))
 
     rows = [page.comments_list.item(row) for row in range(page.comments_list.count())]
-    assert page.comments_title.text() == "COMENTÁRIOS · 2"
+    assert page.comments_title.text() == "Comentários · 2"
     assert [row.data(Qt.ItemDataRole.UserRole + 1)[4] for row in rows] == [True, False]  # pendente, gravado
     assert "Pendente" in rows[0].text() and "Gravada" not in rows[0].text()
 

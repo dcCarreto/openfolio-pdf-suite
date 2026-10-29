@@ -87,7 +87,7 @@ class ColorSwatch(QToolButton):
             painter.drawEllipse(circle)
             if self.isChecked():
                 painter.setBrush(Qt.BrushStyle.NoBrush)
-                check = QColor("#ffffff") if fill.lightnessF() < 0.5 else QColor("#161826")
+                check = QColor("#ffffff") if fill.lightnessF() < 0.5 else QColor("#141b25")
                 pen = QPen(check, 2)
                 pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                 painter.setPen(pen)
