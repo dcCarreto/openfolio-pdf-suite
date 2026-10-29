@@ -1255,13 +1255,14 @@ QListWidget#OrganizerView {{
     background-color: {t["canvas"]};
     border: none;
     outline: none;
+    padding: 24px 28px;
 }}
 
 QLabel#SelectionBadge {{
     background-color: {t["accent_fill"]};
     color: {t["accent_strong"]};
     border-radius: 12px;
-    padding: 3px 10px;
+    padding: 0 10px;
     font-size: 12px;
     font-weight: 600;
 }}
@@ -1277,14 +1278,39 @@ QToolButton[ofRole="toolbar"]:disabled {{
     color: {t["text3"]};
 }}
 
+QToolButton[ofRole="toolbar"][ofTone="danger"] {{
+    color: {t["danger"]};
+}}
+
+/* Girar: o ▾ embutido, com "Girar à esquerda". */
+QToolButton[ofRole="toolbar"]::menu-button {{
+    width: 16px;
+    border: none;
+    background: transparent;
+}}
+
+QToolButton[ofRole="toolbar"]::menu-arrow {{
+    image: url(of:caret-down-{key}.png);
+    width: 10px;
+    height: 10px;
+}}
+
+QToolButton[ofRole="toolbar"][popupMode="1"] {{
+    padding-right: 20px;
+}}
+
 QListWidget#ChangesList {{
     background: transparent;
     border: none;
 }}
 
-#ChangeRow {{
+QFrame#ChangeRow {{
     background-color: {t["raised"]};
     border-radius: 8px;
+}}
+
+QFrame#ChangeRow QLabel {{
+    background: transparent;
 }}
 
 /* -- paleta de comandos (ui/shortcuts.py) ---------------------------------------- */

@@ -348,7 +348,9 @@ def build_duplicate_icon() -> QIcon:
     return _build(draw)
 
 
-def build_trash_icon() -> QIcon:
+def build_trash_icon(color=None) -> QIcon:
+    """trash; `color` ("danger") para excluir."""
+
     def draw(p):
         p.drawLine(QPointF(4, 6), QPointF(20, 6))
         _poly(p, (9, 6), (9, 3.5), (15, 3.5), (15, 6))
@@ -356,7 +358,7 @@ def build_trash_icon() -> QIcon:
         p.drawLine(QPointF(10, 10), QPointF(10, 16.5))
         p.drawLine(QPointF(14, 10), QPointF(14, 16.5))
 
-    return _build(draw)
+    return _build(draw, color=color)
 
 
 # -- estados e tarefas ----------------------------------------------------------------------

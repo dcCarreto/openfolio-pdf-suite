@@ -35,7 +35,7 @@ def _pdf(path, pages=2):
     return str(path)
 
 
-_WITHOUT_OPTIONS = {"ExtractTextPage", "ExtractImagesPage"}  # só entrada e saída
+_WITHOUT_OPTIONS = {"ExtractTextPage", "ExtractImagesPage", "OrganizePage"}  # só entrada (ou a grade) e saída
 
 
 def _section_titles(panel) -> list[str]:

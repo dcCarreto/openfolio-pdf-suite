@@ -663,6 +663,9 @@ class MainWindow(QMainWindow):
             ("rotate_left", tr("Girar à esquerda"), "Ctrl+[", lambda page: page.rotate_selected(270)),
             ("rotate_right", tr("Girar à direita"), "Ctrl+]", lambda page: page.rotate_selected(90)),
             ("duplicate", tr("Duplicar"), "", lambda page: page.duplicate_selected()),
+            # Mover sem o mouse (arrastar é o jeito de mover com ele).
+            ("move_back", tr("Mover para trás"), "Alt+Left", lambda page: page.move_selected(-1)),
+            ("move_forward", tr("Mover para a frente"), "Alt+Right", lambda page: page.move_selected(1)),
         ):
             action = QAction(label, self)
             action.setObjectName(f"organize.{key}")

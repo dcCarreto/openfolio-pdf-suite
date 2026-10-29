@@ -215,7 +215,9 @@ class ToolPanel(QFrame):
         options_label = self.add_section(tr(getattr(page, "options_title", "Opções")), page)
         if output_widget is not None:
             self.add_section(tr("Onde fica o resultado"), output_widget)
-        if not any(child.isVisibleTo(page) and child not in self._actions for child in page.findChildren(QWidget)):
+        # Os botões da ação e os do rodapé ("Descartar") saem da página: não contam como opções.
+        leaving = [*self._actions, *getattr(page, "footer_buttons", [])]
+        if not any(child.isVisibleTo(page) and child not in leaving for child in page.findChildren(QWidget)):
             options_label.hide()  # sem opções (Extrair texto): a seção não aparece vazia
             page.hide()
         self._sections.addStretch(1)  # a sobra fica embaixo, e não entre as seções

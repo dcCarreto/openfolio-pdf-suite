@@ -762,6 +762,8 @@ class DocumentTab(QWidget):
             widget.show()
         self.viewer.toolbar.setVisible(widget is None)
         self.viewer.setVisible(widget is None)
+        # A grade já mostra todas as páginas: as miniaturas da lateral saem enquanto ela está aberta.
+        self.side_container.setVisible(widget is None and not self.viewer.side_panel.isHidden())
 
     def center_widget(self) -> QWidget | None:
         """O que está no lugar do visualizador agora, ou None."""
