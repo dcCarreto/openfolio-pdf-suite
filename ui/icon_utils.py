@@ -12,6 +12,7 @@ entre o tema escuro e o claro não exige recriar os ícones já postos em botõe
 from PySide6.QtCore import QRect, QSize, Qt
 from PySide6.QtGui import QIcon, QIconEngine, QPainter, QPen, QPixmap
 
+from ui.theme import color as token_color
 from ui.theme import icon_color
 
 DEFAULT_SIZE = 24  # a grade em que os ícones são desenhados
@@ -24,14 +25,17 @@ class _ThemedIconEngine(QIconEngine):
         super().__init__()
         self._draw = draw
         self._size = size
-        self._color = color  # fixa (sucesso, erro); sem ela, a do tema e do estado
+        self._color = color  # fixa, ou um token ("success"); sem ela, a do tema e do estado
 
     def paint(self, painter: QPainter, rect: QRect, mode: QIcon.Mode, state: QIcon.State) -> None:
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.translate(rect.topLeft())
         painter.scale(rect.width() / self._size, rect.height() / self._size)
-        pen = QPen(self._color if self._color is not None else icon_color(mode, state))
+        if isinstance(self._color, str):
+            pen = QPen(token_color(self._color))  # o token lido ao pintar: segue o tema
+        else:
+            pen = QPen(self._color if self._color is not None else icon_color(mode, state))
         # Na grade de 24: 1,5; num ícone pequeno (18 px), engrossa para não passar de 1,25 px.
         scale = min(rect.width(), rect.height()) / self._size or 1
         pen.setWidthF(max(STROKE, MIN_STROKE_PX / scale))

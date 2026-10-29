@@ -81,6 +81,7 @@ def test_main_window_has_menu_bar_and_status_bar():
 
     menu_titles = [action.text() for action in window.menuBar().actions()]
     assert menu_titles == ["Arquivo", "Editar", "Exibir", "Ajuda"]
-    assert window.statusBar().currentMessage() != ""
+    # A promessa de privacidade fica sempre na barra de status.
+    assert window._privacy_label.text() == "Local · nenhum arquivo sai deste computador"
 
     window.close()

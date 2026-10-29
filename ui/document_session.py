@@ -27,6 +27,7 @@ import os
 import shutil
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
@@ -59,6 +60,7 @@ class DocumentSession(QObject):
         self._versions: list[_Version] = []
         self._index = -1
         self._saved_index = -1
+        self._saved_at: datetime | None = None
         self._work_dir: str | None = None
         self._pending: set[str] = set()
         self._counter = 0
@@ -85,6 +87,18 @@ class DocumentSession(QObject):
 
     def is_modified(self) -> bool:
         return bool(self._versions) and self._index != self._saved_index
+
+    def unsaved_changes(self) -> int:
+        """Quantas alterações aplicadas separam o documento do arquivo no disco (a barra de
+        status diz "2 alterações aplicadas, não salvas"). Com a versão salva fora do
+        histórico, conta a partir da abertura."""
+        if not self.is_modified():
+            return 0
+        return abs(self._index - self._saved_index) if self._saved_index >= 0 else max(1, self._index)
+
+    def saved_at(self) -> datetime | None:
+        """Quando o documento foi salvo nesta sessão ("Salvo às 14:32"), ou None."""
+        return self._saved_at
 
     def can_undo(self) -> bool:
         return self._index > 0
@@ -199,6 +213,7 @@ class DocumentSession(QObject):
         if _key(current) != _key(self._source):
             _copy_atomically(current, self._source)
         self._saved_index = self._index
+        self._saved_at = datetime.now()
         self.history_changed.emit()
 
     def save_as(self, path: str) -> None:
@@ -214,6 +229,7 @@ class DocumentSession(QObject):
             remember_password(path, password)
         self._source = path
         self._saved_index = self._index
+        self._saved_at = datetime.now()
         self.history_changed.emit()
 
     def discard_temporary_files(self) -> None:
@@ -237,6 +253,7 @@ class DocumentSession(QObject):
         self._versions = []
         self._index = -1
         self._saved_index = -1
+        self._saved_at = None
         self._pending = set()
 
     def _remove_work_dir(self) -> None:

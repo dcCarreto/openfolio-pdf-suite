@@ -200,5 +200,5 @@ def test_icons_follow_the_state(app):
 
     assert color(QIcon.Mode.Normal) == t["text2"]
     assert color(QIcon.Mode.Active) == t["text"]
-    assert color(QIcon.Mode.Normal, QIcon.State.On) == t["accent_strong"]
-    assert color(QIcon.Mode.Selected) == t["accent_strong"]
+    assert color(QIcon.Mode.Normal, QIcon.State.On) == t["accent"]
+    assert color(QIcon.Mode.Selected) == t["accent"]

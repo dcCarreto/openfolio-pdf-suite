@@ -21,6 +21,7 @@ from PySide6.QtCore import QEvent, QPoint, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QSplitter,
     QStackedWidget,
     QToolButton,
@@ -41,7 +42,7 @@ from ui.top_bar import BusySpinner, TabCloseButton
 from ui.tools import AREA_PICK_PAGES, QUICK_TOOLS, ROW_OF, SECTIONS
 from ui.viewer.markup_bar import TOP_INSET, MarkupBar
 from ui.viewer.pdf_viewer import PdfViewer
-from ui.viewer.viewer_icons import build_print_icon, build_save_icon, build_thumbnails_icon
+from ui.viewer.viewer_icons import build_print_icon, build_thumbnails_icon
 from ui.widget_state import capture_state, restore_state
 from ui.widgets.task_status import TaskStatus
 
@@ -135,15 +136,26 @@ class DocumentTab(QWidget):
         )
         self.viewer.setMinimumWidth(VIEWER_MIN_WIDTH)
         self.viewer.verify_signatures_requested.connect(self._verify_signatures)
+        self.viewer.remove_password_requested.connect(self._remove_password)
         self.viewer.thumbnails_button.hide()  # a coluna de ícones da esquerda faz o papel dele
-        # Salvar e Imprimir logo depois de "Abrir"; a janela liga os cliques.
-        self.save_button = self.viewer._tool_button(build_save_icon(), "Salvar (Ctrl+S)")
-        self.save_button.setEnabled(False)
+        # Na ponta da barra: Imprimir e o selo de estado ("✓ Salvo" ou "● Alterações não
+        # salvas" + Salvar). A janela liga os cliques.
         self.print_button = self.viewer._tool_button(build_print_icon(), "Imprimir... (Ctrl+P)")
         self.print_button.setEnabled(False)
+        self.state_badge = QLabel()
+        self.state_badge.setProperty("ofRole", "badge")
+        self.state_badge.setFixedHeight(22)
+        self.save_button = QPushButton()
+        self.save_button.setProperty("ofVariant", "primary")
+        self.save_button.setProperty("ofSize", "mini")
+        self.save_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.save_button.setEnabled(False)
         toolbar_layout = self.viewer.toolbar.layout()
-        toolbar_layout.insertWidget(1, self.save_button)
-        toolbar_layout.insertWidget(2, self.print_button)
+        toolbar_layout.addWidget(self.print_button)
+        toolbar_layout.addSpacing(4)
+        toolbar_layout.addWidget(self.state_badge)
+        toolbar_layout.addWidget(self.save_button)
+        self._narrow = False
 
         # Um painel por ferramenta, construído na primeira vez em que ela é aberta.
         self.stack = QStackedWidget()
@@ -457,6 +469,9 @@ class DocumentTab(QWidget):
         width = self.width()
         self.viewer.set_compact(width < NARROW_WIDTH)
         self._set_drawer(width < NARROW_WIDTH)
+        if (width < NARROW_WIDTH) != self._narrow:
+            self._narrow = width < NARROW_WIDTH
+            self.update_state_badge()
         # Pelas larguras padrão dos painéis: o divisor já espreme os dois quando falta espaço.
         tool_open = self._tool >= 0
         center = width - LEFT_RAIL_WIDTH - RIGHT_RAIL_WIDTH - SIDE_WIDTH - PANEL_WIDTH
@@ -619,6 +634,11 @@ class DocumentTab(QWidget):
         page.mode_combo.setCurrentIndex(1)
         page._apply_verify()
 
+    def _remove_password(self):
+        """"Remover senha" do aviso de documento protegido: abre a ferramenta nesse modo."""
+        page = self.open_tool(ROW_OF["ProtectPage"])
+        page.mode_combo.setCurrentIndex(2)
+
     # -- operações em andamento --------------------------------------------------------
 
     def _on_task_started(self, title: str):
@@ -660,21 +680,35 @@ class DocumentTab(QWidget):
         self.set_tool_shortcuts(self._tool_keys)
         self.all_tools_button.setToolTip(tr("Todas as ferramentas"))
         self._update_side_header()
-        self.save_button.setToolTip(tr("Salvar (Ctrl+S)"))
         self.print_button.setToolTip(tr("Imprimir... (Ctrl+P)"))
+        self.update_state_badge()
         self._update_quick_buttons()
+
+    def update_state_badge(self) -> None:
+        """O selo da barra do visualizador: "✓ Salvo" ou "● Alterações não salvas" com o botão
+        Salvar (só "Não salvo" na janela estreita). Sem documento, nada."""
+        has_document = self.session.path() is not None
+        modified = has_document and self.session.is_modified()
+        if modified:
+            text = tr("Não salvo") if self._narrow else tr("Alterações não salvas")
+            self.state_badge.setText(f"● {text}")
+        else:
+            self.state_badge.setText(f"✓ {tr('Salvo')}")
+        self.state_badge.setProperty("state", "unsaved" if modified else "saved")
+        self.state_badge.style().unpolish(self.state_badge)
+        self.state_badge.style().polish(self.state_badge)
+        self.state_badge.setVisible(has_document)
+        self.save_button.setText(tr("Salvar"))
+        self.save_button.setToolTip(tr("Salvar (Ctrl+S)"))
+        self.save_button.setVisible(modified)
 
     def is_empty(self) -> bool:
         return self.session.path() is None
 
-    def title(self, modified_mark: bool = True) -> str:
-        """O nome do arquivo, com "*" se houver alterações não salvas (a aba mostra um ponto
-        no lugar e pede `modified_mark=False`)."""
+    def title(self) -> str:
+        """O nome do arquivo. O estado (não salvo) fica no selo e no ponto da aba, não no nome."""
         source = self.session.source_path()
-        if not source:
-            return tr("Sem documento")
-        modified = modified_mark and self.session.is_modified()
-        return f"{Path(source).name}{' *' if modified else ''}"
+        return Path(source).name if source else tr("Sem documento")
 
     def shutdown(self) -> None:
         """Ao fechar a aba: solta o arquivo no pdfium e apaga as versões temporárias."""

@@ -378,8 +378,8 @@ def build_clock_icon() -> QIcon:
     return _build(draw)
 
 
-def build_list_checks_icon() -> QIcon:
-    """list-checks: as tarefas."""
+def build_list_checks_icon(color=None) -> QIcon:
+    """list-checks: as tarefas (no acento, `color="accent"`, na barra de status)."""
 
     def draw(p):
         _poly(p, (3.5, 6.5), (5, 8), (8, 5))
@@ -388,7 +388,7 @@ def build_list_checks_icon() -> QIcon:
         p.drawLine(QPointF(11, 13.5), QPointF(20, 13.5))
         p.drawLine(QPointF(11, 19), QPointF(20, 19))
 
-    return _build(draw)
+    return _build(draw, color=color)
 
 
 def build_update_icon() -> QIcon:

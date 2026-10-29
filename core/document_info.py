@@ -9,10 +9,19 @@ from .base import READ, EncryptedPDFError, open_reader
 from .messages import Message
 
 
+# O tipo de cada aviso, que define a cor da faixa e o botão dela.
+PROTECTED, SIGNED, FORM, LAYERS = "protected", "signed", "form", "layers"
+
+
 @dataclass
 class DocumentNotices:
     messages: list[str] = field(default_factory=list)
+    kinds: list[str] = field(default_factory=list)  # um por mensagem: PROTECTED, SIGNED, FORM ou LAYERS
     signature_count: int = 0
+
+    def add(self, kind: str, message) -> None:
+        self.kinds.append(kind)
+        self.messages.append(message)
 
 
 def document_notices(path: str) -> DocumentNotices:
@@ -20,7 +29,7 @@ def document_notices(path: str) -> DocumentNotices:
     try:
         reader = open_reader(path, purpose=READ)
     except EncryptedPDFError:
-        notices.messages.append(Message("Protegido por senha."))
+        notices.add(PROTECTED, Message("Protegido por senha."))
         return notices
     except Exception:
         return notices
@@ -31,9 +40,9 @@ def document_notices(path: str) -> DocumentNotices:
             permissions & UserAccessPermissions.MODIFY and permissions & UserAccessPermissions.EXTRACT
         )
         if restricted:
-            notices.messages.append(Message("O autor restringiu alterações ou cópia (senha de permissões)."))
+            notices.add(PROTECTED, Message("Protegido: o autor bloqueou alterações ou cópia."))
         else:
-            notices.messages.append(Message("Protegido por senha."))
+            notices.add(PROTECTED, Message("Protegido por senha."))
 
     try:
         fields = reader.get_fields() or {}
@@ -42,12 +51,13 @@ def document_notices(path: str) -> DocumentNotices:
     signatures = [f for f in fields.values() if f.field_type == "/Sig" and f.value is not None]
     fillable = [f for f in fields.values() if f.field_type not in (None, "/Sig")]
     notices.signature_count = len(signatures)
-    if signatures:
-        notices.messages.append(
-            Message("Assinado digitalmente ({count} assinatura(s)). Alterar o documento invalida a assinatura.", count=len(signatures))
-        )
+    # Só a estrutura: a validade de cada assinatura sai do "Ver" (verificação completa).
+    if len(signatures) == 1:
+        notices.add(SIGNED, Message("1 assinatura digital. Alterar o PDF a invalida."))
+    elif signatures:
+        notices.add(SIGNED, Message("{count} assinaturas digitais. Alterar o PDF as invalida.", count=len(signatures)))
     if fillable:
-        notices.messages.append(Message("Tem formulário ({count} campo(s)): clique num campo para preencher.", count=len(fillable)))
+        notices.add(FORM, Message("Este PDF tem campos de formulário. Clique em um campo para preencher."))
     if "/OCProperties" in reader.root_object:
-        notices.messages.append(Message("Tem camadas (veja a aba Camadas)."))
+        notices.add(LAYERS, Message("Este PDF tem camadas: partes que podem ser mostradas ou ocultadas."))
     return notices

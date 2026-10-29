@@ -147,7 +147,7 @@ def test_the_tasks_button_and_popover(window, tmp_path):
     try:
         run_task(doc.viewer, "Lenta", lambda progress: release.wait(5))
         QApplication.processEvents()
-        assert window.tasks_button.isVisible() and window.tasks_button.text() == "1 tarefa"
+        assert window.tasks_button.isVisible() and window.tasks_button.text() == "1 tarefa em andamento"
         window.tasks_button.click()
         popover = window.tasks_button.popover
         assert popover.isVisible() and popover.rows.count() == 1
@@ -155,10 +155,11 @@ def test_the_tasks_button_and_popover(window, tmp_path):
     finally:
         release.set()
     assert wait_for_tasks()
-    assert not window.tasks_button.isVisible()  # só aparece com tarefa rodando
+    assert window.tasks_button.text() == "1 concluída"
     assert [entry.state for entry in window.task_log.entries] == ["ok"]
     popover.clear_button.click()
     assert window.task_log.entries == []
+    assert not window.tasks_button.isVisible()  # só aparece quando há tarefas
 
 
 # -- aviso de atualização -----------------------------------------------------------------------

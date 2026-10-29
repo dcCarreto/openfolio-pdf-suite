@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui import theme
-from ui.i18n import tr
+from ui.i18n import plural, tr
 from ui.top_bar import BusySpinner
 from ui.viewer.viewer_icons import build_check_circle_icon, build_close_icon, build_list_checks_icon, build_warning_circle_icon
 
@@ -129,6 +129,8 @@ class _TaskRow(QFrame):
 class TaskPopover(QFrame):
     """Acima do botão "N tarefas", alinhado à direita dele."""
 
+    hidden = Signal()
+
     def __init__(self, log: TaskLog, parent=None):
         super().__init__(parent, Qt.WindowType.Popup)
         self.setObjectName("TaskPopover")
@@ -169,6 +171,10 @@ class TaskPopover(QFrame):
         self.clear_button.setEnabled(any(entry.state != RUNNING for entry in self._log.entries))
         self.adjustSize()
 
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self.hidden.emit()
+
     def show_above(self, button: QWidget):
         self.refresh()
         corner = button.mapToGlobal(QPoint(button.width(), 0))
@@ -177,25 +183,44 @@ class TaskPopover(QFrame):
 
 
 class TasksButton(QToolButton):
-    """"N tarefas" na barra de status, enquanto alguma operação roda; abre o popover."""
+    """Na barra de status, só quando há tarefas: "1 tarefa em andamento" ou "1 em andamento ·
+    3 concluídas". Abre o popover (e fica marcado enquanto ele está aberto)."""
 
     def __init__(self, log: TaskLog, parent=None):
         super().__init__(parent)
         self.setObjectName("TasksButton")
-        self.setIcon(build_list_checks_icon())
+        self.setIcon(build_list_checks_icon("accent"))
         self.setIconSize(QSize(14, 14))
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setCheckable(True)
         self._log = log
         self.popover = TaskPopover(log, self)
-        self.clicked.connect(lambda: self.popover.show_above(self))
+        self.popover.hidden.connect(lambda: self.setChecked(False))
+        self.clicked.connect(self._toggle)
         log.changed.connect(self.refresh)
         self.refresh()
 
+    def _toggle(self):
+        self.setChecked(True)
+        self.popover.show_above(self)
+
     def refresh(self):
         running = self._log.running()
-        text = tr("{count} tarefas").format(count=running) if running != 1 else tr("1 tarefa")
+        done = sum(entry.state == DONE for entry in self._log.entries)
+        failed = sum(entry.state == FAILED for entry in self._log.entries)
+        parts = []
+        if running:
+            parts.append(plural(running, "1 em andamento", "{count} em andamento"))
+        if done:
+            parts.append(plural(done, "1 concluída", "{count} concluídas"))
+        if failed:
+            parts.append(plural(failed, "1 falhou", "{count} falharam"))
+        if running and len(parts) == 1:
+            text = plural(running, "1 tarefa em andamento", "{count} tarefas em andamento")
+        else:
+            text = " · ".join(parts) or plural(len(self._log.entries), "1 tarefa", "{count} tarefas")
         self.setText(text)
         self.setAccessibleName(text)
         self.setToolTip(tr("Tarefas"))
-        self.setVisible(running > 0)
+        self.setVisible(bool(self._log.entries))

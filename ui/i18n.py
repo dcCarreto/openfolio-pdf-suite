@@ -42,6 +42,11 @@ def tr(text: str) -> str:
     return _EN_TRANSLATIONS.get(text, text)
 
 
+def plural(count: int, one: str, many: str) -> str:
+    """"1 página" / "25 páginas": `one` sem {count} no singular, `many` com {count}."""
+    return tr(one if count == 1 else many).format(count=count)
+
+
 def tr_message(text) -> str:
     """Traduz um texto vindo do `core`: uma `core.messages.Message` (modelo + valores) ou um
     texto fixo, procurado no dicionário como qualquer outro."""
@@ -727,6 +732,24 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Opções": "Options",
     "Onde fica o resultado": "Where the result goes",
     "Fechar ferramenta (Esc)": "Close tool (Esc)",
+    # Faixa do topo, barra de status e selo de estado do documento
+    "Ajuste e rotação": "Fit and rotation",
+    "Modo de exibição": "View mode",
+    "Local · nenhum arquivo sai deste computador": "Local · no file leaves this computer",
+    "Salvo às {time}": "Saved at {time}",
+    "Sem alterações": "No changes",
+    "Salvo": "Saved",
+    "Não salvo": "Unsaved",
+    "1 alteração aplicada, não salva": "1 change applied, not saved",
+    "{count} alterações aplicadas, não salvas": "{count} changes applied, not saved",
+    "1 em andamento": "1 running",
+    "{count} em andamento": "{count} running",
+    "1 tarefa em andamento": "1 task running",
+    "{count} tarefas em andamento": "{count} tasks running",
+    "1 concluída": "1 done",
+    "{count} concluídas": "{count} done",
+    "1 falhou": "1 failed",
+    "{count} falharam": "{count} failed",
     "Escolha um PDF de entrada para habilitar.": "Choose an input PDF to enable.",
     "Você pode continuar lendo enquanto isso.": "You can keep reading meanwhile.",
     "Operação cancelada.": "Operation cancelled.",
@@ -1674,16 +1697,15 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Não foi possível salvar o anexo: {error}': 'Could not save the attachment: {error}',
     '(sem título)': '(untitled)',
     'Página {page}': 'Page {page}',
-    'Verificar as assinaturas na aba Assinatura': 'Verify the signatures in the Signature tab',
-    'Assinado digitalmente ({count} assinatura(s)). Alterar o documento invalida a assinatura.': (
-        'Digitally signed ({count} signature(s)). Changing the document invalidates the signature.'
-    ),
-    'Tem formulário ({count} campo(s)): clique num campo para preencher.': 'Has a form ({count} field(s)): click a field to fill it in.',
-    'Tem camadas (veja a aba Camadas).': 'Has layers (see the Layers tab).',
+    'Verificar as assinaturas': 'Verify the signatures',
+    '1 assinatura digital. Alterar o PDF a invalida.': '1 digital signature. Changing the PDF invalidates it.',
+    '{count} assinaturas digitais. Alterar o PDF as invalida.': '{count} digital signatures. Changing the PDF invalidates them.',
+    'Este PDF tem campos de formulário. Clique em um campo para preencher.': 'This PDF has form fields. Click a field to fill it in.',
+    'Este PDF tem camadas: partes que podem ser mostradas ou ocultadas.': 'This PDF has layers: parts that can be shown or hidden.',
     'Protegido por senha.': 'Password-protected.',
-    'O autor restringiu alterações ou cópia (senha de permissões).': (
-        'The author restricted changes or copying (permissions password).'
-    ),
+    'Protegido: o autor bloqueou alterações ou cópia.': 'Protected: the author blocked changes or copying.',
+    'Ver': 'View',
+    'Fechar aviso': 'Dismiss notice',
     'Ocorreu um erro inesperado.': 'An unexpected error occurred.',
     'Não há espaço livre no disco para gravar o arquivo.': 'There is no free disk space to write the file.',
     'Memória insuficiente para concluir a operação. Feche outros programas ou use um arquivo menor.': (

@@ -156,13 +156,13 @@ def test_the_document_tab_layout(window, tmp_path):
 
     assert doc.left_rail.width() == 48 and doc.right_rail.width() == 52
     assert doc.viewer.toolbar.parent() is doc.center and doc.viewer.toolbar.height() == 44
-    assert window.statusBar().objectName() == "StatusBar" and window.statusBar().height() == 28
+    assert window.statusBar().objectName() == "StatusBar" and window.statusBar().height() == 26
     assert doc.splitter.widget(2) is doc.tool_panel
 
 
-def test_a_tool_in_a_1280_window_folds_the_thumbnails_and_gives_them_back(window, tmp_path):
+def test_a_tool_in_a_crowded_window_folds_the_thumbnails_and_gives_them_back(window, tmp_path):
     doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
-    _show(window, 1280, 800)
+    _show(window, 1240, 800)
     side_panel = doc.viewer.side_panel
     assert side_panel.isVisible() and doc._left_buttons[0].isChecked()
 
@@ -188,12 +188,12 @@ def test_a_narrow_window_compacts_the_bars(window, tmp_path):
     doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
     _show(window, 1024, 720)
 
-    assert doc.viewer.more_button.isVisible() and not doc.viewer.single_page_button.isVisible()
-    assert window._command_launcher.text() == "" and window._command_launcher.width() == 32
+    assert doc.viewer.more_button.isVisible() and not doc.viewer.mode_button.isVisible()
+    assert window._command_launcher.text() == "" and window._command_launcher.width() == 84  # a lupa e o "Ctrl K"
     assert window.tabs.tabBar().property("compact")
 
     _show(window, 1440, 900)
-    assert not doc.viewer.more_button.isVisible() and doc.viewer.single_page_button.isVisible()
+    assert not doc.viewer.more_button.isVisible() and doc.viewer.mode_button.isVisible()
     assert window._command_launcher.text() == "Buscar ferramentas e comandos"
 
 

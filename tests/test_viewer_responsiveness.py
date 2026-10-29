@@ -51,7 +51,7 @@ def _viewer(path) -> PdfViewer:
 
 
 def _go_continuous(viewer: PdfViewer) -> None:
-    viewer.continuous_button.click()
+    viewer.continuous_action.trigger()
     _process_events()
 
 

@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QWheelEvent
-from PySide6.QtWidgets import QApplication, QInputDialog
+from PySide6.QtWidgets import QApplication, QFrame, QInputDialog, QLabel, QToolButton
 from reportlab.pdfgen import canvas as rl_canvas
 
 from ui.annotation_state import AnnotationState
@@ -227,11 +227,20 @@ def test_notice_bar_tells_about_forms_signatures_and_layers(tmp_path):
 
     session.open(str(signed))
 
-    text = viewer.notice_label.text()
-    assert "Assinado digitalmente (1" in text and "formulário (1" in text
-    assert viewer.verify_button.isVisibleTo(viewer)
+    rows = viewer.notice_bar.findChildren(QFrame, "documentNotice")
+    assert [row.property("kind") for row in rows] == ["signed", "form"]  # uma faixa por aviso, na cor dele
+    texts = [row.findChild(QLabel, "NoticeText").text() for row in rows]
+    assert texts == [
+        "1 assinatura digital. Alterar o PDF a invalida.",
+        "Este PDF tem campos de formulário. Clique em um campo para preencher.",
+    ]
+    assert viewer.verify_button.isVisibleTo(viewer) and viewer.verify_button.text() == "Ver"
     viewer.verify_button.click()
     assert requested == [1]
+
+    rows[1].findChild(QToolButton, "NoticeClose").click()  # o "x" fecha só aquele aviso
+    shown = [row for row in viewer.notice_bar.findChildren(QFrame, "documentNotice") if row.isVisibleTo(viewer)]
+    assert [row.property("kind") for row in shown] == ["signed"]
 
     session.open(source)
     assert not viewer.notice_bar.isVisibleTo(viewer)

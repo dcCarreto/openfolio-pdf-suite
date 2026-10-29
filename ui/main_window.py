@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QMenuBar,
     QMessageBox,
@@ -42,8 +43,9 @@ from ui.diagnostics import log_path
 from ui.document_tab import PANEL_MIN_WIDTH, PANEL_WIDTH, SIDE_WIDTH, VIEWER_MIN_WIDTH, DocumentTab
 from ui.errors import show_error
 from ui.home_page import HomePage
-from ui.i18n import tr
-from ui.icon import build_app_icon
+from ui.i18n import plural, tr
+from ui.icon import build_app_icon, build_logo_tile
+from ui.sidebar_icons import build_protect_icon
 from ui.preferences import Preferences, start_folder, use_preferences
 from ui.printing import page_count_for_printing, pages_to_print, print_pages
 from ui.properties_dialog import DocumentPropertiesDialog
@@ -154,12 +156,62 @@ class MainWindow(QMainWindow):
         status_bar = self.statusBar()
         status_bar.setObjectName("StatusBar")
         status_bar.setSizeGripEnabled(False)
-        status_bar.setFixedHeight(28)
-        status_bar.showMessage("OpenFolio PDF Suite")
-        # As tarefas de todos os documentos, no canto direito da barra de status.
+        status_bar.setFixedHeight(26)
+        # À esquerda, a promessa de privacidade e o estado do documento da frente (uma
+        # mensagem passageira toma o lugar deles por alguns segundos).
+        self._privacy_icon = QLabel()
+        self._privacy_label = QLabel()
+        self._doc_state_separator = bar_separator()
+        self._doc_state_separator.setFixedHeight(14)
+        self.doc_state_label = QLabel()
+        self.doc_state_label.setProperty("ofRole", "docState")
+        privacy = QWidget()
+        privacy_layout = QHBoxLayout(privacy)
+        privacy_layout.setContentsMargins(4, 0, 0, 0)
+        privacy_layout.setSpacing(6)
+        privacy_layout.addWidget(self._privacy_icon)
+        privacy_layout.addWidget(self._privacy_label)
+        privacy_layout.addSpacing(4)
+        privacy_layout.addWidget(self._doc_state_separator)
+        privacy_layout.addSpacing(4)
+        privacy_layout.addWidget(self.doc_state_label)
+        privacy_layout.addStretch()
+        status_bar.addWidget(privacy, 1)
+        # À direita, as tarefas de todos os documentos (só quando há) e a página.
         self.task_log = TaskLog(self)
         self.tasks_button = TasksButton(self.task_log)
         status_bar.addPermanentWidget(self.tasks_button)
+        self.page_status_label = QLabel()
+        status_bar.addPermanentWidget(self.page_status_label)
+        self._retranslate_status_bar()
+
+    def _retranslate_status_bar(self):
+        self._privacy_icon.setPixmap(build_protect_icon("success").pixmap(QSize(14, 14)))
+        self._privacy_label.setText(tr("Local · nenhum arquivo sai deste computador"))
+        self._update_status_bar()
+
+    def _update_status_bar(self):
+        """O estado do documento da frente ("1 alteração aplicada, não salva", "Salvo às
+        14:32") e a página ("Página 1 de 25")."""
+        doc = self.document if isinstance(self.tabs.currentWidget(), DocumentTab) else None
+        session = doc.session if doc is not None else None
+        has_document = session is not None and session.path() is not None
+        text = ""
+        if has_document:
+            if session.is_modified():
+                text = plural(session.unsaved_changes(), "1 alteração aplicada, não salva", "{count} alterações aplicadas, não salvas")
+            elif session.saved_at() is not None:
+                text = tr("Salvo às {time}").format(time=session.saved_at().strftime("%H:%M"))
+            else:
+                text = tr("Sem alterações")
+        self.doc_state_label.setText(text)
+        self.doc_state_label.setVisible(has_document)
+        self._doc_state_separator.setVisible(has_document)
+        pages = doc.viewer._page_count() if has_document else 0
+        self.page_status_label.setText(
+            tr("Página {current} de {total}").format(current=session.current_page() + 1, total=pages) if pages else ""
+        )
+        self.page_status_label.setVisible(bool(pages))
 
     def _build_top_bar(self) -> QWidget:
         """Logo, menus, abas, "+" (abrir), a busca de comandos e o idioma, numa faixa só."""
@@ -170,9 +222,9 @@ class MainWindow(QMainWindow):
         self._menu_bar.setObjectName("MainMenu")
         self._logo_button = QToolButton()
         self._logo_button.setObjectName("LogoButton")
-        self._logo_button.setIcon(build_app_icon())
-        self._logo_button.setIconSize(QSize(18, 18))
-        self._logo_button.setFixedSize(28, 28)
+        self._logo_button.setIcon(build_logo_tile())
+        self._logo_button.setIconSize(QSize(30, 30))
+        self._logo_button.setFixedSize(32, 32)
         self._logo_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._logo_button.clicked.connect(lambda: self.tabs.setCurrentWidget(self.home))
         self._new_tab_button = QToolButton()
@@ -180,6 +232,7 @@ class MainWindow(QMainWindow):
         self._new_tab_button.setProperty("ofRole", "icon")
         self._new_tab_button.setIcon(build_plus_icon())
         self._new_tab_button.setIconSize(QSize(18, 18))
+        self._new_tab_button.setFixedSize(28, 28)
         self._new_tab_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._new_tab_button.clicked.connect(self._open_pdf)
         self._command_launcher = CommandLauncher()
@@ -255,12 +308,13 @@ class MainWindow(QMainWindow):
         doc.tool_changed.connect(lambda d=doc: self._update_tab(d))
         doc.all_tools_requested.connect(lambda: self.tabs.setCurrentIndex(_TOOLS))
         doc.session.path_changed.connect(lambda d=doc: self._remember_opened_document(d))
+        doc.session.current_page_changed.connect(self._update_status_bar)
         doc.viewer.layout_changed.connect(lambda layout, d=doc: self._on_layout_changed(d, layout))
         if self._preferences.page_layout() in viewer_layouts.LAYOUTS:
             doc.viewer.set_layout(self._preferences.page_layout())
         # Só a escolha do usuário fica guardada: uma ferramenta de desenho força a página única.
-        for button in doc.viewer._mode_buttons.values():
-            button.clicked.connect(lambda _checked=False, d=doc: self._remember_page_layout(d))
+        for action in doc.viewer._mode_actions.values():
+            action.triggered.connect(lambda _checked=False, d=doc: self._remember_page_layout(d))
         doc.tasks.finished.connect(lambda outcome, d=doc: self._on_task_finished(d, outcome))
         doc.save_button.clicked.connect(self.save_document)
         doc.set_tool_shortcuts(self._tool_shortcut_texts())
@@ -272,8 +326,8 @@ class MainWindow(QMainWindow):
         doc.print_button.clicked.connect(self.print_document)
         doc.task_status.hide()
         self.statusBar().insertPermanentWidget(0, doc.task_status)  # o "N tarefas" fica na ponta
-        self.task_log.watch(doc.tasks, lambda d=doc: d.title(modified_mark=False))
-        index = self.tabs.addTab(doc, build_file_icon(), doc.title(modified_mark=False))
+        self.task_log.watch(doc.tasks, lambda d=doc: d.title())
+        index = self.tabs.addTab(doc, build_file_icon(), doc.title())
         # O "x" nas cores do tema, no lugar do botão nativo; vira um ponto com alterações.
         doc.close_button.clicked.connect(lambda _checked=False, d=doc: self.close_document(d))
         self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.RightSide, doc.close_button)
@@ -345,7 +399,7 @@ class MainWindow(QMainWindow):
         unsaved = tr("alterações não salvas")
         # Sem documento, com uma ferramenta aberta (Criar, Mesclar...): a aba leva o nome dela.
         tool = doc.current_tool() if doc.is_empty() else -1
-        self.tabs.setTabText(index, tr(SECTIONS[tool][1]) if tool >= 0 else doc.title(modified_mark=False))
+        self.tabs.setTabText(index, tr(SECTIONS[tool][1]) if tool >= 0 else doc.title())
         tip = doc.session.source_path() or doc.title()
         self.tabs.setTabToolTip(index, f"{tip}\n{unsaved}" if modified else tip)
         doc.close_button.set_dirty(modified)
@@ -751,6 +805,8 @@ class MainWindow(QMainWindow):
         self._preferences.set_language(i18n.get_language())
         self._retranslate_fixed_tabs()
         self._retranslate_top_bar()
+        self._retranslate_status_bar()
+        self.tasks_button.refresh()
         self.home.retranslate()
         self.tools_center.retranslate()
         for doc in self.documents():
@@ -876,6 +932,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_language_switcher"):
             self._language_switcher.setEnabled(not self._any_busy())
 
+        for each in self.documents():
+            each.update_state_badge()
+        self._update_status_bar()
         if doc is not None and session is not None and session.source_path():
             self.setWindowTitle(f"{doc.title()} — OpenFolio PDF Suite")
         else:
@@ -1009,10 +1068,12 @@ class MainWindow(QMainWindow):
         self._preferences.set_theme(key)
         self._theme_actions[key].setChecked(True)
         theme.apply_theme(cast(QApplication, QApplication.instance()), key)
+        self._retranslate_status_bar()  # o cadeado é um pixmap: pinta de novo na cor do tema
 
     def _on_system_color_scheme_changed(self, _scheme) -> None:
         if self._preferences.theme() == theme.SYSTEM:
             theme.apply_theme(cast(QApplication, QApplication.instance()), theme.SYSTEM)
+            self._retranslate_status_bar()
 
     def check_for_updates(self, manual: bool = True) -> bool:
         """Ajuda > Verificar atualizações (e ao iniciar, se o usuário ligou). Consulta a lista

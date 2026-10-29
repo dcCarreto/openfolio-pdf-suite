@@ -137,7 +137,7 @@ def icon_color(mode: QIcon.Mode, state: QIcon.State = QIcon.State.Off) -> QColor
         color.setAlphaF(0.45)
         return color
     if mode == QIcon.Mode.Selected or state == QIcon.State.On:
-        return QColor(t["accent_strong"])
+        return QColor(t["accent"])
     return QColor(t["text"] if mode == QIcon.Mode.Active else t["text2"])
 
 
@@ -373,9 +373,26 @@ QFrame#InputChip[empty="true"] {{
     border: 1px dashed {t["border_strong"]};
 }}
 
+/* Aviso do documento: formulário (acento), assinado (sucesso), protegido (aviso) e
+   camadas (neutro). */
 #documentNotice {{
     background-color: {t["raised"]};
-    border-bottom: 1px solid {t["border"]};
+}}
+
+#documentNotice[kind="form"] {{
+    background-color: {t["accent_fill"]};
+}}
+
+#documentNotice[kind="signed"] {{
+    background-color: {t["success_fill"]};
+}}
+
+#documentNotice[kind="protected"] {{
+    background-color: {t["warning_fill"]};
+}}
+
+#documentNotice QLabel {{
+    font-size: 12px;
 }}
 
 /* -- botões de ícone (barras e trilhos) --------------------------------------- */
@@ -448,7 +465,17 @@ QToolButton#ZoomButton {{
     color: {t["text"]};
 }}
 
-QToolButton#ZoomButton::menu-indicator {{
+/* Ajuste e modo de exibição: ícone + seta, com menu. */
+QToolButton#MenuButton {{
+    padding: 0 14px 0 4px;
+}}
+
+QToolButton#NewTabButton, QToolButton#NoticeClose {{
+    min-width: 28px;
+    min-height: 28px;
+}}
+
+QToolButton#ZoomButton::menu-indicator, QToolButton#MenuButton::menu-indicator {{
     image: url(of:caret-down-{key}.png);
     subcontrol-origin: padding;
     subcontrol-position: right center;
@@ -626,6 +653,18 @@ QPushButton[ofSize="compact"] {{
 }}
 
 QPushButton[ofSize="compact"]:focus {{
+    padding: 0 9px;
+}}
+
+QPushButton[ofSize="mini"] {{
+    min-height: 24px;
+    max-height: 24px;
+    padding: 0 10px;
+    border-radius: 6px;
+    font-size: 12px;
+}}
+
+QPushButton[ofSize="mini"]:focus {{
     padding: 0 9px;
 }}
 
@@ -1115,9 +1154,9 @@ QTabBar#DocTabs {{
 }}
 
 QTabBar#DocTabs::tab {{
-    height: 30px;
+    height: 32px;
     min-width: 64px;
-    max-width: 220px;
+    max-width: 200px;
     padding: 0 6px 0 10px;
     margin: 0 1px;
     border-radius: 8px;
@@ -1133,7 +1172,6 @@ QTabBar#DocTabs::tab:hover:!selected {{
 QTabBar#DocTabs::tab:selected {{
     background-color: {t["raised"]};
     color: {t["text"]};
-    font-weight: 600;
 }}
 
 QTabBar#DocTabs::tab:focus {{
@@ -1202,7 +1240,8 @@ QMenuBar#MainMenu {{
 }}
 
 QMenuBar::item {{
-    padding: 4px 8px;
+    min-height: 28px;
+    padding: 0 8px;
     border-radius: 6px;
     background: transparent;
     color: {t["text2"]};
