@@ -422,6 +422,75 @@ QFrame#InputChip[empty="true"] {{
     border: 1px dashed {t["border_strong"]};
 }}
 
+/* -- Anotações: lista de comentários (ui/pages/annotations_page.py) --------------- */
+
+/* As linhas ficam direto no painel: a lista não tem fundo nem moldura próprios. */
+QListWidget#CommentsList {{
+    background: transparent;
+    border: none;
+}}
+
+/* O comentário escolhido, aberto no lugar. */
+QFrame#CommentEditor {{
+    background-color: {t["accent_fill"]};
+    border: 1px solid {t["accent_line"]};
+    border-radius: 8px;
+}}
+
+QFrame#CommentEditor QLabel {{
+    background: transparent;
+}}
+
+/* "3 selecionados · Cor · Excluir 3": só com dois ou mais escolhidos. */
+QFrame#BulkBar {{
+    background-color: {t["raised"]};
+    border-radius: 8px;
+}}
+
+QComboBox#CompactCombo {{
+    min-height: 28px;
+    max-height: 28px;
+    border-color: transparent;
+    background: transparent;
+    color: {t["text2"]};
+}}
+
+QComboBox#CompactCombo:hover {{
+    background-color: {t["hover"]};
+    color: {t["text"]};
+}}
+
+/* Opções avançadas: a linha que abre e fecha a seção. */
+QPushButton#AdvancedToggle {{
+    min-height: 30px;
+    max-height: 30px;
+    padding: 0;
+    background: transparent;
+    text-align: left;
+}}
+
+QPushButton#AdvancedToggle:hover {{
+    background-color: {t["hover"]};
+}}
+
+QPushButton#AdvancedToggle:checked {{
+    background: transparent;
+    border-color: transparent;
+}}
+
+QPushButton#AdvancedToggle:checked:hover {{
+    background-color: {t["hover"]};
+}}
+
+QPushButton#AdvancedToggle:focus {{
+    border: 2px solid {t["focus"]};
+}}
+
+QLabel#AdvancedTitle {{
+    font-weight: 500;
+    color: {t["text"]};
+}}
+
 /* Aviso do documento: formulário (acento), assinado (sucesso), protegido (aviso) e
    camadas (neutro). */
 #documentNotice {{
@@ -535,7 +604,8 @@ QToolButton#ZoomButton::menu-indicator, QToolButton#MenuButton::menu-indicator {
 
 /* -- barra de marcação (ui/viewer/markup_bar.py) ---------------------------------- */
 
-QFrame#MarkupBar {{
+/* Com o id do visualizador: senão "#ViewerCanvas > QWidget > QWidget" (o fundo dele) ganha. */
+#ViewerCanvas QFrame#MarkupBar, QFrame#MarkupBar {{
     background-color: {t["panel"]};
     border: 1px solid {t["border"]};
     border-radius: 12px;
@@ -549,39 +619,40 @@ QFrame#MarkupPopover {{
 
 QToolButton#MarkupTool {{
     border-radius: 8px;
-    padding: 0 7px;
-    color: {t["text"]};
-    font-size: 12px;
-    font-weight: 600;
+    padding: 0;
 }}
 
+/* A ferramenta ativa: só o fundo e o ícone no acento, sem borda. */
 QToolButton#MarkupTool:checked {{
-    color: {t["accent_strong"]};
-}}
-
-QLabel#Kbd[ofVariant="accent"] {{
-    color: {t["accent_strong"]};
-    border-color: {t["accent_line"]};
-    padding: 1px 4px;
-}}
-
-QFrame#PendingBadge {{
     background-color: {t["accent_fill"]};
-    border-radius: 12px;
+    border-color: transparent;
 }}
 
-QLabel#PendingCount {{
-    background-color: {t["primary"]};
-    color: {t["on_primary"]};
-    border-radius: 8px;
-    font-size: 10px;
-    font-weight: 700;
+QToolButton#MarkupTool:focus {{
+    border: 2px solid {t["focus"]};
+}}
+
+/* Realce e Formas: o ▾ embutido no botão (uma peça só, alvo de 46 x 32). */
+QToolButton#MarkupTool[split="true"] {{
+    padding-right: 14px;
+}}
+
+QToolButton#MarkupTool[split="true"]::menu-button {{
+    width: 14px;
+    border: none;
+    background: transparent;
+}}
+
+QToolButton#MarkupTool[split="true"]::menu-arrow {{
+    image: url(of:caret-down-{key}.png);
+    width: 10px;
+    height: 10px;
 }}
 
 QLabel#PendingText {{
-    color: {t["accent_strong"]};
+    color: {t["warning"]};
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 500;
 }}
 
 QToolButton#MoreButton::menu-indicator {{
@@ -944,7 +1015,7 @@ QRadioButton::indicator:checked:focus {{
     padding: 0 9px;
 }}
 
-/* Pílula de filtro (24 px na lista de comentários: ofSize="small"). */
+/* Pílula de filtro (28 px; 24 com ofSize="small", só onde não é alvo de clique). */
 QToolButton[ofRole="chip"] {{
     min-height: 28px;
     max-height: 28px;
@@ -1538,8 +1609,9 @@ QLabel#sectionTitle {{
     font-weight: 600;
 }}
 
-/* Rótulo de seção em frase normal ("Arquivo", "Onde fica o resultado"), sem caixa alta. */
-QLabel[ofRole="section"] {{
+/* Rótulo de seção em frase normal ("Arquivo", "Onde fica o resultado"), sem caixa alta, e o
+   rótulo de um campo, acima dele e sem dois-pontos ("Texto da nota"). */
+QLabel[ofRole="section"], QLabel[ofRole="field"] {{
     font-size: 12px;
     font-weight: 600;
     color: {t["text2"]};

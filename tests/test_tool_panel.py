@@ -50,7 +50,9 @@ def test_every_tool_follows_the_panel_pattern(window, tmp_path, row):
     panel = doc.panel(row)
 
     expected = ["Arquivo"] if hasattr(page, "source_bar") else []
-    expected += [page.extra_section[0].text()] if hasattr(page, "extra_section") else []  # Comentários
+    if hasattr(page, "extra_section"):  # Comentários: o rótulo, ou o cabeçalho com ele e controles à direita
+        header = page.extra_section[0]
+        expected += [header.text() if isinstance(header, QLabel) else header.findChild(QLabel).text()]
     expected += [] if SECTIONS[row][4] in _WITHOUT_OPTIONS else [getattr(page, "options_title", "Opções")]
     expected += ["Onde fica o resultado"] if hasattr(page, "output_picker") else []
     assert _section_titles(panel) == expected

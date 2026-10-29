@@ -6,6 +6,8 @@ Substitui o antigo FilePicker(mode="open") nos painéis de ferramenta de entrada
 ferramenta passa a atuar sobre esse arquivo em vez de pedir o seu próprio.
 Sem documento, o cartão fica tracejado, com "Nenhum PDF aberto", uma linha de ajuda e
 "Abrir PDF...". O estado (não salvo) fica no selo da barra do visualizador, não no nome.
+Compacto (Anotações, onde a lista de comentários precisa do espaço), o arquivo cabe numa linha
+só: "Contrato.pdf · 25 págs.".
 """
 
 import os
@@ -38,10 +40,18 @@ def _page_count(path: str) -> int | None:
 
 
 class DocumentSourceBar(QFrame):
-    def __init__(self, session: DocumentSession, parent=None, empty_hint: str = "Abra ou arraste o PDF que quer usar."):
+    def __init__(
+        self,
+        session: DocumentSession,
+        parent=None,
+        empty_hint: str = "Abra ou arraste o PDF que quer usar.",
+        compact: bool = False,
+    ):
         super().__init__(parent)
         self.setObjectName("InputChip")
+        self.setProperty("compact", compact)
         self.session = session
+        self._compact = compact
         self._display_name = tr("Nenhum PDF aberto")
         self._empty_hint = empty_hint
 
@@ -65,12 +75,16 @@ class DocumentSourceBar(QFrame):
         self.open_button.setToolTip(tr("Abrir outro arquivo PDF"))
         self.open_button.clicked.connect(self._browse)
 
-        texts = QVBoxLayout()
-        texts.setSpacing(2)
+        texts = QHBoxLayout() if compact else QVBoxLayout()
+        texts.setSpacing(6 if compact else 2)
         texts.addWidget(self.path_label)
         texts.addWidget(self.meta_label)
+        if compact:
+            texts.addStretch(1)
+        if compact:
+            self.meta_label.setWordWrap(False)
         self._layout = QHBoxLayout(self)
-        self._layout.setContentsMargins(12, 10, 8, 10)
+        self._layout.setContentsMargins(*((12, 4, 4, 4) if compact else (12, 10, 8, 10)))
         self._layout.setSpacing(10)
         self._layout.addWidget(self.icon)
         self._layout.addLayout(texts, 1)
@@ -96,13 +110,16 @@ class DocumentSourceBar(QFrame):
         self.open_button.style().unpolish(self.open_button)
         self.open_button.style().polish(self.open_button)
         self.meta_label.setText(tr(self._empty_hint) if empty else self._meta(self.session.path()))
+        self.meta_label.setVisible(not (self._compact and empty))
 
     def _meta(self, working_path: str | None) -> str:
         """"25 páginas · 2,6 MB", da versão de trabalho (a que a ferramenta vai ler)."""
         if not working_path or not os.path.exists(working_path):
             return ""
-        parts = [format_size(os.path.getsize(working_path))]
         pages = _page_count(working_path)
+        if self._compact:  # "· 25 págs.", logo depois do nome
+            return f"· {plural(pages, '1 pág.', '{count} págs.')}" if pages is not None else ""
+        parts = [format_size(os.path.getsize(working_path))]
         if pages is not None:
             parts.insert(0, plural(pages, "1 página", "{count} páginas"))
         return " · ".join(parts)
@@ -110,6 +127,12 @@ class DocumentSourceBar(QFrame):
     def _update_elided_text(self):
         metrics = self.path_label.fontMetrics()
         available_width = max(self.path_label.width(), 1)
+        if self._compact and self.meta_label.isVisibleTo(self):
+            # O nome ocupa o que sobra do cartão; "· 25 págs." vem logo depois dele.
+            margins = self._layout.contentsMargins()
+            others = self.icon.width() + self.open_button.sizeHint().width() + self.meta_label.sizeHint().width()
+            spacing = self._layout.spacing() * 2 + 6
+            available_width = max(1, self.width() - margins.left() - margins.right() - others - spacing)
         elided = metrics.elidedText(self._display_name, Qt.TextElideMode.ElideMiddle, available_width)
         self.path_label.setText(elided)
 

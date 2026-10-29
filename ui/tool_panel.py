@@ -324,7 +324,9 @@ class ToolPanel(QFrame):
             return widget.current()
         return widget.currentIndex() if widget is not None else 0
 
-    def add_section(self, title: str, widget: QWidget, label: QLabel | None = None) -> QLabel:
+    def add_section(self, title: str, widget: QWidget, label: QWidget | None = None) -> QWidget:
+        """Uma seção: o rótulo (ou um cabeçalho da ferramenta, com controles à direita) e o
+        conteúdo."""
         if label is None:
             label = QLabel(title)
             label.setProperty("ofRole", "section")

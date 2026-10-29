@@ -242,6 +242,24 @@ def build_minus_icon() -> QIcon:
     return _build(draw)
 
 
+def build_caret_down_icon() -> QIcon:
+    """caret-down: o "▾" dos botões com mais opções (Realce, Formas, Estilo)."""
+
+    def draw(p):
+        _poly(p, (7.5, 10), (12, 14.5), (16.5, 10))
+
+    return _build(draw)
+
+
+def build_caret_right_icon() -> QIcon:
+    """caret-right: uma seção recolhida (Opções avançadas)."""
+
+    def draw(p):
+        _poly(p, (10, 7.5), (14.5, 12), (10, 16.5))
+
+    return _build(draw)
+
+
 def build_check_icon() -> QIcon:
     def draw(p):
         _poly(p, (5, 12.5), (10, 17.5), (19, 7.5))

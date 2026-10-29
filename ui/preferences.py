@@ -116,6 +116,13 @@ class Preferences:
     def note_tool_use(self, tool: str) -> None:
         self._set(f"tools/uses/{tool}", self.tool_uses().get(tool, 0) + 1)
 
+    def advanced_open(self, tool: str) -> bool:
+        """Se as "Opções avançadas" da ferramenta ficaram abertas da última vez."""
+        return str(self._get(f"tools/advanced/{tool}", "false")).lower() == "true"
+
+    def set_advanced_open(self, tool: str, opened: bool) -> None:
+        self._set(f"tools/advanced/{tool}", "true" if opened else "false")
+
     # -- visualizador ---------------------------------------------------------------
 
     def page_layout(self) -> str | None:

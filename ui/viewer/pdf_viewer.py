@@ -32,6 +32,7 @@ from core.form_fields import FillFormFields, FormWidget, ListFormWidgets
 from core.geometry import PageGeometry
 from core.progress import PDFIUM_LOCK
 from core.redaction import RedactionRect
+from ui import theme
 from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
 from ui.errors import show_error
@@ -76,6 +77,9 @@ _TEXT_SELECTION_COLOR = QColor(33, 150, 243, 90)
 _FORM_FIELD_COLOR = QColor(100, 149, 237, 45)  # campos preenchíveis, como nos leitores de PDF
 _DRAWING_TOOLS = ("highlight", "underline", "strikeout", "note", "ink", "square", "circle", "arrow", "stamp")
 _SHAPE_TOOLS = ("square", "circle", "arrow")
+# A marcação pendente (só na ferramenta, ainda não gravada) ganha este contorno tracejado, igual
+# nos dois temas: é uma cor das marcações sobre a página, não da interface.
+PENDING_OUTLINE = "#b07800"
 _RESIZE_HANDLE = 10  # pixels em volta do canto inferior direito que redimensionam
 # Rolagem contínua: páginas a mais de N alturas de tela da área visível têm a imagem
 # descartada (voltam a ser renderizadas se o usuário rolar até elas). Antes nenhuma página
@@ -898,10 +902,14 @@ class PdfViewer(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         for spec in specs:
             self._paint_pending_spec(painter, page_index, spec)
-        if comment is not None:
-            painter.setPen(QPen(QColor("#ff5252"), 2))
+            outline = QPen(QColor(PENDING_OUTLINE), 1.5, Qt.PenStyle.DashLine)
+            painter.setPen(outline)
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRect(self._user_rect_to_screen(page_index, comment[1]).adjusted(-3, -3, 3, 3))
+            painter.drawRoundedRect(self._user_rect_to_screen(page_index, spec_rect(spec)).adjusted(-3, -3, 3, 3), 2, 2)
+        if comment is not None:  # a escolhida na lista: um anel de 2 px no acento
+            painter.setPen(QPen(theme.color("accent"), 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(self._user_rect_to_screen(page_index, comment[1]).adjusted(-4, -4, 4, 4), 3, 3)
         painter.end()
         return result
 
@@ -1623,7 +1631,7 @@ class PdfViewer(QWidget):
             self._comment_drag_rect = new_rect
             preview = QPixmap(self._comment_preview_base)
             painter = QPainter(preview)
-            painter.setPen(QPen(QColor("#ff5252"), 2, Qt.PenStyle.DashLine))
+            painter.setPen(QPen(theme.color("accent"), 2, Qt.PenStyle.DashLine))  # como o anel da escolhida
             painter.drawRect(new_rect)
             painter.end()
             self._page_labels[0].setPixmap(preview)

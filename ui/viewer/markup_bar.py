@@ -1,7 +1,9 @@
-"""A barra de marcação: flutua sobre o visualizador enquanto Anotações está aberta, com as
-ferramentas, a cor, a espessura, o número de pendentes e "Gravar"."""
+"""A barra de marcação: flutua sobre o visualizador enquanto Anotações está aberta, numa linha só
+e em grupos: Selecionar | Realce ▾, Nota, Caneta, Formas ▾, Carimbo | Estilo ▾ | pendentes e
+"Gravar". Sublinhado e riscado ficam no ▾ do Realce; retângulo, círculo e seta, no das Formas; a
+cor e a espessura, no popover do Estilo."""
 
-from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -10,6 +12,7 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QToolButton,
     QVBoxLayout,
@@ -18,26 +21,46 @@ from PySide6.QtWidgets import (
 
 from ui import motion, theme
 from ui.annotation_state import TOOLS, AnnotationState
-from ui.i18n import EN_US, get_language, tr
+from ui.i18n import EN_US, get_language, plural, tr
 from ui.top_bar import bar_separator
-from ui.viewer.viewer_icons import build_check_icon, build_markup_icon, build_minus_icon, build_plus_icon
+from ui.viewer.viewer_icons import build_caret_down_icon, build_markup_icon, build_minus_icon, build_plus_icon
 
 TOOL_LABELS = {
-    "select": "Selecionar/Apagar",
+    "select": "Selecionar",
     "highlight": "Realce",
     "underline": "Sublinhado",
     "strikeout": "Riscado",
-    "note": "Nota adesiva",
+    "note": "Nota",
     "ink": "Caneta",
     "square": "Retângulo",
     "circle": "Círculo",
     "arrow": "Seta",
     "stamp": "Carimbo",
 }
-# O nome no botão da ferramenta ativa, quando o completo não cabe (fica na dica e no leitor
-# de tela).
-SHORT_LABELS = {"select": "Selecionar"}
+# A frase da dica de cada ferramenta: o que ela faz na página.
+TOOL_PHRASES = {
+    "select": "Clique numa marcação para escolhê-la; arraste para movê-la.",
+    "highlight": "Arraste sobre o texto para realçá-lo.",
+    "underline": "Arraste sobre o texto para sublinhá-lo.",
+    "strikeout": "Arraste sobre o texto para riscá-lo.",
+    "note": "Clique na página para deixar um comentário.",
+    "ink": "Desenhe à mão livre sobre a página.",
+    "square": "Arraste para desenhar um retângulo.",
+    "circle": "Arraste para desenhar um círculo.",
+    "arrow": "Arraste para desenhar uma seta.",
+    "stamp": "Clique na página para pôr o carimbo escolhido no painel.",
+}
 DEFAULT_KEYS = dict(zip(TOOLS, "VHUSNPROAK"))
+# Os botões da barra, na ordem; os de mais de uma ferramenta têm o ▾ com as outras.
+GROUPS = [
+    ("select",),
+    ("highlight", "underline", "strikeout"),
+    ("note",),
+    ("ink",),
+    ("square", "circle", "arrow"),
+    ("stamp",),
+]
+MORE_LABELS = {"highlight": "Sublinhado e riscado", "square": "Círculo e seta"}  # o ▾ de cada grupo
 COLORS = [
     ("ffeb3b", "Amarelo"),
     ("f44336", "Vermelho"),
@@ -48,14 +71,21 @@ COLORS = [
 TEXT_TOOLS = ("highlight", "underline", "strikeout")  # seguem a linha do texto: sem espessura
 WIDTH_RANGE = (0.5, 20.0)
 WIDTH_STEP = 0.5
-TOP = 12  # distância do topo do visualizador
+TOP = 10  # distância do topo do visualizador
 TOP_INSET = 64  # margem extra da página com a barra aberta
 TOOL_SIZE = 32
+SPLIT_WIDTH = 14  # a área do ▾ nos botões de grupo
 
 
 def format_width(width: float) -> str:
     text = f"{width:g}"
     return f"{text if get_language() == EN_US else text.replace('.', ',')} pt"
+
+
+def tool_tip(tool: str, key: str) -> str:
+    """A dica rica: o nome, a tecla e o que a ferramenta faz."""
+    title = f"<b>{tr(TOOL_LABELS[tool])}</b>" + (f"&nbsp;&nbsp;({key})" if key else "")
+    return f"{title}<br>{tr(TOOL_PHRASES[tool])}"
 
 
 class ColorSwatch(QToolButton):
@@ -94,38 +124,131 @@ class ColorSwatch(QToolButton):
                 painter.drawPolyline([center + QPointF(-4, 0), center + QPointF(-1, 3), center + QPointF(4, -3)])
         if self.isChecked() or self.hasFocus():
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.setPen(QPen(QColor(t["accent"]), 2))
+            painter.setPen(QPen(QColor(t["accent"] if self.isChecked() else t["focus"]), 2))
             painter.drawEllipse(circle.adjusted(-2.5, -2.5, 2.5, 2.5))
 
 
-class _StyleButton(QToolButton):
-    """Modo compacto: a cor e a espessura num botão só (círculo, traço e seta)."""
+class ToolGroup(QWidget):
+    """Um botão da barra. Com mais de uma ferramenta (Realce, Formas), o botão mostra a última
+    escolhida do grupo e tem o ▾ embutido, que abre as outras (a seta para baixo também abre,
+    pelo teclado): uma peça só, de 46 x 32, para o alvo de clique não ficar estreito."""
+
+    chosen = Signal(str)
+
+    def __init__(self, tools: tuple[str, ...], parent=None):
+        super().__init__(parent)
+        self.tools = tools
+        self.current = tools[0]
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.button = QToolButton()
+        self.button.setObjectName("MarkupTool")
+        self.button.setIconSize(QSize(18, 18))
+        self.button.setCheckable(True)
+        self.button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.button.setProperty("split", len(tools) > 1)
+        self.button.clicked.connect(lambda: self.chosen.emit(self.current))
+        layout.addWidget(self.button)
+        self.menu: QMenu | None = None
+        self.tool_actions: dict = {}
+        if len(tools) > 1:
+            self.menu = QMenu(self)
+            for tool in tools:
+                action = self.menu.addAction(build_markup_icon(tool), "")
+                action.setCheckable(True)
+                action.triggered.connect(lambda _checked=False, t=tool: self.chosen.emit(t))
+                self.tool_actions[tool] = action
+            self.button.setMenu(self.menu)
+            self.button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+            self.button.installEventFilter(self)
+        self.button.setFixedSize(TOOL_SIZE + (SPLIT_WIDTH if self.menu else 0), TOOL_SIZE)
+        self.set_active(None)
+
+    def show_menu(self) -> None:
+        if self.menu is not None:
+            self.button.showMenu()
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Down:
+            self.show_menu()
+            return True
+        return super().eventFilter(watched, event)
+
+    def set_active(self, active: str | None) -> None:
+        if active in self.tools:
+            self.current = active
+        self.button.setIcon(build_markup_icon(self.current))
+        self.button.setChecked(active in self.tools)
+        for tool, action in self.tool_actions.items():
+            action.setChecked(tool == active)
+
+    def retranslate(self, keys: dict[str, str]) -> None:
+        name = tr(TOOL_LABELS[self.current])
+        tip = tool_tip(self.current, keys.get(self.current, ""))
+        if self.menu is not None:
+            more = tr(MORE_LABELS[self.tools[0]])
+            tip += "<br>" + tr("{more}: no ▾ (ou seta para baixo).").format(more=more)
+        self.button.setToolTip(tip)
+        self.button.setAccessibleName(name)
+        for tool, action in self.tool_actions.items():
+            key = keys.get(tool, "")
+            action.setText(f"{tr(TOOL_LABELS[tool])}	{key}" if key else tr(TOOL_LABELS[tool]))
+
+
+class StyleButton(QToolButton):
+    """Estilo: a bolinha da cor atual, a espessura ("2,5 pt") e o ▾ que abre o popover. Na
+    barra compacta, só a bolinha e o ▾."""
 
     def __init__(self, state: AnnotationState, parent=None):
         super().__init__(parent)
+        self.setObjectName("MarkupTool")
         self._state = state
-        self.setFixedSize(52, TOOL_SIZE)
+        self._compact = False
+        self.setFixedHeight(TOOL_SIZE)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
+    def set_compact(self, compact: bool) -> None:
+        self._compact = compact
+        self.setFixedWidth(self.width_for(compact))
+        self.update()
+
+    def width_for(self, compact: bool) -> int:
+        """Bolinha, o texto (fora do compacto) e o ▾, com as folgas."""
+        text = 0 if compact else QFontMetrics(self._font()).horizontalAdvance(self._text()) + 4
+        return 8 + 14 + 6 + text + 12 + 6
+
+    def _text(self) -> str:
+        return format_width(self._state.width())
+
+    def _font(self) -> QFont:
+        font = QFont(self.font())
+        font.setPixelSize(12)
+        return font
+
+    def refresh(self) -> None:
+        self.setFixedWidth(self.width_for(self._compact))
+        self.update()
+
     def paintEvent(self, event):
-        super().paintEvent(event)
+        super().paintEvent(event)  # o fundo (mouse, pressionado) vem do estilo
         t = theme.tokens()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QPen(QColor(t["border_strong"]), 1))
         painter.setBrush(QColor(f"#{self._state.active_color()}"))
-        painter.drawEllipse(QRectF(6, 8, 16, 16))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(t["text2"]))
-        height = max(1.0, min(8.0, self._state.width() / 1.5))
-        painter.drawRoundedRect(QRectF(26, 16 - height / 2, 12, height), height / 2, height / 2)
-        pen = QPen(QColor(t["text2"]), 1.5)
-        painter.setPen(pen)
-        painter.drawPolyline([QPointF(42, 14), QPointF(45, 17), QPointF(48, 14)])
+        middle = self.height() / 2
+        painter.drawEllipse(QRectF(8, middle - 7, 14, 14))
+        if not self._compact:
+            painter.setFont(self._font())
+            painter.setPen(QColor(t["text2"]))
+            text = QRect(8 + 14 + 6, 0, self.width() - (8 + 14 + 6) - 18, self.height())
+            painter.drawText(text, Qt.AlignmentFlag.AlignVCenter, self._text())
+        build_caret_down_icon().paint(painter, QRect(self.width() - 18, int(middle) - 6, 12, 12))
 
 
 class MarkupBar(QFrame):
-    """Filha do viewport do visualizador, fora de qualquer layout: centralizada a 12 px do
+    """Filha do viewport do visualizador, fora de qualquer layout: centralizada a 10 px do
     topo e reposicionada quando ele muda de tamanho. Quem a mostra é a aba do documento."""
 
     save_requested = Signal()
@@ -133,74 +256,62 @@ class MarkupBar(QFrame):
     def __init__(self, state: AnnotationState, parent: QWidget):
         super().__init__(parent)
         self.setObjectName("MarkupBar")
-        self.setFixedHeight(48)
         self._state = state
-        self._compact: bool | None = None  # None até o primeiro set_compact
-        # Apertada: sem a palavra "pendentes" e sem o selo da tecla da ferramenta ativa, antes
-        # de ficar compacta (só ícones).
-        self._tight = False
+        self._compact = False
         self._right_inset = 0
         self._keys = dict(DEFAULT_KEYS)
         self._faded = False
-        self._shown_tool: str | None = None  # a que está aberta (com o nome) agora
-        self._active_target = TOOL_SIZE  # a largura final do botão da ferramenta ativa
-        self._full_width: int | None = None  # a largura da barra inteira, medida quando preciso
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 0, 6, 0)
-        layout.setSpacing(4)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(2)
         self._layout = layout
 
-        self.tool_buttons: dict[str, QToolButton] = {}
-        self._tool_group = QButtonGroup(self)
-        self._kbd: dict[str, QLabel] = {}
-        tools = QHBoxLayout()
-        tools.setSpacing(2)
-        for tool in TOOLS:
-            if tool == "note":
-                tools.addSpacing(2)
-                tools.addWidget(bar_separator())
-                tools.addSpacing(2)
-            button = QToolButton()
-            button.setObjectName("MarkupTool")
-            button.setIcon(build_markup_icon(tool))
-            button.setIconSize(QSize(18, 18))
-            button.setCheckable(True)
-            button.setFixedHeight(TOOL_SIZE)
-            button.setMinimumWidth(TOOL_SIZE)
-            button.setMaximumWidth(TOOL_SIZE)
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.clicked.connect(lambda _checked=False, k=tool: self._state.set_tool(k))
-            kbd = QLabel(button)
-            kbd.setObjectName("Kbd")
-            kbd.setProperty("ofVariant", "accent")
-            kbd.hide()
-            self._kbd[tool] = kbd
-            self._tool_group.addButton(button)
-            tools.addWidget(button)
-            self.tool_buttons[tool] = button
-        layout.addLayout(tools)
+        self.groups: list[ToolGroup] = []
+        self.group_of: dict[str, ToolGroup] = {}
+        for tools in GROUPS:
+            group = ToolGroup(tools)
+            group.chosen.connect(self._choose)
+            if tools[0] == "highlight":
+                layout.addWidget(self._separator())
+            layout.addWidget(group)
+            self.groups.append(group)
+            for tool in tools:
+                self.group_of[tool] = group
+        layout.addWidget(self._separator())
 
-        # Cor e espessura: na barra, ou no popover do botão de estilo (modo compacto).
+        # Estilo: a cor e a espessura num popover.
+        self.style_button = StyleButton(state)
+        self.style_button.clicked.connect(self._show_style_popover)
+        layout.addWidget(self.style_button)
+        self.style_popover = QFrame(self, Qt.WindowType.Popup)
+        self.style_popover.setObjectName("MarkupPopover")
+        popover = QVBoxLayout(self.style_popover)
+        popover.setContentsMargins(12, 10, 12, 12)
+        popover.setSpacing(8)
         self.style_group = QWidget()
-        style = QHBoxLayout(self.style_group)
+        style = QVBoxLayout(self.style_group)
         style.setContentsMargins(0, 0, 0, 0)
-        style.setSpacing(0)  # as amostras já têm folga de 4 px em volta do círculo
+        style.setSpacing(8)
+        self._color_title = QLabel()
+        self._color_title.setProperty("ofRole", "section")
+        swatches = QHBoxLayout()
+        swatches.setSpacing(0)  # as amostras já têm folga de 4 px em volta do círculo
         self.color_buttons: dict[str, ColorSwatch] = {}
         self._color_group = QButtonGroup(self)
         for color, _name in COLORS:
             swatch = ColorSwatch(color)
             swatch.clicked.connect(lambda _checked=False, c=color: self._state.set_color(c))
             self._color_group.addButton(swatch)
-            style.addWidget(swatch)
+            swatches.addWidget(swatch)
             self.color_buttons[color] = swatch
         self.custom_color_button = ColorSwatch(None)
         self.custom_color_button.clicked.connect(self._choose_color)
         self._color_group.addButton(self.custom_color_button)
-        style.addWidget(self.custom_color_button)
-        style.addSpacing(4)
-        style.addWidget(bar_separator())
-        style.addSpacing(4)
+        swatches.addWidget(self.custom_color_button)
+        swatches.addStretch()
+        self._width_title = QLabel()
+        self._width_title.setProperty("ofRole", "section")
         self.width_control = QWidget()
         self.width_control.setObjectName("Segmented")
         self.width_control.setFixedHeight(TOOL_SIZE)
@@ -212,7 +323,7 @@ class MarkupBar(QFrame):
         self.width_down.clicked.connect(lambda: self._step_width(-WIDTH_STEP))
         self.width_sample = QLabel()
         self.width_label = QLabel()
-        self.width_label.setMinimumWidth(42)
+        self.width_label.setMinimumWidth(48)
         self.width_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.width_up = QToolButton()
         self.width_up.setIcon(build_plus_icon())
@@ -222,44 +333,28 @@ class MarkupBar(QFrame):
             widget.setIconSize(QSize(18, 18))
             widget.setStyleSheet("QToolButton { padding: 0; }")  # o do segmentado espremia o ícone
         width_layout.addWidget(self.width_down)
+        width_layout.addStretch()
         width_layout.addWidget(self.width_sample)
         width_layout.addWidget(self.width_label)
+        width_layout.addStretch()
         width_layout.addWidget(self.width_up)
+        style.addWidget(self._color_title)
+        style.addLayout(swatches)
+        style.addWidget(self._width_title)
         style.addWidget(self.width_control)
-
-        self.style_button = _StyleButton(state)
-        self.style_button.clicked.connect(self._show_style_popover)
-        self.style_popover = QFrame(self, Qt.WindowType.Popup)
-        self.style_popover.setObjectName("MarkupPopover")
-        self._popover_layout = QVBoxLayout(self.style_popover)
-        self._popover_layout.setContentsMargins(10, 10, 10, 10)
-
-        layout.addWidget(bar_separator())
-        layout.addWidget(self.style_group)
-        layout.addWidget(self.style_button)
-        layout.addWidget(bar_separator())
+        popover.addWidget(self.style_group)
+        layout.addWidget(self._separator())
 
         # Pendentes e Gravar.
-        self.pending_badge = QFrame()
-        self.pending_badge.setObjectName("PendingBadge")
-        self.pending_badge.setFixedHeight(24)
-        badge = QHBoxLayout(self.pending_badge)
-        badge.setContentsMargins(4, 0, 6, 0)
-        badge.setSpacing(4)
-        self.pending_count = QLabel()
-        self.pending_count.setObjectName("PendingCount")
-        self.pending_count.setFixedSize(16, 16)
-        self.pending_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.pending_text = QLabel()
-        self.pending_text.setObjectName("PendingText")
-        badge.addWidget(self.pending_count)
-        badge.addWidget(self.pending_text)
-        layout.addWidget(self.pending_badge)
+        self.pending_label = QLabel()
+        self.pending_label.setObjectName("PendingText")
+        layout.addSpacing(4)
+        layout.addWidget(self.pending_label)
+        layout.addSpacing(4)
         self.save_button = QPushButton()
         self.save_button.setProperty("ofVariant", "primary")
-        self.save_button.setFixedHeight(TOOL_SIZE)
-        self.save_button.setStyleSheet("QPushButton { padding: 0 10px; }")  # compacto: cabe em 1440 px
-        self.save_button.setIcon(build_check_icon())
+        self.save_button.setProperty("ofSize", "compact")
+        self.save_button.setFixedHeight(28)
         self.save_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.save_button.clicked.connect(self.save_requested)
         layout.addWidget(self.save_button)
@@ -275,8 +370,27 @@ class MarkupBar(QFrame):
         parent.installEventFilter(self)
         self.setGraphicsEffect(theme.floating_shadow(self))
         self.retranslate()
-        self.set_compact(False)
         self.hide()
+
+    @staticmethod
+    def _separator() -> QWidget:
+        holder = QWidget()
+        layout = QHBoxLayout(holder)
+        layout.setContentsMargins(4, 0, 4, 0)
+        layout.addWidget(bar_separator())
+        return holder
+
+    def button_for(self, tool: str) -> QToolButton:
+        """O botão que leva à ferramenta (o do grupo dela, para sublinhado, círculo...)."""
+        return self.group_of[tool].button
+
+    def choose(self, tool: str) -> None:
+        """Como escolher a ferramenta na barra (no botão ou no ▾ do grupo)."""
+        self._choose(tool)
+
+    def _choose(self, tool: str) -> None:
+        self._state.set_tool(tool)
+        self._update_tool()  # clicar na já escolhida não muda o estado, mas o botão desmarcou
 
     # -- textos e atalhos -------------------------------------------------------------
 
@@ -287,12 +401,15 @@ class MarkupBar(QFrame):
             self.color_buttons[color].setAccessibleName(tr("Cor: {name}").format(name=tr(name)))
         self.custom_color_button.setToolTip(tr("Mais cores..."))
         self.custom_color_button.setAccessibleName(tr("Mais cores..."))
+        self._color_title.setText(tr("Cor"))
+        self._width_title.setText(tr("Espessura"))
         self.width_down.setToolTip(tr("Diminuir a espessura"))
         self.width_down.setAccessibleName(tr("Diminuir a espessura"))
         self.width_up.setToolTip(tr("Aumentar a espessura"))
         self.width_up.setAccessibleName(tr("Aumentar a espessura"))
-        self.style_button.setToolTip(tr("Cor e espessura"))
-        self.style_button.setAccessibleName(tr("Cor e espessura"))
+        self.style_button.setToolTip(f"<b>{tr('Estilo')}</b><br>{tr('A cor e a espessura das próximas marcações.')}")
+        self.style_button.setAccessibleName(tr("Estilo: cor e espessura"))
+        self.save_button.setText(tr("Gravar"))
         self.save_button.setToolTip(tr("Gravar as marcações pendentes como uma versão do documento (Ctrl+Z desfaz)"))
         self._update_tool()
         self._update_style()
@@ -307,46 +424,9 @@ class MarkupBar(QFrame):
 
     def _update_tool(self):
         active = self._state.active_tool() or "select"
-        previous, self._shown_tool = self._shown_tool, (None if self._compact else active)
-        self._full_width = None
-        self._active_target = TOOL_SIZE
-        for tool, button in self.tool_buttons.items():
-            name = tr(TOOL_LABELS[tool])
-            key = self._keys.get(tool, "")
-            button.setToolTip(f"{name} ({key})" if key else name)
-            button.setAccessibleName(name)
-            kbd = self._kbd[tool]
-            kbd.setText(key)
-            is_active = tool == active
-            button.setChecked(is_active)
-            wide = is_active and not self._compact
-            button.setProperty("active", wide)
-            button.style().unpolish(button)
-            button.style().polish(button)
-            button.setText("")  # o texto entra depois do estilo: trocar o texto refaz a medida do botão
-            button.setToolButtonStyle(
-                Qt.ToolButtonStyle.ToolButtonTextBesideIcon if wide else Qt.ToolButtonStyle.ToolButtonIconOnly
-            )
-            show_key = wide and bool(key) and not self._tight
-            kbd.setVisible(show_key)
-            kbd.adjustSize()
-            # O selo da tecla fica à direita do nome, no espaço reservado pelo padding.
-            # Com seletor: sem ele, o padding valeria também para o selo, que é filho do botão.
-            padding = f"QToolButton#MarkupTool {{ padding-right: {kbd.width() + 14}px; }}"
-            button.setStyleSheet(padding if show_key else "")
-            button.setText(tr(SHORT_LABELS.get(tool, TOOL_LABELS[tool])) if wide else "")
-            if wide:
-                end = button.sizeHint().width()
-                kbd.move(end - kbd.width() - 8, (TOOL_SIZE - kbd.height()) // 2)
-                self._active_target = end
-                if previous is not None and tool != previous:  # só anima ao trocar de ferramenta
-                    grow = motion.animate(button, b"maximumWidth", TOOL_SIZE, end, motion.FAST)
-                    if grow is not None:  # a barra cresce junto com o botão
-                        grow.valueChanged.connect(lambda _value: self._reposition())
-                else:
-                    button.setMaximumWidth(end)
-            else:
-                button.setMaximumWidth(TOOL_SIZE)
+        for group in self.groups:
+            group.set_active(active)
+            group.retranslate(self._keys)
         text_tool = active in TEXT_TOOLS
         self.width_control.setEnabled(not text_tool)
         self.width_control.setToolTip(
@@ -358,7 +438,6 @@ class MarkupBar(QFrame):
         self._reposition()
 
     def _update_style(self):
-        self._full_width = None
         color = self._state.active_color()
         swatch = self.color_buttons.get(color)
         if swatch is None:
@@ -375,7 +454,8 @@ class MarkupBar(QFrame):
         self.width_down.setEnabled(width > WIDTH_RANGE[0])
         self.width_up.setEnabled(width < WIDTH_RANGE[1])
         self.width_sample.setPixmap(self._sample(width))
-        self.style_button.update()
+        self.style_button.refresh()
+        self._reposition()
 
     def _sample(self, width: float) -> QPixmap:
         ratio = self.devicePixelRatioF() or 1.0
@@ -391,19 +471,19 @@ class MarkupBar(QFrame):
         painter.end()
         return pixmap
 
+    def pending_text(self, count: int, compact: bool | None = None) -> str:
+        """"2 pendentes"; na barra compacta, só o número."""
+        compact = self._compact if compact is None else compact
+        return str(count) if compact else plural(count, "1 pendente", "{count} pendentes")
+
     def _update_pending(self):
-        self._full_width = None
         count = len(self._state.pending())
-        text = tr("{count} pendentes").format(count=count)
-        self.pending_count.setText(str(count))
-        self.pending_text.setText(tr("pendentes"))
-        self.pending_text.setVisible(not self._compact and not self._tight)
-        self.pending_badge.setToolTip(text)
-        self.pending_badge.setAccessibleName(text)
-        self.pending_badge.setVisible(count > 0)
+        self.pending_label.setText(self.pending_text(count))
+        full = plural(count, "1 pendente", "{count} pendentes")
+        self.pending_label.setToolTip(full)
+        self.pending_label.setAccessibleName(full)
+        self.pending_label.setVisible(count > 0)
         self.save_button.setEnabled(count > 0)
-        self.save_button.setText("" if self._compact else tr("Gravar"))
-        self.save_button.setAccessibleName(tr("Gravar"))
         self._reposition()
 
     def _step_width(self, delta: float):
@@ -420,70 +500,38 @@ class MarkupBar(QFrame):
     # -- modo compacto e posição -------------------------------------------------------
 
     def set_compact(self, compact: bool) -> None:
-        """Abaixo de 1180 px (ou com o centro estreito): só ícones, e cor e espessura num
-        popover."""
+        """Sem espaço para a barra inteira (janela estreita, gaveta aberta): o Estilo fica só
+        com a bolinha e o contador só com o número."""
         if compact == self._compact:
             return
         self._compact = compact
-        self.style_button.setVisible(compact)
-        if compact:
-            self._popover_layout.addWidget(self.style_group)
-        else:
-            self.style_popover.hide()
-            self._layout.insertWidget(self._layout.indexOf(self.style_button), self.style_group)
-        self.style_group.show()
-        self._update_tool()
+        self.style_button.set_compact(compact)
         self._update_pending()
 
     def is_compact(self) -> bool:
-        return bool(self._compact)
-
-    def set_tight(self, tight: bool) -> None:
-        if tight != self._tight:
-            self._tight = tight
-            self._update_tool()
-            self._update_pending()
-
-    def is_tight(self) -> bool:
-        return self._tight
-
-    def tight_width(self) -> int:
-        """A largura da barra apertada: a inteira sem "pendentes" e sem o selo da tecla."""
-        key = self._kbd[self._state.active_tool() or "select"]
-        return self.full_width() - (self.pending_text.sizeHint().width() + 4) - (key.sizeHint().width() + 7)
+        return self._compact
 
     def full_width(self) -> int:
-        """A largura da barra inteira (fora do modo compacto) no pior caso: o nome mais longo
-        na ferramenta ativa e o selo de pendentes à mostra. Quem a posiciona decide por ela se
-        a barra cabe, e a barra não muda de modo ao trocar de ferramenta nem com a primeira
-        pendente."""
-        if self._full_width is None:
-            compact, tight = self._compact, self._tight
-            self.set_tight(False)
-            if compact:
-                self.set_compact(False)
-            tool = self._state.active_tool() or "select"
-            active = self.tool_buttons[tool]
-            growing = max(0, self._active_target - active.maximumWidth())  # no meio da animação
-            font = QFont(active.font())
-            font.setPixelSize(12)
-            font.setWeight(QFont.Weight.DemiBold)
-            metrics = QFontMetrics(font)
-            labels = {t: tr(SHORT_LABELS.get(t, TOOL_LABELS[t])) for t in TOOLS}
-            longer = max(metrics.horizontalAdvance(text) for text in labels.values())
-            longer -= metrics.horizontalAdvance(labels[tool])
-            badge = 0 if self.pending_badge.isVisibleTo(self) else self.pending_badge.sizeHint().width() + 4
-            width = self.sizeHint().width() + growing + longer + badge
-            if compact:
-                self.set_compact(True)
-            self.set_tight(tight)
-            self._full_width = width
-        return self._full_width
+        """A largura da barra inteira, com o Estilo e o contador por extenso, no pior caso (com
+        pendentes): quem a posiciona decide por ela se a barra cabe, e a barra não muda de modo
+        com a primeira pendente."""
+        width = self.sizeHint().width()
+        metrics = self.pending_label.fontMetrics()
+        longest = metrics.horizontalAdvance(self.pending_text(99, compact=False))
+        if self.pending_label.isVisibleTo(self):
+            width -= self.pending_label.sizeHint().width()
+        else:
+            width += self._layout.spacing()
+        width += longest
+        if self._compact:
+            width += self.style_button.width_for(False) - self.style_button.width_for(True)
+        return width
 
     def _show_style_popover(self):
         self.style_popover.adjustSize()
         self.style_popover.move(self.style_button.mapToGlobal(QPoint(0, self.style_button.height() + 6)))
         self.style_popover.show()
+        motion.animate(self.style_popover, b"windowOpacity", 0.0, 1.0, motion.MEDIUM)
 
     def set_right_inset(self, inset: int) -> None:
         """Com a gaveta da ferramenta aberta, centraliza na parte visível à esquerda dela."""
