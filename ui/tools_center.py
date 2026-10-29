@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui import search_index, sidebar_icons
-from ui.i18n import tr
+from ui.i18n import literal, tr
 from ui.icon_utils import in_accent
 from ui.preferences import preferences
 from ui.tools import GROUPS, TOOLS
@@ -81,17 +81,37 @@ class ToolRow(QToolButton):
 
     def retranslate(self):
         tool = TOOLS[self.tool_id]
-        self.setText(tr(tool.title))
+        self.name = tr(tool.title)
         self.setToolTip(tool_tip(self.tool_id))
+        self.setAccessibleName(self.name)
         self.setAccessibleDescription(tr(tool.description))
+        self._fit_name()
+
+    def text(self) -> str:  # type: ignore[override]
+        """O nome inteiro, mesmo quando a linha mostra com reticências."""
+        return self.name
+
+    def _fit_name(self) -> None:
+        """O nome numa linha só, com reticências se não couber antes do motivo e do alfinete."""
+        extras = [label for label in (self.reason, self.pin) if not label.isHidden()]
+        right = sum(label.sizeHint().width() + 6 for label in extras) + (8 if extras else 0)
+        available = self.width() - right - self.iconSize().width() - 22  # bordas, padding e o vão do ícone
+        shown = self.fontMetrics().elidedText(self.name, Qt.TextElideMode.ElideRight, max(available, 20))
+        super().setText(literal(shown))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._fit_name()
 
     def set_pinned(self, pinned: bool) -> None:
         self.pin.setVisible(pinned)
         self.pin.setToolTip(tr("Na coluna rápida") if pinned else "")
+        self._fit_name()
 
     def set_reason(self, reason: str) -> None:
         self.reason.setText(tr("por “{word}”").format(word=reason) if reason else "")
         self.reason.setVisible(bool(reason))
+        self._fit_name()
 
     def focusInEvent(self, event):
         super().focusInEvent(event)
@@ -214,7 +234,7 @@ class ToolsCenter(QScrollArea):
             pill.setIcon(in_accent(getattr(sidebar_icons, TOOLS[tool_id].icon)()))
             pill.setIconSize(QSize(16, 16))
             pill.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-            pill.setText(tr(TOOLS[tool_id].title))
+            pill.setText(literal(tr(TOOLS[tool_id].title)))
             pill.setCursor(Qt.CursorShape.PointingHandCursor)
             pill.clicked.connect(lambda _checked=False, t=tool_id: self.tool_requested.emit(t))
             favorites.addWidget(pill)

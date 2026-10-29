@@ -245,7 +245,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(8, 0, 8, 0)
         layout.setSpacing(4)
         layout.addWidget(self._logo_button)
-        layout.addWidget(self._menu_bar)
+        layout.addWidget(self._menu_bar, 0, Qt.AlignmentFlag.AlignVCenter)  # senão os menus colam no topo
         layout.addWidget(bar_separator())
         layout.addWidget(self.tabs.tabBar(), 1)
         layout.addWidget(self._new_tab_button)

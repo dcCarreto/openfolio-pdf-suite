@@ -93,7 +93,7 @@ class DocumentTabs(QStackedWidget):
         """`addTab(widget, texto)` ou `addTab(widget, ícone, texto)`, como no QTabWidget."""
         icon, text = (QIcon(), args[0]) if len(args) == 1 else args
         index = self.addWidget(widget)
-        self._bar.insertTab(index, icon, text)
+        self._bar.insertTab(index, icon, i18n.literal(text))
         return index
 
     def removeTab(self, index: int) -> None:
@@ -112,10 +112,10 @@ class DocumentTabs(QStackedWidget):
         self.setCurrentIndex(self.indexOf(widget))
 
     def tabText(self, index: int) -> str:
-        return self._bar.tabText(index)
+        return self._bar.tabText(index).replace("&&", "&")
 
     def setTabText(self, index: int, text: str) -> None:
-        self._bar.setTabText(index, text)
+        self._bar.setTabText(index, i18n.literal(text))
 
     def setTabToolTip(self, index: int, text: str) -> None:
         self._bar.setTabToolTip(index, text)

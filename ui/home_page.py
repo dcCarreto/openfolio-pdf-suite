@@ -275,6 +275,8 @@ class HomePage(QScrollArea):
             texts.addWidget(title, 0, Qt.AlignmentFlag.AlignLeft if compact else Qt.AlignmentFlag.AlignHCenter)
             texts.addWidget(hint, 0, Qt.AlignmentFlag.AlignLeft if compact else Qt.AlignmentFlag.AlignHCenter)
             if compact:
+                texts.insertStretch(0)  # na faixa, título e dica juntos no meio da altura
+                texts.addStretch()
                 layout_zone = QHBoxLayout(zone)
                 layout_zone.setContentsMargins(24, 0, 24, 0)
                 layout_zone.setSpacing(16)

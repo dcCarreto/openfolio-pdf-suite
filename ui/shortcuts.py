@@ -233,7 +233,8 @@ class CommandPalette(QDialog):
         self._actions = []
         self._entries: list[search_index.Entry | None] = []
         self._haystacks = []
-        entries = [(label, action) for label, action in [*commands, *extras] if action.isEnabled()]
+        self._labels: list[str] = []
+        entries =[(label, action) for label, action in [*commands, *extras] if action.isEnabled()]
         order = {key: position for position, (key, _title) in enumerate(GROUPS)}
         entries.sort(key=lambda entry: order[command_group(entry[1])])  # estável: a ordem dos menus fica
         for label, action in entries:
@@ -254,6 +255,7 @@ class CommandPalette(QDialog):
             self._actions.append(action)
             self._entries.append(entry)
             self._haystacks.append(fold_text(f"{label} {action.statusTip()}"))
+            self._labels.append(fold_text(label))
 
         self.search.textChanged.connect(self._filter)
         self.search.returnPressed.connect(self._run)
@@ -266,7 +268,7 @@ class CommandPalette(QDialog):
     def _filter(self, *_args):
         query = self.search.text()
         words = fold_text(query).split()
-        first = -1
+        first = best = -1  # a primeira linha à mostra e a primeira achada sem sinônimo
         shown: dict[str, int] = {}
         for row, haystack in enumerate(self._haystacks):
             item = self.list.item(row)
@@ -279,6 +281,8 @@ class CommandPalette(QDialog):
             elif entry is not None:
                 # Sem nada digitado, só as ferramentas; os modos aparecem na busca ou com Tab.
                 visible, reason = search_index.match(entry, query) if words else (entry.mode is None, "")
+                if not visible and words and all(word in self._labels[row] for word in words):
+                    visible = True  # o rótulo inteiro ("Ferramentas › Comprimir") também acha
             else:
                 visible = all(word in haystack for word in words)
             if visible and not words and not self._modes_of and shown.get(group, 0) >= MAX_PER_GROUP:
@@ -289,8 +293,12 @@ class CommandPalette(QDialog):
             if visible:
                 shown[group] = shown.get(group, 0) + 1
                 first = row if first < 0 else first
+                if best < 0 and entry is not None and search_index.in_title(entry, query):
+                    best = row
         self.list.doItemsLayout()  # as linhas com título mudaram de altura
-        self.list.setCurrentRow(first)
+        # O destaque (Enter) vai para o resultado mais exato: o primeiro com tudo o que foi
+        # digitado no nome ("certificado digital" destaca o modo, não Preencher e assinar).
+        self.list.setCurrentRow(best if best >= 0 else first)
 
     def show_modes(self, tool_id: str) -> None:
         """Só os modos da ferramenta `tool_id` ("" volta à lista toda)."""

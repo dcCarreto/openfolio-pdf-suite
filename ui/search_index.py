@@ -40,19 +40,30 @@ class Entry:
 
 
 def entries(with_modes: bool = True) -> list[Entry]:
-    """As ferramentas (na ordem do registro) e, com `with_modes`, os modos das que têm mais de um."""
+    """As ferramentas (na ordem do registro) e, com `with_modes`, os modos das que têm mais de um.
+    Sem `with_modes` (a aba Ferramentas), o nome dos modos leva à ferramenta; com eles (a
+    paleta), leva só ao modo, que é o resultado mais exato."""
     result = []
     for tool in TOOLS.values():
         pages = {mode.page for mode in tool.modes}
         base = f"{tr(tool.title)} {tr(tool.description)} {tool.title} {tool.description}"
         synonyms = " ".join([SYNONYMS.get(tool.id, ""), *(page_synonyms(page) for page in pages)])
-        synonyms += " " + " ".join(f"{tr(mode.label)} {mode.label}" for mode in tool.modes)
+        if not with_modes:
+            synonyms += " " + " ".join(f"{tr(mode.label)} {mode.label}" for mode in tool.modes)
         result.append(Entry(tool, None, _words(base), _words(synonyms)))
         if with_modes and len(tool.modes) > 1:
             for index, mode in enumerate(tool.modes):
                 text = f"{tr(tool.title)} {tr(mode.label)} {tool.title} {mode.label}"
                 result.append(Entry(tool, index, _words(text), _words(page_synonyms(mode.page))))
     return result
+
+
+def in_title(entry: Entry, query: str) -> bool:
+    """Cada palavra digitada começa uma palavra do nome mostrado ("Preencher e assinar ›
+    Certificado digital"): o resultado mais exato, que a paleta destaca."""
+    title = _words(entry.title)
+    typed = _words(query)
+    return bool(typed) and all(any(candidate.startswith(word) for candidate in title) for word in typed)
 
 
 def match(entry: Entry, query: str) -> tuple[bool, str]:

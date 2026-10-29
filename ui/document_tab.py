@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
+    QListView,
     QMenu,
     QPushButton,
     QSplitter,
@@ -116,6 +117,7 @@ class DocumentTab(QWidget):
         self._busy_panel: ToolPanel | None = None
         self._center_widgets: list[QWidget] = []  # o que uma ferramenta põe no lugar do visualizador
         self._last_mode: dict[str, int] = {}
+        self._entering_mode: tuple[str, int] | None = None  # open_mode já escolheu o modo
 
         self._build_ui()
         self.task_status = TaskStatus(self.tasks)  # vai para a barra de status da janela
@@ -477,14 +479,15 @@ class DocumentTab(QWidget):
         if selector is None:
             return
         items = mode.items or tuple(range(selector.count()))
-        view = selector.view()
+        view = cast(QListView, selector.view())
         for index in range(selector.count()):
             view.setRowHidden(index, index not in items)
         if selector.currentIndex() not in items:
             selector.setCurrentIndex(items[0])
         visible = len(items) > 1
         selector.setVisible(visible)
-        layout = _containing_layout(page.layout(), selector) if page.layout() is not None else None
+        page_layout = page.layout()
+        layout = _containing_layout(page_layout, selector) if page_layout is not None else None
         if layout is not None:
             before = layout.itemAt(layout.indexOf(selector) - 1)
             label = before.widget() if before is not None else None
@@ -508,10 +511,11 @@ class DocumentTab(QWidget):
             self._entering_mode = None
 
     def _follow_selector(self, row: int) -> None:
-        if row != self._tool or getattr(self, "_entering_mode", None):
+        if row != self._tool or self._entering_mode:
             return
         class_name = SECTIONS[row][4]
-        tool, index = mode_for(class_name, self._selector(self._pages[row], class_name).currentIndex())
+        selector = self._selector(self._pages[row], class_name)
+        tool, index = mode_for(class_name, selector.currentIndex() if selector is not None else None)
         if (tool.id, index) != (self._tool_id, self._mode):
             self.open_mode(tool.id, index, keep_selection=True)
 
@@ -519,7 +523,7 @@ class DocumentTab(QWidget):
         """Abre a tela no painel da direita, com o nome e os modos da ferramenta no topo."""
         page = self.page(row)
         class_name = SECTIONS[row][4]
-        entering = getattr(self, "_entering_mode", None)
+        entering = self._entering_mode
         if entering is None:
             selector = self._selector(page, class_name)
             tool, mode = mode_for(class_name, selector.currentIndex() if selector is not None else None)

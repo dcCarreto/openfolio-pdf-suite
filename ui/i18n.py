@@ -42,6 +42,11 @@ def tr(text: str) -> str:
     return _EN_TRANSLATIONS.get(text, text)
 
 
+def literal(text: str) -> str:
+    """O texto para um botão ou uma aba sem que o "&" vire atalho ("Fill & sign", "A&B.pdf")."""
+    return text.replace("&", "&&")
+
+
 def plural(count: int, one: str, many: str) -> str:
     """"1 página" / "25 páginas": `one` sem {count} no singular, `many` com {count}."""
     return tr(one if count == 1 else many).format(count=count)
@@ -756,6 +761,9 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Escaneados e OCR": "Scans and OCR",
     "Escolha pelo que você quer fazer. Cada grupo diz para que serve.": "Choose by what you want to do. Each group says what it is for.",
     "Escolha quais camadas do PDF aparecem ao abrir.": "Choose which PDF layers show when it opens.",
+    "Escolha uma pasta e uma operação; no fim, um relatório CSV mostra o que deu certo.": (
+        "Pick a folder and an operation; at the end, a CSV report shows what worked."
+    ),
     "Esconder dados pessoais": "Hide personal data",
     "Escreva na página, assine à mão ou com certificado digital.": "Write on the page, sign by hand or with a digital certificate.",
     "Fixar na coluna rápida": "Pin to the quick column",
@@ -942,14 +950,9 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "hoje, {hora}": "today, {hora}",
     "ontem": "yesterday",
     "há {n} dias": "{n} days ago",
-    "Tudo o que o OpenFolio faz com um PDF, por categoria.": "Everything OpenFolio does with a PDF, by category.",
     "Buscar ferramenta": "Search tools",
-    "Buscar ferramenta (ex.: assinar, cpf, word)": "Search tools (e.g. sign, redact, word)",
     "Todas": "All",
-    "No trilho rápido": "In the quick rail",
     "Documentos abertos": "Open documents",
-    "↑ ↓ navegar · Enter executar · Tab filtrar por categoria": "↑ ↓ navigate · Enter run · Tab filter by category",
-    "Atalhos em Editar › Atalhos de teclado": "Shortcuts in Edit › Keyboard shortcuts",
     "{count} selecionadas": "{count} selected",
     "Em branco": "Blank",
     "Apagar": "Delete",
@@ -971,7 +974,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "a página em branco": "the blank page",
     "{count} páginas": "{count} pages",
     "Trocar...": "Change...",
-    "{count} página(s)": "{count} page(s)",
     "Gravar o resultado num arquivo novo": "Save the result to a new file",
     "Nenhum documento aberto": "No document open",
     "Arraste um PDF para cá ou escolha um arquivo no computador.": "Drop a PDF here or choose a file on your computer.",
@@ -2131,14 +2133,9 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Sem documento": "No document",
     "Fechar documento": "Close document",
     "Miniaturas das páginas": "Page thumbnails",
-    "Criar e editar": "Create and edit",
     "Revisar e comentar": "Review and comment",
-    "Formulários e assinatura": "Forms and signature",
-    "Converter e otimizar": "Convert and optimize",
-    "Documento": "Document",
     "Automatizar": "Automate",
     "Recentes": "Recent",
-    "Os PDFs abertos aparecem aqui.": "The PDFs you open show up here.",
     "Salvar (Ctrl+S)": "Save (Ctrl+S)",
     "Imprimir... (Ctrl+P)": "Print... (Ctrl+P)",
 }
