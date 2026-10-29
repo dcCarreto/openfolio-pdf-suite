@@ -1,16 +1,17 @@
-"""O painel de ferramenta: um padrão só para as 30 ferramentas.
+"""O painel de ferramenta: um padrão só para todas as ferramentas.
 
     [ícone] Título                                        [x]
-            descrição de uma linha
+            descrição, em até duas linhas
     ─────────────────────────────────────────────────────────
-    ENTRADA   o PDF aberto
-    OPÇÕES    os controles da ferramenta
-    SAÍDA     no documento aberto | arquivo novo
+    Arquivo                  o PDF aberto
+    (rótulo da ferramenta)   os controles dela
+    Onde fica o resultado    Neste documento | Em um arquivo novo
     ─────────────────────────────────────────────────────────
     [            ação principal              Ctrl+Enter ]
 
-O rodapé tem cinco estados: pronto, vazio (sem o PDF de entrada, a ação fica desabilitada),
-ocupado (andamento e "Cancelar"), sucesso e erro (o cartão de resultado no lugar dos diálogos).
+O rodapé tem cinco estados: pronto, vazio (sem o PDF de entrada: "Abra um PDF para continuar."
+e a ação desabilitada), ocupado (andamento e "Cancelar", com o conteúdo esmaecido), sucesso e
+erro (o cartão de resultado no lugar dos diálogos).
 
 A ferramenta continua dona dos widgets e da lógica dela. O painel só os arruma: tira da página
 o `source_bar` (entrada) e o `output_picker` (saída), com o rótulo logo antes de cada um, e
@@ -22,6 +23,7 @@ from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLayout,
@@ -38,7 +40,6 @@ from PySide6.QtWidgets import (
 
 from ui import motion, theme
 from ui.i18n import tr
-from ui.top_bar import BusySpinner
 from ui.viewer.viewer_icons import build_close_icon
 
 READY, EMPTY, BUSY, SUCCESS, ERROR, INFO = "ready", "empty", "busy", "success", "error", "info"
@@ -95,8 +96,10 @@ class ResultCard(QFrame):
         self.technical.setProperty("ofRole", "secondary")
         self.technical.setWordWrap(True)
         self.technical.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.technical_button = QPushButton(tr("Mostrar detalhes"))
+        self.technical_button = QPushButton(tr("Ver detalhes"))
         self.technical_button.setProperty("ofVariant", "ghost")
+        self.technical_button.setProperty("ofTone", "danger")
+        self.technical_button.setProperty("ofSize", "mini")
         self.technical_button.setCheckable(True)
         self.technical_button.toggled.connect(self.technical.setVisible)
         text = QVBoxLayout()
@@ -189,7 +192,7 @@ class ToolPanel(QFrame):
         self.body = QWidget()
         self.body.setObjectName("ToolBody")
         self._sections = QVBoxLayout(self.body)
-        self._sections.setContentsMargins(16, 16, 16, 16)
+        self._sections.setContentsMargins(16, 16, 16, 12)
         self._sections.setSpacing(20)
         for widget in (input_widget, output_widget):
             if widget is not None:
@@ -203,14 +206,15 @@ class ToolPanel(QFrame):
         extra = getattr(page, "extra_section", None)
         if extra is not None:
             self.add_section("", extra[1], label=extra[0])
-        options_label = self.add_section(tr("Opções"), page)
+        # O rótulo das opções é o da ferramenta ("Quanto comprimir"), se ela tiver um.
+        options_label = self.add_section(tr(getattr(page, "options_title", "Opções")), page)
         if output_widget is not None:
             self.add_section(tr("Onde fica o resultado"), output_widget)
         if not any(child.isVisibleTo(page) and child not in self._actions for child in page.findChildren(QWidget)):
             options_label.hide()  # sem opções (Extrair texto): a seção não aparece vazia
             page.hide()
         self._sections.addStretch(1)  # a sobra fica embaixo, e não entre as seções
-        scroll = QScrollArea()
+        scroll = self.scroll_area = QScrollArea()
         scroll.setObjectName("ToolScroll")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -244,27 +248,24 @@ class ToolPanel(QFrame):
     def _build_header(self, icon: QIcon, title: str, description: str) -> QWidget:
         header = QWidget()
         header.setObjectName("ToolHeader")
-        header.setFixedHeight(56)
         tile = QLabel()
         tile.setObjectName("IconTile")
         tile.setFixedSize(32, 32)
         tile.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        tile.setPixmap(icon.pixmap(QSize(17, 17), QIcon.Mode.Selected))
+        tile.setPixmap(icon.pixmap(QSize(18, 18), QIcon.Mode.Selected))
         self.title_label = QLabel(title)
         self.title_label.setObjectName("ToolTitle")
+        # A descrição quebra em até duas linhas, sem reticências (os textos são escritos curtos).
         self.description_label = QLabel(description)
         self.description_label.setProperty("ofRole", "secondary")
-        self.description_label.setToolTip(description)
+        self.description_label.setWordWrap(True)
         self.description_label.setMinimumWidth(40)
-        self.description_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        self._description = description
         texts = QVBoxLayout()
-        texts.setSpacing(0)
-        texts.addStretch()
+        texts.setSpacing(2)
         texts.addWidget(self.title_label)
         texts.addWidget(self.description_label)
-        texts.addStretch()
         self.close_button = QToolButton()
+        self.close_button.setObjectName("ToolClose")
         self.close_button.setProperty("ofRole", "icon")
         self.close_button.setIcon(build_close_icon())
         self.close_button.setIconSize(QSize(18, 18))
@@ -272,12 +273,16 @@ class ToolPanel(QFrame):
         self.close_button.setToolTip(tr("Fechar ferramenta (Esc)"))
         self.close_button.setAccessibleName(tr("Fechar ferramenta (Esc)"))
         self.close_button.clicked.connect(self.close_requested)
-        layout = QHBoxLayout(header)
-        layout.setContentsMargins(16, 0, 8, 0)
-        layout.setSpacing(10)
-        layout.addWidget(tile)
-        layout.addLayout(texts, 1)
-        layout.addWidget(self.close_button)
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        row.addWidget(tile, 0, Qt.AlignmentFlag.AlignTop)
+        row.addLayout(texts, 1)
+        row.addWidget(self.close_button, 0, Qt.AlignmentFlag.AlignTop)
+        # Abaixo da linha do título, o segmentado dos modos (quando a ferramenta tem).
+        self.header_layout = QVBoxLayout(header)
+        self.header_layout.setContentsMargins(16, 12, 12, 12)
+        self.header_layout.setSpacing(12)
+        self.header_layout.addLayout(row)
         return header
 
     def add_section(self, title: str, widget: QWidget, label: QLabel | None = None) -> QLabel:
@@ -301,56 +306,59 @@ class ToolPanel(QFrame):
         self.primary_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.primary_button.clicked.connect(self.run)
         self.primary_kbd = QLabel("Ctrl+Enter")
-        self.primary_kbd.setProperty("ofRole", "secondary")
+        self.primary_kbd.setObjectName("PrimaryKbd")
         kbd_layout = QHBoxLayout(self.primary_button)
         kbd_layout.setContentsMargins(0, 0, 12, 0)
         kbd_layout.addStretch()
         kbd_layout.addWidget(self.primary_kbd)
-        self.empty_caption = QLabel(tr("Escolha um PDF de entrada para habilitar."))
-        self.empty_caption.setProperty("ofRole", "secondary")
+        # Vazio: o motivo logo acima do botão desabilitado.
+        self.empty_caption = QLabel(tr("Abra um PDF para continuar."))
+        self.empty_caption.setProperty("ofRole", "help")
+        self.empty_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_caption.setWordWrap(True)
         ready_layout = self._footer_layout(ready)
         self._ready_row = QHBoxLayout()
         self._ready_row.setSpacing(8)
         self._ready_row.addWidget(self.primary_button, 1)
-        ready_layout.addLayout(self._ready_row)
         ready_layout.addWidget(self.empty_caption)
+        ready_layout.addLayout(self._ready_row)
 
+        # Ocupado: "Comprimir… 12 de 25" e "48%", a barra de 4 px e "Cancelar".
         busy = QWidget()
-        self.spinner = BusySpinner()
         self.busy_title = QLabel()
-        self.busy_title.setObjectName("ResultTitle")
+        self.busy_title.setObjectName("BusyText")
         self.busy_percent = QLabel()
-        self.busy_percent.setProperty("ofRole", "secondary")
+        self.busy_percent.setObjectName("ResultTitle")
         head = QHBoxLayout()
         head.setSpacing(8)
-        head.addWidget(self.spinner)
         head.addWidget(self.busy_title, 1)
         head.addWidget(self.busy_percent)
         self.progress = QProgressBar()
+        self.progress.setObjectName("TaskProgress")
         self.progress.setTextVisible(False)
-        self.busy_caption = QLabel()
-        self.busy_caption.setProperty("ofRole", "secondary")
-        self.busy_caption.setWordWrap(True)
         self.cancel_button = QPushButton(tr("Cancelar"))
         self.cancel_button.clicked.connect(self._cancel)
         busy_layout = self._footer_layout(busy)
         busy_layout.addLayout(head)
         busy_layout.addWidget(self.progress)
-        busy_layout.addWidget(self.busy_caption)
         busy_layout.addWidget(self.cancel_button)
 
+        # Sucesso e erro: o cartão e, embaixo, "Desfazer" ou "Fechar" e a ação principal.
         result = QWidget()
         self.result_card = ResultCard()
-        self.undo_button = QPushButton(tr("Desfazer"))
+        self.undo_button = QPushButton(f"↶ {tr('Desfazer')}")
         self.undo_button.setProperty("ofVariant", "ghost")
         self.undo_button.clicked.connect(self._undo)
+        self.dismiss_button = QPushButton(tr("Fechar"))
+        self.dismiss_button.setProperty("ofVariant", "ghost")
+        self.dismiss_button.clicked.connect(self._back_to_ready)
         self.result_button = QPushButton()
         self.result_button.setProperty("ofVariant", "primary")
         self.result_button.clicked.connect(self._after_result)
         buttons = QHBoxLayout()
         buttons.setSpacing(8)
         buttons.addWidget(self.undo_button)
+        buttons.addWidget(self.dismiss_button)
         buttons.addWidget(self.result_button, 1)
         result_layout = self._footer_layout(result)
         result_layout.addWidget(self.result_card)
@@ -378,15 +386,19 @@ class ToolPanel(QFrame):
 
     def _footer_layout(self, page: QWidget) -> QVBoxLayout:
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(16, 12, 16, 16)
+        layout.setContentsMargins(16, 12, 16, 14)
         layout.setSpacing(8)
         return layout
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        metrics = self.description_label.fontMetrics()
-        width = max(self.description_label.width(), 1)
-        self.description_label.setText(metrics.elidedText(self._description, Qt.TextElideMode.ElideRight, width))
+    def _set_busy_look(self, busy: bool) -> None:
+        """Ocupado: o conteúdo fica a 45% e não aceita interação."""
+        self.body.setEnabled(not busy)
+        if busy:
+            effect = QGraphicsOpacityEffect(self.scroll_area)
+            effect.setOpacity(0.45)
+            self.scroll_area.setGraphicsEffect(effect)
+        else:
+            self.scroll_area.setGraphicsEffect(None)  # type: ignore[arg-type]
 
     # -- estados ---------------------------------------------------------------------------
 
@@ -428,13 +440,13 @@ class ToolPanel(QFrame):
 
     def task_started(self, title: str) -> None:
         self._state = BUSY
-        self.busy_title.setText(title)
+        self._busy_label = title
+        self.busy_title.setText(f"{title}…")
         self.busy_percent.setText("")
         self.progress.setRange(0, 0)
-        self.busy_caption.setText(tr("Você pode continuar lendo enquanto isso."))
         self.cancel_button.setEnabled(True)
         self.cancel_button.setText(tr("Cancelar"))
-        self.body.setEnabled(False)
+        self._set_busy_look(True)
         self._show_footer(1)
 
     def task_progress(self, done: int, total: int, message: str) -> None:
@@ -442,15 +454,16 @@ class ToolPanel(QFrame):
             self.progress.setRange(0, total)
             self.progress.setValue(done)
             self.busy_percent.setText(f"{min(100, done * 100 // total)}%")
-        step = tr(message) if message else ""
-        if total > 0 and step:
-            step = f"{step} ({min(done + 1, total)}/{total})"
-        caption = tr("Você pode continuar lendo enquanto isso.")
-        self.busy_caption.setText(f"{step} · {caption}" if step else caption)
+        step = tr(message) if message else self._busy_label
+        if total > 0:
+            step = tr("{step}… {current} de {total}").format(step=step, current=min(done + 1, total), total=total)
+        else:
+            step = f"{step}…"
+        self.busy_title.setText(step)
 
     def task_finished(self, outcome: str) -> None:
         """A operação acabou. Sucesso e erro chegam logo depois, por `show_result`."""
-        self.body.setEnabled(True)
+        self._set_busy_look(False)
         self._back_to_ready()
         if outcome == "cancelled":
             self.show_result(INFO, tr("Operação cancelada."), tr("Nada foi gravado."))
@@ -459,6 +472,7 @@ class ToolPanel(QFrame):
         self._state = kind
         self.result_card.show_result(kind, title, details, technical)
         self.undo_button.setVisible(kind == SUCCESS and self.session.can_undo())
+        self.dismiss_button.setVisible(kind == ERROR)
         self.result_button.setText(tr("Tentar de novo") if kind == ERROR else tr("Concluir"))
         self._show_footer(2)
         window = self.window()

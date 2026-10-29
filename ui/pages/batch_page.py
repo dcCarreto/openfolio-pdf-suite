@@ -73,8 +73,8 @@ class BatchPage(QWidget):
         self.operation_combo.addItems([tr(label) for label, _suffix in _OPERATIONS])
 
         self.level_combo = QComboBox()
-        for level, label in _LEVELS:
-            self.level_combo.addItem(tr(label), level)
+        for level, _name, _badge, _effect, short in _LEVELS:
+            self.level_combo.addItem(tr(short), level)
         self.level_combo.setCurrentIndex(1)
         self.language_combo = QComboBox()
         languages = get_available_languages()

@@ -51,7 +51,7 @@ def test_every_tool_follows_the_panel_pattern(window, tmp_path, row):
 
     expected = ["Arquivo"] if hasattr(page, "source_bar") else []
     expected += [page.extra_section[0].text()] if hasattr(page, "extra_section") else []  # Comentários
-    expected += [] if SECTIONS[row][4] in _WITHOUT_OPTIONS else ["Opções"]
+    expected += [] if SECTIONS[row][4] in _WITHOUT_OPTIONS else [getattr(page, "options_title", "Opções")]
     expected += ["Onde fica o resultado"] if hasattr(page, "output_picker") else []
     assert _section_titles(panel) == expected
     assert panel.title_label.text() == SECTIONS[row][1] and panel.close_button.isVisibleTo(panel)
@@ -219,3 +219,41 @@ def test_outside_a_panel_messages_still_use_dialogs(monkeypatch):
     monkeypatch.setattr(QMessageBox, "information", lambda *args: shown.append(args[2]))
     tool_panel.notify_success(QWidget(), "Título", "Feito.")
     assert shown == ["Feito."]
+
+
+def test_compress_levels_are_cards_that_follow_the_combo_and_shrink_when_space_is_short(window, tmp_path):
+    doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
+    window.resize(1440, 900)
+    window.show()
+    row = window._row_of["CompressPage"]
+    page = doc.open_tool(row)
+    panel = doc.panel(row)
+    QApplication.processEvents()
+    cards = page.level_cards
+
+    assert [card.radio.text() for card in cards.cards] == ["Leve", "Equilibrada", "Forte"]
+    assert cards.cards[1].radio.isChecked() and cards.cards[1].property("selected")  # Equilibrada, recomendada
+    cards.cards[2].radio.setChecked(True)
+    assert page.level_combo.currentData() == "strong"
+    assert cards.cards[0].isVisibleTo(cards) and not page.level_combo.isVisibleTo(cards)
+
+    panel.show_result(tool_panel.ERROR, "Não foi possível comprimir.", "A imagem da página 7 está corrompida.")
+    assert page.level_combo.isVisibleTo(cards) and not cards.cards[0].isVisibleTo(cards)  # a linha compacta
+    assert panel.dismiss_button.isVisibleTo(panel) and panel.result_button.text() == "Tentar de novo"
+    panel.dismiss_button.click()  # "Fechar" volta ao estado Pronto, sem rodar de novo
+    assert panel.state() == tool_panel.READY and cards.cards[0].isVisibleTo(cards)
+    assert page.level_combo.currentData() == "strong"
+
+
+def test_the_busy_panel_dims_its_content(window, tmp_path):
+    doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
+    row = window._row_of["CompressPage"]
+    doc.open_tool(row)
+    panel = doc.panel(row)
+
+    panel.task_started("Comprimir")
+    panel.task_progress(11, 25, "")
+    assert panel.scroll_area.graphicsEffect() is not None and panel.scroll_area.graphicsEffect().opacity() == 0.45
+    assert panel.busy_title.text() == "Comprimir… 12 de 25" and panel.busy_percent.text() == "44%"
+    panel.task_finished("ok")
+    assert panel.scroll_area.graphicsEffect() is None and panel.body.isEnabled()

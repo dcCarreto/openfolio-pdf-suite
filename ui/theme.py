@@ -172,6 +172,12 @@ def _ensure_images() -> None:
     QDir.setSearchPaths("of", [folder])
 
 
+def _alpha(hex_color: str, alpha: float) -> str:
+    """Um token #rrggbb com transparência, em rgba() para o QSS."""
+    value = QColor(hex_color)
+    return f"rgba({value.red()}, {value.green()}, {value.blue()}, {alpha})"
+
+
 def build_qss(t: dict, key: str) -> str:
     """O stylesheet do app a partir dos tokens `t` do tema `key` (DARK ou LIGHT)."""
     return f"""
@@ -351,6 +357,49 @@ QLabel#ToolTitle {{
 
 QLabel#ResultTitle {{
     font-weight: 600;
+}}
+
+/* O atalho dentro do botão principal: on_primary a 80%. */
+QLabel#PrimaryKbd {{
+    font-size: 11px;
+    color: {_alpha(t["on_primary"], 0.8)};
+}}
+
+QLabel#PrimaryKbd:disabled {{
+    color: {t["text3"]};
+}}
+
+QLabel#BusyText {{
+    font-size: 12px;
+    color: {t["text2"]};
+}}
+
+/* Cartões de rádio (Comprimir: Leve, Equilibrada, Forte). */
+QFrame#ChoiceCard {{
+    border: 1px solid {t["border"]};
+    border-radius: 8px;
+}}
+
+QFrame#ChoiceCard:hover {{
+    background-color: {t["hover"]};
+}}
+
+QFrame#ChoiceCard[selected="true"] {{
+    background-color: {t["accent_fill"]};
+    border-color: {t["accent_line"]};
+}}
+
+QFrame#ChoiceCard QRadioButton {{
+    font-weight: 500;
+}}
+
+QLabel#ChoiceBadge {{
+    font-size: 11px;
+    color: {t["accent_strong"]};
+}}
+
+QComboBox#ChoiceCombo {{
+    min-height: 36px;
 }}
 
 #ToolScroll, #ToolScroll > QWidget, #ToolBody {{
