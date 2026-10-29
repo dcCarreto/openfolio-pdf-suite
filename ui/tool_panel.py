@@ -19,15 +19,19 @@ mostra no rodapé um botão que faz o papel do botão de ação do modo visível
 (`page.action_buttons`, um por modo), com o mesmo texto e habilitado quando ele estiver.
 """
 
+import re
+
 from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QComboBox,
     QFrame,
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLayout,
+    QLineEdit,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -172,6 +176,40 @@ def _take_out(page: QWidget, widget: QWidget) -> None:
         label.hide()
 
 
+# Termos técnicos que ganham "ⓘ" ao lado do rótulo, com a explicação na dica (seção 8). As siglas
+# são as mesmas em português e em inglês.
+TERMS = {
+    "PAdES": "Padrão de assinatura em PDF que mantém a assinatura verificável por muitos anos.",
+    "TSA": "Comprova quando o documento foi assinado. Usa a internet: só um resumo do arquivo é enviado, nunca o PDF.",
+    "Bates": "Numeração sequencial usada em processos (ex.: DOC000123) que continua de um arquivo para o outro.",
+    "DPI": "Resolução das imagens. Mais DPI, mais nitidez e arquivo maior. 150 é bom para tela; 300, para impressão.",
+}
+
+
+def _explain_terms(page: QWidget) -> None:
+    """Rótulos, caixas de seleção e campos com um termo técnico: "ⓘ" e a explicação na dica e
+    na descrição para o leitor de tela."""
+    widgets: list[QLabel | QAbstractButton | QLineEdit] = [
+        *page.findChildren(QLabel),
+        *page.findChildren(QAbstractButton),
+        *page.findChildren(QLineEdit),
+    ]
+    for widget in widgets:
+        text = widget.placeholderText() if isinstance(widget, QLineEdit) else widget.text()
+        term = next((term for term in TERMS if re.search(rf"\b{term}\b", text)), None)
+        if term is None or "ⓘ" in text:
+            continue
+        help_text = tr(TERMS[term])
+        if isinstance(widget, (QLabel, QAbstractButton)) and widget.text():
+            widget.setText(f"{widget.text()} ⓘ")
+        tip = widget.toolTip()
+        widget.setToolTip(f"{tip}\n{help_text}" if tip else help_text)
+        widget.setAccessibleDescription(help_text)
+        buddy = widget.buddy() if isinstance(widget, QLabel) else None
+        if buddy is not None:
+            buddy.setAccessibleDescription(help_text)
+
+
 def _tidy_labels(page: QWidget) -> None:
     """Rótulos de campo sem dois-pontos e no estilo de rótulo (seção 8): "Páginas:" vira
     "Páginas". Um lugar só para as 23 ferramentas, em vez de cada texto e a tradução dele."""
@@ -216,6 +254,7 @@ class ToolPanel(QFrame):
         if (page_layout := page.layout()) is not None:
             page_layout.setContentsMargins(0, 0, 0, 0)
         _tidy_labels(page)
+        _explain_terms(page)
         if input_widget is not None:
             self.add_section(tr("Arquivo"), input_widget)
         # Uma seção própria da ferramenta, com título que ela mesma atualiza (os comentários

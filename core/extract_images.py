@@ -10,7 +10,7 @@ from pypdf import PdfWriter
 from pypdf.generic import DictionaryObject, NameObject, NumberObject, StreamObject
 
 from .base import EXTRACT, READ, add_object, open_reader, replace_object, require_valid_page_index, write_pdf
-from .messages import Message
+from .messages import plural_message
 
 
 class ExtractImages:
@@ -108,10 +108,11 @@ class ReplaceEmbeddedImage:
         images = writer.pages[page_number].images
         if not 0 <= image_index < len(images):
             raise ValueError(
-                Message(
-                    "A imagem {number} não existe: a página tem {count} imagem(ns).",
+                plural_message(
+                    len(images),
+                    "A imagem {number} não existe: a página tem 1 imagem.",
+                    "A imagem {number} não existe: a página tem {count} imagens.",
                     number=image_index + 1,
-                    count=len(images),
                 )
             )
         target = images[image_index]

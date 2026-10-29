@@ -13,7 +13,7 @@ from pypdf import PdfReader, PdfWriter
 
 from .base import open_reader, require_valid_page_index, write_pdf
 from .document import pages_writer
-from .messages import Message
+from .messages import Message, plural_message
 
 
 def _page_list(pages: Iterable[int]) -> str:
@@ -56,7 +56,12 @@ class ReorderPages:
             require_valid_page_index(total_pages, index)
         duplicated = {index for index in order if order.count(index) > 1}
         if duplicated:
-            raise ValueError(Message("Página(s) repetida(s) na nova ordem: {pages}.", pages=_page_list(duplicated)))
+            raise ValueError(plural_message(
+                    len(duplicated),
+                    "Página repetida na nova ordem: {pages}.",
+                    "Páginas repetidas na nova ordem: {pages}.",
+                    pages=_page_list(duplicated),
+                ))
         missing = set(range(total_pages)) - set(order)
         if missing:
             raise ValueError(
@@ -97,10 +102,11 @@ class InsertPages:
         total_pages = len(reader.pages)
         if not 0 <= at_index <= total_pages:
             raise ValueError(
-                Message(
-                    "Posição de inserção inválida: o documento tem {total} página(s); dá para "
-                    "inserir antes da página 1 até depois da página {total}.",
-                    total=total_pages,
+                plural_message(
+                    total_pages,
+                    "Posição de inserção inválida: o documento tem 1 página; dá para inserir antes ou depois dela.",
+                    "Posição de inserção inválida: o documento tem {count} páginas; dá para inserir antes da "
+                    "página 1 até depois da página {count}.",
                 )
             )
 
@@ -130,11 +136,13 @@ class ReplacePages:
         require_valid_page_index(total_pages, start_index, label="Página inicial")
         if not start_index < end_index <= total_pages:
             raise ValueError(
-                Message(
-                    "Intervalo inválido: a página final precisa vir depois da inicial ({start}) e "
-                    "o documento tem {total} página(s).",
+                plural_message(
+                    total_pages,
+                    "Intervalo inválido: a página final precisa vir depois da inicial ({start}) e o documento "
+                    "tem 1 página.",
+                    "Intervalo inválido: a página final precisa vir depois da inicial ({start}) e o documento "
+                    "tem {count} páginas.",
                     start=start_index + 1,
-                    total=total_pages,
                 )
             )
 

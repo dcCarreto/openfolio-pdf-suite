@@ -262,3 +262,16 @@ def test_the_busy_panel_dims_its_content(window, tmp_path):
     assert panel.busy_title.text() == "Comprimir… 12 de 25" and panel.busy_percent.text() == "44%"
     panel.task_finished("ok")
     assert panel.scroll_area.graphicsEffect() is None and panel.body.isEnabled()
+
+
+def test_technical_terms_get_an_explanation(window, tmp_path):
+    from PySide6.QtWidgets import QCheckBox
+
+    doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
+    page = doc.open_tool(window._row_of["SignaturePage"])
+    pades = page.pades_check
+    assert pades.text().endswith("ⓘ") and "verificável por muitos anos" in pades.toolTip()
+    assert isinstance(pades, QCheckBox) and pades.accessibleDescription()
+    page = doc.open_tool(window._row_of["OCRPage"])
+    labels = [label.text() for label in page.findChildren(QLabel) if label.text().startswith("DPI")]
+    assert labels == ["DPI ⓘ"]  # sem os dois-pontos, com a ajuda

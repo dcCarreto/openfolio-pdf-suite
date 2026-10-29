@@ -1124,6 +1124,48 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "O reconhecimento de texto não está instalado: veja a ferramenta Escaneados e OCR.": "Text recognition is not installed: see the Scans and OCR tool.",
     "Requer a detecção de orientação do reconhecimento de texto.": "Needs the orientation detection of text recognition.",
     "{items} e {last}": "{items} and {last}",
+    "Padrão de assinatura em PDF que mantém a assinatura verificável por muitos anos.": "A PDF signature standard that keeps the signature verifiable for many years.",
+    "Comprova quando o documento foi assinado. Usa a internet: só um resumo do arquivo é enviado, nunca o PDF.": "Proves when the document was signed. Uses the internet: only a digest of the file is sent, never the PDF.",
+    "Numeração sequencial usada em processos (ex.: DOC000123) que continua de um arquivo para o outro.": "Sequential numbering used in legal cases (e.g. DOC000123) that carries on from one file to the next.",
+    "Resolução das imagens. Mais DPI, mais nitidez e arquivo maior. 150 é bom para tela; 300, para impressão.": "Image resolution. More DPI, sharper images and a bigger file. 150 is good for screens; 300 for print.",
+    "1 figura tagueada sem texto alternativo (/Alt).": "1 tagged figure without alternative text (/Alt).",
+    "{count} figuras tagueadas sem texto alternativo (/Alt).": "{count} tagged figures without alternative text (/Alt).",
+    "1 página com links ou campos sem ordem de tabulação pela estrutura (/Tabs /S).": "1 page with links or fields without a tab order by structure (/Tabs /S).",
+    "{count} páginas com links ou campos sem ordem de tabulação pela estrutura (/Tabs /S).": "{count} pages with links or fields without a tab order by structure (/Tabs /S).",
+    "1 campo de formulário sem descrição para leitores de tela (/TU): {names}.": "1 form field without a description for screen readers (/TU): {names}.",
+    "{count} campos de formulário sem descrição para leitores de tela (/TU): {names}.": "{count} form fields without a description for screen readers (/TU): {names}.",
+    "{label} {page} não existe: o documento tem 1 página.": "{label} {page} does not exist: the document has 1 page.",
+    "{label} {page} não existe: o documento tem {count} páginas.": "{label} {page} does not exist: the document has {count} pages.",
+    "O documento tem 1 página: confira as páginas informadas.": "The document has 1 page: check the pages you entered.",
+    "O documento tem {count} páginas: confira as páginas informadas.": "The document has {count} pages: check the pages you entered.",
+    "{name} tem 1 página: confira as páginas escolhidas.": "{name} has 1 page: check the pages you picked.",
+    "{name} tem {count} páginas: confira as páginas escolhidas.": "{name} has {count} pages: check the pages you picked.",
+    "A imagem {number} não existe: a página tem 1 imagem.": "Image {number} does not exist: the page has 1 image.",
+    "A imagem {number} não existe: a página tem {count} imagens.": "Image {number} does not exist: the page has {count} images.",
+    "A camada {number} não existe: o documento tem 1 camada.": "Layer {number} does not exist: the document has 1 layer.",
+    "A camada {number} não existe: o documento tem {count} camadas.": "Layer {number} does not exist: the document has {count} layers.",
+    "O link {number} não existe: a página tem 1 link.": "Link {number} does not exist: the page has 1 link.",
+    "O link {number} não existe: a página tem {count} links.": "Link {number} does not exist: the page has {count} links.",
+    "1 slide com texto demais para uma página continuou na página seguinte.": "1 slide with too much text for one page carried on to the next page.",
+    "{count} slides com texto demais para uma página continuaram na página seguinte.": "{count} slides with too much text for one page carried on to the next page.",
+    "Página repetida na nova ordem: {pages}.": "Page repeated in the new order: {pages}.",
+    "Páginas repetidas na nova ordem: {pages}.": "Pages repeated in the new order: {pages}.",
+    "Posição de inserção inválida: o documento tem 1 página; dá para inserir antes ou depois dela.": "Invalid insert position: the document has 1 page; you can insert before or after it.",
+    "Posição de inserção inválida: o documento tem {count} páginas; dá para inserir antes da página 1 até depois da página {count}.": "Invalid insert position: the document has {count} pages; you can insert from before page 1 to after page {count}.",
+    "Intervalo inválido: a página final precisa vir depois da inicial ({start}) e o documento tem 1 página.": "Invalid range: the last page has to come after the first ({start}) and the document has 1 page.",
+    "Intervalo inválido: a página final precisa vir depois da inicial ({start}) e o documento tem {count} páginas.": "Invalid range: the last page has to come after the first ({start}) and the document has {count} pages.",
+    "1 ação proibida removida (JavaScript, abrir programas, ações automáticas).": "1 forbidden action removed (JavaScript, launching programs, automatic actions).",
+    "{count} ações proibidas removidas (JavaScript, abrir programas, ações automáticas).": "{count} forbidden actions removed (JavaScript, launching programs, automatic actions).",
+    "1 anexo removido: o PDF/A-{part} não permite esse anexo.": "1 attachment removed: PDF/A-{part} does not allow it.",
+    "{count} anexos removidos: o PDF/A-{part} não permite esses anexos.": "{count} attachments removed: PDF/A-{part} does not allow them.",
+    "1 anotação removida (multimídia, escondida ou com anexo não permitido).": "1 annotation removed (multimedia, hidden or with an attachment that is not allowed).",
+    "{count} anotações removidas (multimídia, escondidas ou com anexo não permitido).": "{count} annotations removed (multimedia, hidden or with an attachment that is not allowed).",
+    "1 anotação marcada para impressão, como o PDF/A exige.": "1 annotation marked for printing, as PDF/A requires.",
+    "{count} anotações marcadas para impressão, como o PDF/A exige.": "{count} annotations marked for printing, as PDF/A requires.",
+    "1 stream com compressão LZW recodificado.": "1 LZW-compressed stream re-encoded.",
+    "{count} streams com compressão LZW recodificados.": "{count} LZW-compressed streams re-encoded.",
+    "1 anotação sem aparência definida (/AP).": "1 annotation without a defined appearance (/AP).",
+    "{count} anotações sem aparência definida (/AP).": "{count} annotations without a defined appearance (/AP).",
     # Annotations: tools
     "Selecionar": "Select",
     "Realce": "Highlight",
@@ -1547,9 +1589,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'A margem é maior que a página.': 'The margin is larger than the page.',
     'As imagens do documento não foram incluídas.': "The document's images were not included.",
     'Cabeçalhos e rodapés não foram incluídos.': 'Headers and footers were not included.',
-    '{count} slide(s) com texto demais para uma página continuaram na página seguinte.': (
-        '{count} slide(s) with too much text for one page continued on the next page.'
-    ),
     'As imagens e gráficos dos slides não foram incluídos.': (
         "The slides' images and charts were not included."
     ),
@@ -1587,14 +1626,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
         'The text did not fit entirely in area(s) {areas}: what did not fit was left out. Enlarge the area or reduce the font.'
     ),
     'https://exemplo.com': 'https://example.com',
-    'A imagem {number} não existe: a página tem {count} imagem(ns).': (
-        'Image {number} does not exist: the page has {count} image(s).'
-    ),
     'Esta imagem está gravada dentro do conteúdo da página (imagem inline) e não pode ser substituída sem reescrever a página. Use Editar texto ou a redação para cobri-la.': (
         'This image is stored inside the page content (inline image) and cannot be replaced without rewriting the page. Use Edit text or redaction to cover it.'
-    ),
-    'O link {number} não existe: a página tem {count} link(s).': (
-        'Link {number} does not exist: the page has {count} link(s).'
     ),
     'Informe uma URL ou uma página de destino — exatamente uma das duas.': (
         'Provide a URL or a target page — exactly one of them.'
@@ -1678,19 +1711,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'O nível {conformance} não existe no PDF/A-{part} (use {options}).': (
         'Level {conformance} does not exist in PDF/A-{part} (use {options}).'
     ),
-    '{count} ação(ões) proibida(s) removida(s) (JavaScript, abrir programas, ações automáticas).': (
-        '{count} forbidden action(s) removed (JavaScript, launching programs, automatic actions).'
-    ),
-    '{count} anexo(s) removido(s): o PDF/A-{part} não permite esses anexos.': (
-        '{count} attachment(s) removed: PDF/A-{part} does not allow them.'
-    ),
-    '{count} anotação(ões) removida(s) (multimídia, escondidas ou com anexo não permitido).': (
-        '{count} annotation(s) removed (multimedia, hidden or with a disallowed attachment).'
-    ),
-    '{count} anotação(ões) marcada(s) para impressão, como o PDF/A exige.': (
-        '{count} annotation(s) marked for printing, as PDF/A requires.'
-    ),
-    '{count} stream(s) com compressão LZW recodificado(s).': '{count} LZW-compressed stream(s) re-encoded.',
     'Formulário XFA removido (proibido em PDF/A).': 'XFA form removed (forbidden in PDF/A).',
     'Falta o perfil de cor (/OutputIntent).': 'The color profile (/OutputIntent) is missing.',
     'Fontes não embutidas: {fonts}.': 'Fonts not embedded: {fonts}.',
@@ -1708,9 +1728,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     'O nível A exige o idioma do documento (/Lang); defina-o em Acessibilidade.': (
         'Level A requires the document language (/Lang); set it in Accessibility.'
-    ),
-    '{count} anotação(ões) sem aparência definida (/AP).': (
-        '{count} annotation(s) without a defined appearance (/AP).'
     ),
     'O título no dicionário Info e no XMP não são iguais.': (
         'The title in the Info dictionary and in the XMP differ.'
@@ -1757,29 +1774,10 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'O leitor mostra o nome do arquivo em vez do título (falta /DisplayDocTitle).': (
         'Readers show the file name instead of the title (/DisplayDocTitle is missing).'
     ),
-    '{count} figura(s) tagueada(s) sem texto alternativo (/Alt).': (
-        '{count} tagged figure(s) without alternative text (/Alt).'
-    ),
-    '{count} página(s) com links ou campos sem ordem de tabulação pela estrutura (/Tabs /S).': (
-        '{count} page(s) with links or fields without structure tab order (/Tabs /S).'
-    ),
-    '{count} campo(s) de formulário sem descrição para leitores de tela (/TU): {names}.': (
-        '{count} form field(s) without a description for screen readers (/TU): {names}.'
-    ),
     'Informe um idioma (ex.: pt-BR).': 'Provide a language (e.g.: en-US).',
     'Informe um título para o documento.': 'Provide a title for the document.',
-    '{label} {page} não existe: o documento tem {total} página(s).': (
-        '{label} {page} does not exist: the document has {total} page(s).'
-    ),
-    'Página(s) repetida(s) na nova ordem: {pages}.': 'Repeated page(s) in the new order: {pages}.',
     'A nova ordem precisa incluir todas as {total} páginas; faltam: {pages}. Para tirar páginas, use Remover.': (
         'The new order must include all {total} pages; missing: {pages}. To drop pages, use Remove.'
-    ),
-    'Posição de inserção inválida: o documento tem {total} página(s); dá para inserir antes da página 1 até depois da página {total}.': (
-        'Invalid insert position: the document has {total} page(s); you can insert from before page 1 up to after page {total}.'
-    ),
-    'Intervalo inválido: a página final precisa vir depois da inicial ({start}) e o documento tem {total} página(s).': (
-        'Invalid range: the last page must come after the first one ({start}) and the document has {total} page(s).'
     ),
     'O ângulo de rotação precisa ser múltiplo de 90 graus.': (
         'The rotation angle must be a multiple of 90 degrees.'
@@ -1789,9 +1787,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
         'The crop margins exceed the size of page {page}.'
     ),
     'A largura e a altura precisam ser maiores que zero.': 'Width and height must be greater than zero.',
-    'A camada {number} não existe: o documento tem {count} camada(s).': (
-        'Layer {number} does not exist: the document has {count} layer(s).'
-    ),
     'Informe ao menos um arquivo PDF para mesclar.': 'Provide at least one PDF file to merge.',
     "Para intercalar, informe exatamente dois arquivos: o das frentes e o dos versos.": "To interleave, provide exactly two files: the fronts and the backs.",
     "Informe as páginas de cada arquivo (ou nenhuma).": "Provide the pages of each file (or none).",

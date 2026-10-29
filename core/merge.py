@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from .messages import plural_message
 from .base import open_reader, write_pdf
 from .document import pages_writer
 from .progress import Progress, ensure_progress
@@ -44,7 +45,14 @@ class MergePDF:
         for path, reader, chosen in zip(input_paths, readers, pages or [None] * len(readers)):
             total = len(reader.pages)
             if chosen is not None and not all(0 <= index < total for index in chosen):
-                raise ValueError(f"{Path(path).name} tem {total} página(s): confira as páginas escolhidas.")
+                raise ValueError(
+                    plural_message(
+                        total,
+                        "{name} tem 1 página: confira as páginas escolhidas.",
+                        "{name} tem {count} páginas: confira as páginas escolhidas.",
+                        name=Path(path).name,
+                    )
+                )
             selections.append(list(range(total)) if chosen is None else list(chosen))
         if not any(selections):
             raise ValueError("Nenhuma página escolhida.")

@@ -7,7 +7,7 @@ from pypdf import PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject
 
 from .base import READ, open_reader, write_pdf
-from .messages import Message
+from .messages import plural_message
 
 
 @dataclass
@@ -71,10 +71,11 @@ class SetLayerVisibility:
         ocg_refs = oc_properties.get("/OCGs") or []
         if not 0 <= layer_index < len(ocg_refs):
             raise ValueError(
-                Message(
-                    "A camada {number} não existe: o documento tem {count} camada(s).",
+                plural_message(
+                    len(ocg_refs),
+                    "A camada {number} não existe: o documento tem 1 camada.",
+                    "A camada {number} não existe: o documento tem {count} camadas.",
                     number=layer_index + 1,
-                    count=len(ocg_refs),
                 )
             )
         target_ref = ocg_refs[layer_index]

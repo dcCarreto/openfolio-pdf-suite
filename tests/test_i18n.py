@@ -94,8 +94,8 @@ def test_core_messages_are_translated_with_their_values():
     with pytest.raises(ValueError) as error:
         require_valid_page_index(3, 7, label="Página de destino")
 
-    assert str(error.value) == "Página de destino 8 não existe: o documento tem 3 página(s)."
-    assert i18n.error_text(error.value) == "Target page 8 does not exist: the document has 3 page(s)."
+    assert str(error.value) == "Página de destino 8 não existe: o documento tem 3 páginas."
+    assert i18n.error_text(error.value) == "Target page 8 does not exist: the document has 3 pages."
 
 
 def test_fixed_core_errors_are_translated_too():

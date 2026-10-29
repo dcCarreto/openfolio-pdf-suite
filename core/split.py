@@ -9,6 +9,7 @@ import io
 import re
 from pathlib import Path
 
+from .messages import DOC_PAGES, plural_message
 from .base import open_reader, write_pdf
 from .document import pages_writer
 from .progress import Progress, ensure_progress
@@ -54,7 +55,7 @@ class SplitByRanges:
         reader = open_reader(input_path)
         total = len(reader.pages)
         if not all(0 <= index < total for group in groups for index in group):
-            raise ValueError(f"O documento tem {total} página(s): confira as páginas informadas.")
+            raise ValueError(plural_message(total, *DOC_PAGES))
         return _write_parts(input_path, reader, output_dir, groups)
 
 

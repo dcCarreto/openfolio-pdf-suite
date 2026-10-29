@@ -21,7 +21,7 @@ from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, 
 
 from .base import atomic_output
 from .fonts import SANS, SANS_BOLD, register_fonts
-from .messages import Message
+from .messages import Message, plural_message
 from .progress import Progress, ensure_progress
 
 SUPPORTED_SUFFIXES = (".docx", ".xlsx", ".pptx")
@@ -297,7 +297,11 @@ def _pptx_to_pdf(input_path: str, output_path: str) -> list[Message]:
     warnings = []
     if continued:
         warnings.append(
-            Message("{count} slide(s) com texto demais para uma página continuaram na página seguinte.", count=continued)
+            plural_message(
+                continued,
+                "1 slide com texto demais para uma página continuou na página seguinte.",
+                "{count} slides com texto demais para uma página continuaram na página seguinte.",
+            )
         )
     if images:
         warnings.append(Message("As imagens e gráficos dos slides não foram incluídos."))

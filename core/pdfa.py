@@ -45,7 +45,7 @@ from pypdf.generic import (
 from pypdf.xmp import DC_NAMESPACE, PDF_NAMESPACE, PDFAID_NAMESPACE, RDF_NAMESPACE, XMP_NAMESPACE, XmpInformation
 
 from .base import add_object, atomic_output, open_reader
-from .messages import Message
+from .messages import Message, plural_message
 from .progress import Progress, ensure_progress
 
 ICC_PROFILE = Path(__file__).resolve().parent / "data" / "icc" / "sRGB-v2-micro.icc"
@@ -292,15 +292,15 @@ def _prepare(writer: PdfWriter, part: int) -> list[str]:
     _sync_metadata(writer)
 
     if counts["actions"]:
-        fixed.append(Message("{count} ação(ões) proibida(s) removida(s) (JavaScript, abrir programas, ações automáticas).", count=counts["actions"]))
+        fixed.append(plural_message(counts["actions"], "1 ação proibida removida (JavaScript, abrir programas, ações automáticas).", "{count} ações proibidas removidas (JavaScript, abrir programas, ações automáticas)."))
     if counts["attachments"]:
-        fixed.append(Message("{count} anexo(s) removido(s): o PDF/A-{part} não permite esses anexos.", count=counts["attachments"], part=part))
+        fixed.append(plural_message(counts["attachments"], "1 anexo removido: o PDF/A-{part} não permite esse anexo.", "{count} anexos removidos: o PDF/A-{part} não permite esses anexos.", part=part))
     if counts["annotations"]:
-        fixed.append(Message("{count} anotação(ões) removida(s) (multimídia, escondidas ou com anexo não permitido).", count=counts["annotations"]))
+        fixed.append(plural_message(counts["annotations"], "1 anotação removida (multimídia, escondida ou com anexo não permitido).", "{count} anotações removidas (multimídia, escondidas ou com anexo não permitido)."))
     if counts["flags"]:
-        fixed.append(Message("{count} anotação(ões) marcada(s) para impressão, como o PDF/A exige.", count=counts["flags"]))
+        fixed.append(plural_message(counts["flags"], "1 anotação marcada para impressão, como o PDF/A exige.", "{count} anotações marcadas para impressão, como o PDF/A exige."))
     if counts["lzw"]:
-        fixed.append(Message("{count} stream(s) com compressão LZW recodificado(s).", count=counts["lzw"]))
+        fixed.append(plural_message(counts["lzw"], "1 stream com compressão LZW recodificado.", "{count} streams com compressão LZW recodificados."))
     return fixed
 
 
@@ -642,7 +642,7 @@ def _blocking_issues(document, part: int, conformance: str) -> list[str]:
                 if has_area and "/AP" not in annotation:
                     missing_appearance += 1
     if missing_appearance:
-        issues.append(Message("{count} anotação(ões) sem aparência definida (/AP).", count=missing_appearance))
+        issues.append(plural_message(missing_appearance, "1 anotação sem aparência definida (/AP).", "{count} anotações sem aparência definida (/AP)."))
     return issues
 
 
