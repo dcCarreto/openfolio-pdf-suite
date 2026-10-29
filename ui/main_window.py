@@ -180,6 +180,7 @@ class MainWindow(QMainWindow):
         status_bar.addWidget(privacy, 1)
         # À direita, as tarefas de todos os documentos (só quando há) e a página.
         self.task_log = TaskLog(self)
+        self.task_log.view_requested.connect(self._show_task_document)
         self.tasks_button = TasksButton(self.task_log)
         status_bar.addPermanentWidget(self.tasks_button)
         self.page_status_label = QLabel()
@@ -363,6 +364,12 @@ class MainWindow(QMainWindow):
         doc = self.current_document()
         self.tabs.setCurrentWidget(doc)
         return doc.open_mode(tool_id, mode)
+
+    def _show_task_document(self, manager) -> None:
+        """O "Ver" de uma tarefa concluída: a aba do documento em que ela rodou."""
+        doc = next((doc for doc in self.documents() if doc.tasks is manager), None)
+        if doc is not None:
+            self.tabs.setCurrentWidget(doc)
 
     def set_quick_tools(self, tools: list[str]) -> None:
         """Fixar ou tirar uma ferramenta da coluna rápida: grava e refaz a de cada documento."""

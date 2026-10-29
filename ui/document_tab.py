@@ -606,7 +606,7 @@ class DocumentTab(QWidget):
 
     def _drawer_shadow(self) -> None:
         if self._drawer:
-            self.stack.setGraphicsEffect(theme.floating_shadow(self.stack))
+            self.stack.setGraphicsEffect(theme.floating_shadow(self.stack, leftward=True))
 
     # -- larguras ---------------------------------------------------------------------
 
@@ -661,7 +661,7 @@ class DocumentTab(QWidget):
         self.stack.setProperty("drawer", on)
         if on:
             self.stack.setParent(self)
-            self.stack.setGraphicsEffect(theme.floating_shadow(self.stack))
+            self.stack.setGraphicsEffect(theme.floating_shadow(self.stack, leftward=True))
             self._place_drawer()
         else:
             self.stack.setGraphicsEffect(None)  # type: ignore[arg-type]

@@ -162,6 +162,45 @@ def test_the_tasks_button_and_popover(window, tmp_path):
     assert not window.tasks_button.isVisible()  # só aparece quando há tarefas
 
 
+def test_each_task_row_says_how_it_ended(window, tmp_path, monkeypatch):
+    from ui.widgets import task_popover
+
+    doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
+    _show(window, 1440, 900)
+    release = threading.Event()
+    try:
+        run_task(doc.viewer, "Lenta", lambda progress: release.wait(5))
+        QApplication.processEvents()
+        window.tasks_button.click()
+        popover = window.tasks_button.popover
+        row = popover.rows.itemAt(0).widget()
+        assert row.action.text() == "Cancelar" and popover.width() == 380
+        corner = window.mapToGlobal(window.rect().bottomRight())
+        # 8 px da direita e 32 de baixo da janela (com folga para a moldura de cada sistema)
+        assert abs(corner.x() - popover.geometry().right() - 8) <= 4
+        assert abs(corner.y() - popover.geometry().bottom() - 32) <= 4
+    finally:
+        release.set()
+    assert wait_for_tasks()
+
+    monkeypatch.setattr("ui.tasks.show_error", lambda *args, **kwargs: None)
+
+    def fail(_progress):
+        raise ValueError("O arquivo pede senha.")
+
+    run_task(doc.viewer, "Comprimir", fail)
+    assert wait_for_tasks()
+    QApplication.processEvents()
+    failed, done = (popover.rows.itemAt(n).widget() for n in range(2))
+    assert failed.entry.state == task_popover.FAILED and "O arquivo pede senha." in failed.detail.text()
+    assert failed.action.text() == "Ver motivo"
+    assert done.action.text() == "Ver" and "agora" in done.detail.text()
+    window.tabs.setCurrentWidget(window.home)
+    done.action.click()  # Ver: a aba do documento em que ela rodou
+    assert window.tabs.currentWidget() is doc
+    assert task_popover.ago(1000, now=1000 + 150) == "há 2 min"
+
+
 # -- aviso de atualização -----------------------------------------------------------------------
 
 

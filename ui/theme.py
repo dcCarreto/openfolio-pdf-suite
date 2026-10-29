@@ -108,12 +108,13 @@ def color(key: str) -> QColor:
     return QColor(value)
 
 
-def floating_shadow(parent: QWidget, modal: bool = False) -> QGraphicsDropShadowEffect:
+def floating_shadow(parent: QWidget, modal: bool = False, leftward: bool = False) -> QGraphicsDropShadowEffect:
     """Elevação 1 das superfícies flutuantes (gaveta, barra de marcação, popovers) ou, com
-    `modal`, a 2 da paleta e dos diálogos, que têm o véu por trás."""
+    `modal`, a 2 da paleta e dos diálogos, que têm o véu por trás. A gaveta, presa à direita,
+    joga a sombra para a esquerda (`leftward`)."""
     shadow = QGraphicsDropShadowEffect(parent)
     shadow.setBlurRadius(48 if modal else 24)
-    shadow.setOffset(0, 16 if modal else 8)
+    shadow.setOffset(*((-8, 0) if leftward else (0, 16 if modal else 8)))
     shadow.setColor(color("shadow"))
     return shadow
 
@@ -273,8 +274,31 @@ QFrame#TaskRow {{
     border-radius: 8px;
 }}
 
-QFrame#TaskRow[running="true"] {{
+QFrame#TaskRow[state="running"] {{
     background-color: {t["raised"]};
+}}
+
+QFrame#TaskRow[state="error"] {{
+    background-color: {t["danger_fill"]};
+}}
+
+QFrame#TaskRow QLabel {{
+    background: transparent;
+}}
+
+QLabel#TaskName[muted="true"] {{
+    color: {t["text2"]};
+    font-weight: 500;
+}}
+
+QLabel#TaskPercent {{
+    font-size: 12px;
+    font-weight: 600;
+    color: {t["text"]};
+}}
+
+QPushButton[ofVariant="ghost"][ofTone="danger"] {{
+    font-weight: 600;
 }}
 
 QProgressBar#TaskProgress {{
