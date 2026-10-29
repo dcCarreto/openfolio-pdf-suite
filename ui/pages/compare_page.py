@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.compare import CompareDocuments, CompareText, CompareVisual
-from ui.i18n import tr
+from ui.i18n import plural, tr
 from ui.tasks import call_with_progress, run_task
 from ui.viewer.compare_view import CompareWindow
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -171,8 +171,12 @@ class ComparePage(QWidget):
                     continue
                 preview = " | ".join(result.diff_lines[:4])
                 self.text_results_list.addItem(
-                    tr("Página {page}: {count} linha(s) diferentes — {preview}").format(
-                        page=result.page_index + 1, count=len(result.diff_lines), preview=preview
+                    plural(
+                        len(result.diff_lines),
+                        "Página {page}: 1 linha diferente — {preview}",
+                        "Página {page}: {count} linhas diferentes — {preview}",
+                        page=result.page_index + 1,
+                        preview=preview,
                     )
                 )
 

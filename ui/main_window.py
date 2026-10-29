@@ -1089,7 +1089,7 @@ class MainWindow(QMainWindow):
             tr("Imprimir"),
             lambda progress: print_pages(path, printer, pages, progress),
             on_success=lambda count: self.statusBar().showMessage(
-                tr("{count} página(s) enviada(s) para a impressora.").format(count=count), 8000
+                plural(count, "1 página enviada para a impressora.", "{count} páginas enviadas para a impressora."), 8000
             ),
             error_message=tr("Não foi possível imprimir: {error}"),
         )
@@ -1273,7 +1273,7 @@ class MainWindow(QMainWindow):
         if outcome == "cancelled":
             self.statusBar().showMessage(tr("Operação cancelada: nada foi gravado."), 8000)
         elif outcome == "ok":
-            self.statusBar().showMessage(tr("Operação concluída."), 5000)
+            self.statusBar().showMessage(tr("{task}: pronto.").format(task=doc.tasks.title()), 5000)
 
     # -- fechar ----------------------------------------------------------------------
 

@@ -3,7 +3,7 @@
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from core.extract_images import ExtractImages
-from ui.i18n import tr
+from ui.i18n import plural, tr
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -55,7 +55,7 @@ class ExtractImagesPage(QWidget):
             notify_success(
                 self,
                 tr("Extrair imagens"),
-                tr("{count} imagem(ns) extraída(s) com sucesso.").format(count=len(output_paths)),
+                plural(len(output_paths), "1 imagem extraída.", "{count} imagens extraídas."),
             )
 
         run_task(

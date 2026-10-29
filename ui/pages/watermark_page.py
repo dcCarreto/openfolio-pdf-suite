@@ -105,7 +105,7 @@ class WatermarkPage(QWidget):
         )
 
         self.pages_edit = QLineEdit()
-        self.pages_edit.setPlaceholderText(tr("Páginas (vazio = todas), ex: 1, 3-5"))
+        self.pages_edit.setPlaceholderText(tr("Todas · ex.: 1-3, 5, 8-"))
         self.selection_button = QPushButton(tr("Usar seleção"))
         self.selection_button.setToolTip(tr("Preenche com as páginas selecionadas nas miniaturas (Ctrl ou Shift + clique)."))
         self.selection_button.clicked.connect(lambda: self.pages_edit.setText(format_page_ranges(session.selected_pages())))

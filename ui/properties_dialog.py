@@ -28,7 +28,7 @@ from core.accessibility import CheckAccessibility
 from core.metadata import SetMetadata, SetXMP
 from core.pdfa import ValidatePDFA
 from core.properties import DocumentProperties
-from ui.i18n import PT_BR, get_language, tr, tr_message
+from ui.i18n import PT_BR, get_language, plural, tr, tr_message
 from ui.page_ranges import format_page_ranges
 from ui.tasks import call, call_with_progress, run_task
 
@@ -141,7 +141,7 @@ class DocumentPropertiesDialog(QDialog):
         size = format_file_size(p.file_size)
         if modified:
             size += " " + tr("(com as alterações ainda não salvas)")
-        form = "" if not p.form_fields else tr("{count} campo(s)").format(count=p.form_fields)
+        form = "" if not p.form_fields else plural(p.form_fields, "1 campo", "{count} campos")
         if p.xfa:
             form = (form + " · " if form else "") + tr("XFA (formulário dinâmico, que o app não preenche)")
         return self._form(
@@ -305,7 +305,7 @@ class DocumentPropertiesDialog(QDialog):
         if not p.fonts:
             summary = tr("Nenhuma fonte: o documento não tem texto (escaneado ou só imagens).")
         else:
-            summary = tr("{count} fonte(s).").format(count=len(p.fonts))
+            summary = plural(len(p.fonts), "1 fonte.", "{count} fontes.")
             if missing:
                 summary += " " + tr(
                     "{count} não embutida(s): em outro computador, o texto pode aparecer com outra fonte."

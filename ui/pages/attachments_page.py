@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.attachments import AddAttachment, ExtractAttachments, ListAttachments, RemoveAttachment
-from ui.i18n import tr
+from ui.i18n import plural, tr
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -232,7 +232,7 @@ class AttachmentsPage(QWidget):
             notify_success(
                 self,
                 tr("Anexos"),
-                tr("{count} anexo(s) extraído(s) com sucesso.").format(count=len(output_paths)),
+                plural(len(output_paths), "1 anexo extraído.", "{count} anexos extraídos."),
             )
 
         run_task(

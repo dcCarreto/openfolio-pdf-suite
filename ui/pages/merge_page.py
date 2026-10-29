@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QCheckBox, QLabel, QPushButton, QVBoxLayout, QWidg
 
 from core.base import READ, open_reader
 from core.merge import MergePDF
-from ui.i18n import tr
+from ui.i18n import plural, tr
 from ui.page_ranges import parse_page_ranges
 from ui.tasks import run_task
 from ui.widgets.file_list_editor import FileListEditor
@@ -32,27 +32,45 @@ class MergePage(QWidget):
             suggested_suffix="mesclado",
         )
         self.bookmark_check = QCheckBox(tr("Um marcador por arquivo (com os marcadores dele dentro)"))
-        self.interleave_check = QCheckBox(tr("Intercalar frentes e versos escaneados à parte"))
+        self.interleave_check = QCheckBox(tr("Intercalar frente e verso"))
         self.interleave_check.setToolTip(
             tr("Junta dois arquivos página a página: a 1ª do primeiro, a 1ª do segundo, a 2ª do primeiro...")
         )
+        interleave_help = QLabel(tr("Use quando frentes e versos foram escaneados em arquivos separados."))
+        interleave_help.setProperty("ofRole", "help")
+        interleave_help.setWordWrap(True)
+        interleave_help.setContentsMargins(24, 0, 0, 0)
         self.reverse_check = QCheckBox(tr("Versos em ordem inversa (o maço virado no scanner)"))
         self.reverse_check.setEnabled(False)
         self.interleave_check.toggled.connect(self.reverse_check.setEnabled)
 
-        merge_button = QPushButton(tr("Mesclar"))
+        merge_button = QPushButton()
+        self.merge_button = merge_button
         self.action_buttons.append(merge_button)
         merge_button.clicked.connect(self._merge)
+        # "Mesclar 3 PDFs": o botão conta os arquivos da lista.
+        model = self.file_list_editor.list_widget.model()
+        model.rowsInserted.connect(self._update_merge_button)
+        model.rowsRemoved.connect(self._update_merge_button)
+        self._update_merge_button()
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(tr("Arquivos a mesclar (na ordem desejada):")))
+        files_label = QLabel(tr("Arquivos, na ordem em que vão aparecer"))
+        files_label.setObjectName("FieldLabel")
+        files_label.setProperty("ofRole", "field")
+        layout.addWidget(files_label)
         layout.addWidget(self.file_list_editor)
         layout.addWidget(self.bookmark_check)
         layout.addWidget(self.interleave_check)
+        layout.addWidget(interleave_help)
         layout.addWidget(self.reverse_check)
         layout.addWidget(QLabel(tr("Arquivo de saída:")))
         layout.addWidget(self.output_picker)
         layout.addWidget(merge_button)
+
+    def _update_merge_button(self, *_args):
+        count = self.file_list_editor.list_widget.count()
+        self.merge_button.setText(plural(count, "Mesclar 1 PDF", "Mesclar {count} PDFs") if count else tr("Mesclar PDFs"))
 
     def _merge(self):
         entries = self.file_list_editor.entries()
@@ -89,7 +107,7 @@ class MergePage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            notify_success(self, tr("Mesclar"), tr("PDFs mesclados com sucesso."))
+            notify_success(self, tr("Mesclar"), plural(len(entries), "1 PDF juntado num só.", "{count} PDFs juntados num só."))
 
         run_task(
             self,

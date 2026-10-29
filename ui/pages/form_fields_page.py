@@ -39,7 +39,7 @@ from core.form_fields import (
     SetTabOrder,
 )
 from ui.area_pick_state import AreaPickState
-from ui.i18n import tr
+from ui.i18n import plural, tr
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -634,7 +634,7 @@ class FormFieldsPage(QWidget):
 
         def done(count):
             notify_success(
-                self, tr("Exportar dados"), tr("{count} campo(s) exportado(s) com sucesso.").format(count=count)
+                self, tr("Exportar dados"), plural(count, "1 campo exportado.", "{count} campos exportados.")
             )
 
         run_task(
@@ -689,7 +689,7 @@ class FormFieldsPage(QWidget):
 
         def done(result):
             self.session.open(output_path)
-            message = tr("{count} campo(s) preenchido(s) com sucesso.").format(count=result.filled)
+            message = plural(result.filled, "1 campo preenchido.", "{count} campos preenchidos.")
             if result.not_found:
                 message += "\n\n" + tr("Sem campo correspondente no PDF (ignorados): {names}").format(
                     names=", ".join(result.not_found)
@@ -751,7 +751,7 @@ class FormFieldsPage(QWidget):
             notify_success(
                 self,
                 tr("Achatar formulário"),
-                tr("{count} campo(s) achatado(s) com sucesso.").format(count=count),
+                plural(count, "1 campo achatado.", "{count} campos achatados."),
             )
 
         run_task(

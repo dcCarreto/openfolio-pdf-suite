@@ -162,7 +162,7 @@ class OCRDocument:
         tesseract_path = find_tesseract()
         if not tesseract_path:
             raise RuntimeError(
-                "Tesseract OCR não encontrado. Instale o Tesseract para usar esta ferramenta."
+                "O reconhecimento de texto não está instalado. Instale-o para usar esta ferramenta."
             )
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
 

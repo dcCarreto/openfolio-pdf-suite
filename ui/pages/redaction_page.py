@@ -26,7 +26,7 @@ from core.redaction import (
     SanitizeReport,
     TEXT_KIND,
 )
-from ui.i18n import tr
+from ui.i18n import plural, tr
 from ui.pending_history import PendingHistory
 from ui.tasks import call, call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -60,7 +60,7 @@ def format_sanitize_report(report: SanitizeReport) -> str:
     """Resumo, para o usuário, do que a sanitização removeu."""
     items = []
     if report.javascript:
-        items.append(tr("{count} script(s) ou ação(ões) de JavaScript").format(count=report.javascript))
+        items.append(plural(report.javascript, "1 script ou ação de JavaScript", "{count} scripts ou ações de JavaScript"))
     if report.external_actions:
         items.append(
             tr(
@@ -69,9 +69,9 @@ def format_sanitize_report(report: SanitizeReport) -> str:
             ).format(count=report.external_actions)
         )
     if report.embedded_files:
-        items.append(tr("{count} arquivo(s) embutido(s)").format(count=report.embedded_files))
+        items.append(plural(report.embedded_files, "1 arquivo embutido", "{count} arquivos embutidos"))
     if report.annotations_removed:
-        items.append(tr("{count} anotação(ões)").format(count=report.annotations_removed))
+        items.append(plural(report.annotations_removed, "1 anotação", "{count} anotações"))
     if report.private_data:
         items.append(
             tr(
@@ -284,7 +284,7 @@ class RedactionPage(QWidget):
     def _refresh_pending(self):
         pending = self.redaction_state.pending()
         self.pending_label.setText(
-            tr("{count} área(s) marcada(s) para redação").format(count=len(pending))
+            plural(len(pending), "1 área marcada para redação", "{count} áreas marcadas para redação")
         )
         selected = self.redaction_state.selected()
         self.pending_list.blockSignals(True)
@@ -396,7 +396,7 @@ class RedactionPage(QWidget):
             pages_redacted, report = result
             self.redaction_state.clear_pending()
             self.session.open(output_path)
-            message = tr("{count} página(s) redigida(s) com sucesso.").format(count=pages_redacted)
+            message = plural(pages_redacted, "1 página redigida.", "{count} páginas redigidas.")
             if report is not None:
                 message += "\n\n" + format_sanitize_report(report)
             notify_success(self, tr("Redigir"), message)

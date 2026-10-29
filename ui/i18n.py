@@ -47,9 +47,10 @@ def literal(text: str) -> str:
     return text.replace("&", "&&")
 
 
-def plural(count: int, one: str, many: str) -> str:
-    """"1 página" / "25 páginas": `one` sem {count} no singular, `many` com {count}."""
-    return tr(one if count == 1 else many).format(count=count)
+def plural(count: int, one: str, many: str, **params) -> str:
+    """"1 página" / "25 páginas": `one` sem {count} no singular, `many` com {count}; os outros
+    valores do texto ("{folder}") vêm em `params`."""
+    return tr(one if count == 1 else many).format(count=count, **params)
 
 
 def tr_message(text) -> str:
@@ -220,11 +221,9 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Personalizado": "Custom",
     # Merge
     "Selecionar PDFs": "Select PDFs",
-    "Arquivos a mesclar (na ordem desejada):": "Files to merge (in the desired order):",
     "todas (ex.: 1-3, 5)": "all (e.g. 1-3, 5)",
     "Páginas do arquivo selecionado:": "Pages of the selected file:",
     "Um marcador por arquivo (com os marcadores dele dentro)": "One bookmark per file (with its bookmarks inside)",
-    "Intercalar frentes e versos escaneados à parte": "Interleave fronts and backs scanned separately",
     "Junta dois arquivos página a página: a 1ª do primeiro, a 1ª do segundo, a 2ª do primeiro...": (
         "Joins two files page by page: the 1st of the first, the 1st of the second, the 2nd of the first..."
     ),
@@ -232,11 +231,9 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Para intercalar, deixe na lista só dois arquivos: o das frentes e o dos versos.": "To interleave, keep only two files in the list: the fronts and the backs.",
     "Adicione pelo menos um arquivo.": "Add at least one file.",
     "Falha ao mesclar: {error}": "Failed to merge: {error}",
-    "PDFs mesclados com sucesso.": "PDFs merged successfully.",
     # Split
     "Páginas por arquivo:": "Pages per file:",
     "Falha ao dividir: {error}": "Failed to split: {error}",
-    "PDF dividido em {count} arquivo(s).": "PDF split into {count} file(s).",
     "Por número de páginas": "By page count",
     "Por marcadores": "By bookmarks",
     "Um arquivo por marcador de nível superior do sumário — cada arquivo vai da "
@@ -373,7 +370,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Escolha o PDF de origem das páginas.": "Choose the source PDF for the pages.",
     "Ângulo:": "Angle:",
     "Páginas a rotacionar:": "Pages to rotate:",
-    "Páginas (vazio = todas), ex: 1, 3-5": "Pages (empty = all), e.g.: 1, 3-5",
     "90° no sentido horário": "90° clockwise",
     "180°": "180°",
     "90° no sentido anti-horário": "90° counterclockwise",
@@ -387,7 +383,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Informe a nova ordem das páginas.": "Enter the new page order.",
     "Informe quais páginas remover.": "Enter which pages to remove.",
     "Falha ao processar: {error}": "Processing failed: {error}",
-    "Operação concluída com sucesso.": "Operation completed successfully.",
     # Compress
     # Convert
     "Direção:": "Direction:",
@@ -402,7 +397,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Arquivo Word, Excel ou PowerPoint de entrada:": "Input Word, Excel, or PowerPoint file:",
     "Arquivo XML de entrada:": "Input XML file:",
     "Falha ao converter: {error}": "Failed to convert: {error}",
-    "{count} imagem(ns) gerada(s) com sucesso.": "{count} image(s) generated successfully.",
     "Adicione pelo menos uma imagem.": "Add at least one image.",
     "Escolha o arquivo PDF de saída.": "Choose the output PDF file.",
     "PDF gerado com sucesso.": "PDF generated successfully.",
@@ -505,7 +499,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     # Extract images
     "Falha ao extrair imagens: {error}": "Failed to extract images: {error}",
     "Nenhuma imagem encontrada no PDF.": "No images found in the PDF.",
-    "{count} imagem(ns) extraída(s) com sucesso.": "{count} image(s) extracted successfully.",
     # Crop / Resize
     "Cortar margens": "Crop margins",
     "Redimensionar": "Resize",
@@ -675,9 +668,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Arquivo FDF com os dados:": "FDF file with the data:",
     "Escolha o arquivo de dados.": "Choose the data file.",
     "Falha ao exportar dados: {error}": "Failed to export data: {error}",
-    "{count} campo(s) exportado(s) com sucesso.": "{count} field(s) exported successfully.",
     "Falha ao importar dados: {error}": "Failed to import data: {error}",
-    "{count} campo(s) preenchido(s) com sucesso.": "{count} field(s) filled in successfully.",
     # Form fields: flatten
     "Achatar formulário": "Flatten form",
     "Grava o valor atual de cada campo preenchido como conteúdo estático da "
@@ -687,7 +678,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "removes the interactive widgets. Fields with no value set are left as they are."
     ),
     "Falha ao achatar formulário: {error}": "Failed to flatten the form: {error}",
-    "{count} campo(s) achatado(s) com sucesso.": "{count} field(s) flattened successfully.",
     # Menu bar: open PDF
     "Abrir PDF...": "Open PDF...",
     # Document source bar (shared "open document" indicator on tool panels)
@@ -1071,6 +1061,69 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "cancelada por você": "canceled by you",
     "há {n} min": "{n} min ago",
     "{done} de {total}": "{done} of {total}",
+    "1 página enviada para a impressora.": "1 page sent to the printer.",
+    "{count} páginas enviadas para a impressora.": "{count} pages sent to the printer.",
+    "1 anexo extraído.": "1 attachment extracted.",
+    "{count} anexos extraídos.": "{count} attachments extracted.",
+    "1 PDF na pasta.": "1 PDF in the folder.",
+    "{count} PDFs na pasta.": "{count} PDFs in the folder.",
+    "{done} de 1 arquivo processado em {folder}.": "{done} of 1 file processed in {folder}.",
+    "{done} de {count} arquivos processados em {folder}.": "{done} of {count} files processed in {folder}.",
+    "Página {page}: 1 linha diferente — {preview}": "Page {page}: 1 different line — {preview}",
+    "Página {page}: {count} linhas diferentes — {preview}": "Page {page}: {count} different lines — {preview}",
+    "1 imagem gerada.": "1 image created.",
+    "{count} imagens geradas.": "{count} images created.",
+    "1 página editada.": "1 page edited.",
+    "{count} páginas editadas.": "{count} pages edited.",
+    "1 imagem extraída.": "1 image extracted.",
+    "{count} imagens extraídas.": "{count} images extracted.",
+    "1 campo exportado.": "1 field exported.",
+    "{count} campos exportados.": "{count} fields exported.",
+    "1 campo preenchido.": "1 field filled.",
+    "{count} campos preenchidos.": "{count} fields filled.",
+    "1 campo achatado.": "1 field flattened.",
+    "{count} campos achatados.": "{count} fields flattened.",
+    "Texto reconhecido em 1 página.": "Text recognized on 1 page.",
+    "Texto reconhecido em {count} páginas.": "Text recognized on {count} pages.",
+    "1 script ou ação de JavaScript": "1 JavaScript script or action",
+    "{count} scripts ou ações de JavaScript": "{count} JavaScript scripts or actions",
+    "1 arquivo embutido": "1 embedded file",
+    "{count} arquivos embutidos": "{count} embedded files",
+    "1 anotação": "1 annotation",
+    "{count} anotações": "{count} annotations",
+    "1 área marcada para redação": "1 area marked for redaction",
+    "{count} áreas marcadas para redação": "{count} areas marked for redaction",
+    "1 página redigida.": "1 page redacted.",
+    "{count} páginas redigidas.": "{count} pages redacted.",
+    "1 revisão gravada depois desta assinatura": "1 revision saved after this signature",
+    "{count} revisões gravadas depois desta assinatura": "{count} revisions saved after this signature",
+    "PDF dividido em 1 arquivo.": "PDF split into 1 file.",
+    "PDF dividido em {count} arquivos.": "PDF split into {count} files.",
+    "1 campo": "1 field",
+    "{count} campos": "{count} fields",
+    "1 fonte.": "1 font.",
+    "{count} fontes.": "{count} fonts.",
+    "1 diferença no texto.": "1 difference in the text.",
+    "{count} diferenças no texto.": "{count} differences in the text.",
+    "Intercalar frente e verso": "Interleave front and back",
+    "Use quando frentes e versos foram escaneados em arquivos separados.": "Use it when fronts and backs were scanned into separate files.",
+    "Arquivos, na ordem em que vão aparecer": "Files, in the order they will appear",
+    "Mesclar 1 PDF": "Merge 1 PDF",
+    "Mesclar {count} PDFs": "Merge {count} PDFs",
+    "Mesclar PDFs": "Merge PDFs",
+    "1 PDF juntado num só.": "1 PDF combined into one.",
+    "{count} PDFs juntados num só.": "{count} PDFs combined into one.",
+    "O reconhecimento de texto não está instalado neste computador.": "Text recognition is not installed on this computer.",
+    "Nenhum idioma de reconhecimento instalado.": "No recognition language installed.",
+    "Idiomas disponíveis: {languages}.": "Available languages: {languages}.",
+    "Para reconhecer português, instale o idioma português do reconhecimento de texto.": "To recognize Portuguese, install the Portuguese language for text recognition.",
+    "{task}: pronto.": "{task}: done.",
+    "Páginas organizadas. Aplicado neste documento; salve para gravar no arquivo.": "Pages organized. Applied to this document; save to write it to the file.",
+    "Todas · ex.: 1-3, 5, 8-": "All · e.g. 1-3, 5, 8-",
+    "O reconhecimento de texto não está instalado. Instale-o para usar esta ferramenta.": "Text recognition is not installed. Install it to use this tool.",
+    "O reconhecimento de texto não está instalado: veja a ferramenta Escaneados e OCR.": "Text recognition is not installed: see the Scans and OCR tool.",
+    "Requer a detecção de orientação do reconhecimento de texto.": "Needs the orientation detection of text recognition.",
+    "{items} e {last}": "{items} and {last}",
     # Annotations: tools
     "Selecionar": "Select",
     "Realce": "Highlight",
@@ -1108,14 +1161,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "OCR": "OCR",
     # OCR: page UI
     "Reconhecer texto": "Recognize text",
-    "Nenhum idioma de reconhecimento instalado no Tesseract.": (
-        "No recognition language installed in Tesseract."
-    ),
-    "Tesseract encontrado. Idiomas disponíveis: {languages}.": (
-        "Tesseract found. Available languages: {languages}."
-    ),
     "Falha ao reconhecer texto: {error}": "Failed to recognize text: {error}",
-    "Texto reconhecido em {count} página(s).": "Text recognized in {count} page(s).",
     "Nenhuma página precisou de OCR (o PDF já tinha texto).": (
         "No page needed OCR (the PDF already had text)."
     ),
@@ -1169,7 +1215,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "{count} occurrence(s) found, {added} new one(s) marked for redaction. "
         "Review the list before applying."
     ),
-    "{count} área(s) marcada(s) para redação": "{count} area(s) marked for redaction",
     "Expressão personalizada": "Custom expression",
     "área marcada à mão": "area marked by hand",
     "Selecione uma área para vê-la destacada no visualizador.": (
@@ -1194,7 +1239,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "Mark at least one area in the viewer before applying."
     ),
     "Falha ao redigir: {error}": "Failed to redact: {error}",
-    "{count} página(s) redigida(s) com sucesso.": "{count} page(s) redacted successfully.",
     "Remover metadados": "Remove metadata",
     "Remover anotações e comentários": "Remove annotations and comments",
     "JavaScript, ações que abrem arquivos ou programas ou enviam dados, e arquivos "
@@ -1206,13 +1250,10 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "PDF sanitizado com sucesso.": "PDF sanitized successfully.",
     "Removido:": "Removed:",
     "Nada perigoso foi encontrado no documento.": "Nothing dangerous was found in the document.",
-    "{count} script(s) ou ação(ões) de JavaScript": "{count} JavaScript script(s) or action(s)",
     "{count} ação(ões) que abrem arquivos ou programas, enviam dados ou acessam "
     "conteúdo externo": (
         "{count} action(s) that open files or programs, send data, or access external content"
     ),
-    "{count} arquivo(s) embutido(s)": "{count} embedded file(s)",
-    "{count} anotação(ões)": "{count} annotation(s)",
     "{count} item(ns) de dados privados de aplicativos, miniaturas ou metadados "
     "de páginas e imagens": (
         "{count} item(s) of private application data, thumbnails, or page and image metadata"
@@ -1280,9 +1321,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "nenhuma — a assinatura cobre o documento inteiro": "none — the signature covers the whole document",
     "a assinatura não cobre o documento de forma padrão — trate como suspeito": (
         "the signature does not cover the document in the standard way — treat it as suspicious"
-    ),
-    "{count} revisão(ões) gravada(s) depois desta assinatura": (
-        "{count} revision(s) saved after this signature"
     ),
     "sem mudança de conteúdo": "no content change",
     "só manutenção de assinaturas (carimbos de tempo e dados de validação)": (
@@ -1354,7 +1392,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     "Marque pelo menos uma área com texto novo.": "Mark at least one area with new text.",
     "Falha ao editar texto: {error}": "Failed to edit text: {error}",
-    "{count} página(s) editada(s) com sucesso.": "{count} page(s) edited successfully.",
     # Edit: links
     "URL externa": "External URL",
     "Página do documento": "Document page",
@@ -1398,9 +1435,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Escolha os dois arquivos PDF a comparar.": "Choose both PDF files to compare.",
     "Falha ao comparar: {error}": "Failed to compare: {error}",
     "Página {page}: sem alterações": "Page {page}: no changes",
-    "Página {page}: {count} linha(s) diferentes — {preview}": (
-        "Page {page}: {count} different line(s) — {preview}"
-    ),
     "Pasta de saída (imagens de diferença):": "Output folder (difference images):",
     "comparada": "compared",
     "só existe em A": "only exists in A",
@@ -1451,7 +1485,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Anexo removido com sucesso.": "Attachment removed successfully.",
     "Extrair anexos": "Extract attachments",
     "Falha ao extrair anexos: {error}": "Failed to extract attachments: {error}",
-    "{count} anexo(s) extraído(s) com sucesso.": "{count} attachment(s) extracted successfully.",
     # Measure
     "Arraste no visualizador entre dois pontos para medir a distância entre eles.": (
         "Drag over the viewer between two points to measure the distance between them."
@@ -1475,7 +1508,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Cancelar': 'Cancel',
     'Cancelando...': 'Cancelling...',
     'Operação cancelada: nada foi gravado.': 'Operation cancelled: nothing was saved.',
-    'Operação concluída.': 'Operation completed.',
     'Operação em andamento': 'Operation in progress',
     '"{task}" ainda está em andamento. Cancelar e sair?': '"{task}" is still running. Cancel it and quit?',
     'Reconhecendo o texto': 'Recognizing text',
@@ -1622,20 +1654,12 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     'Corrigir páginas digitalizadas de lado': 'Fix pages scanned sideways',
     'Detecta páginas digitalizadas de lado ou de cabeça para baixo.': 'Detects pages scanned sideways or upside down.',
-    'Requer o pacote "osd" do Tesseract.': 'Requires the Tesseract "osd" package.',
     'Marque pelo menos um idioma do texto.': 'Check at least one text language.',
-    'Tesseract OCR não encontrado.': 'Tesseract OCR not found.',
-    'Para reconhecer português, instale o idioma "por" do Tesseract.': (
-        'To recognize Portuguese, install the Tesseract "por" language.'
-    ),
     'Os instaladores do app já trazem o Tesseract. Rodando o código-fonte, instale-o no sistema: no Windows, pelo instalador em https://github.com/UB-Mannheim/tesseract/wiki (marque o idioma Portuguese e "Orientation and script detection"); no Linux, sudo apt install tesseract-ocr tesseract-ocr-por; no macOS, brew install tesseract tesseract-lang. Depois, reabra o app.': (
         'The app installers already include Tesseract. When running from source, install it on the system: on Windows, with the installer at https://github.com/UB-Mannheim/tesseract/wiki (check the Portuguese language and "Orientation and script detection"); on Linux, sudo apt install tesseract-ocr tesseract-ocr-por; on macOS, brew install tesseract tesseract-lang. Then reopen the app.'
     ),
     'O DPI do OCR precisa estar entre 72 e 1200.': 'OCR DPI must be between 72 and 1200.',
     'Escolha pelo menos um idioma de reconhecimento.': 'Choose at least one recognition language.',
-    'Tesseract OCR não encontrado. Instale o Tesseract para usar esta ferramenta.': (
-        'Tesseract OCR not found. Install Tesseract to use this tool.'
-    ),
     'Numeração de página': 'Page numbering',
     'Marcador desconhecido no texto: {names}. Use {{page}} (número da página) e {{pages}} (total de páginas).': (
         'Unknown placeholder in the text: {names}. Use {{page}} (page number) and {{pages}} (total pages).'
@@ -1901,7 +1925,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Imprimir...': 'Print...',
     'Imprimir': 'Print',
     'Imprimindo páginas': 'Printing pages',
-    '{count} página(s) enviada(s) para a impressora.': '{count} page(s) sent to the printer.',
     'Não foi possível imprimir: {error}': 'Could not print: {error}',
     'Não foi possível iniciar a impressão.': 'Could not start printing.',
     'Nenhuma página escolhida para imprimir.': 'No pages chosen to print.',
@@ -1969,10 +1992,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Sem opções: cada arquivo vira PDF/A-2b.': 'No options: each file becomes PDF/A-2b.',
     'Sem pasta de saída, os arquivos vão para "processados", dentro da pasta de entrada.': 'Without an output folder, the files go to "processados", inside the input folder.',
     'Senha para abrir:': 'Password to open:',
-    'Tesseract não encontrado: instale-o para usar o OCR (veja a aba OCR).': 'Tesseract not found: install it to use OCR (see the OCR tab).',
-    '{count} PDF(s) na pasta.': '{count} PDF(s) in the folder.',
     'Falharam: {count}.': 'Failed: {count}.',
-    '{done} de {total} arquivo(s) processado(s) em {folder}.': '{done} of {total} file(s) processed into {folder}.',
     'Limpar escaneados': 'Clean up scans',
     'Remova páginas em branco, endireite páginas tortas e corte as margens brancas de um escaneado.': 'Remove blank pages, straighten skewed pages and crop the white margins of a scan.',
     'Remover páginas em branco': 'Remove blank pages',
@@ -2015,7 +2035,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Removido de A': 'Removed from A',
     'Incluído em B': 'Added in B',
     'Alterado': 'Changed',
-    '{count} diferença(s) no texto.': '{count} difference(s) in the text.',
     'Nenhuma diferença no texto.': 'No differences in the text.',
     'Páginas de {side} sem texto (escaneadas? faça o OCR antes): {pages}': 'Pages of {side} without text (scanned? run OCR first): {pages}',
     'Imagens, formatação e cabeçalhos/rodapés repetidos em todas as páginas não entram na comparação; para eles, use "Comparar visualmente".': 'Images, formatting and headers/footers repeated on every page are not compared; for them, use "Compare visually".',
@@ -2061,7 +2080,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Segurança": "Security",
     "Fontes": "Fonts",
     "(com as alterações ainda não salvas)": "(with the changes not saved yet)",
-    "{count} campo(s)": "{count} field(s)",
     "XFA (formulário dinâmico, que o app não preenche)": "XFA (dynamic form, which the app does not fill in)",
     "Arquivo:": "File:",
     "Versão do PDF:": "PDF version:",
@@ -2086,7 +2104,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Não (fonte padrão)": "No (standard font)",
     "(sem nome)": "(no name)",
     "Nenhuma fonte: o documento não tem texto (escaneado ou só imagens).": "No fonts: the document has no text (scanned or images only).",
-    "{count} fonte(s).": "{count} font(s).",
     "{count} não embutida(s): em outro computador, o texto pode aparecer com outra fonte.": "{count} not embedded: on another computer, the text may show in a different font.",
     "Tamanho": "Size",
     "Personalizada": "Custom",

@@ -172,6 +172,17 @@ def _take_out(page: QWidget, widget: QWidget) -> None:
         label.hide()
 
 
+def _tidy_labels(page: QWidget) -> None:
+    """Rótulos de campo sem dois-pontos e no estilo de rótulo (seção 8): "Páginas:" vira
+    "Páginas". Um lugar só para as 23 ferramentas, em vez de cada texto e a tradução dele."""
+    for label in page.findChildren(QLabel):
+        text = label.text()
+        if text.endswith(":") and "\n" not in text and label.textFormat() != Qt.TextFormat.RichText:
+            label.setText(text[:-1].rstrip())
+            if not label.property("ofRole"):
+                label.setProperty("ofRole", "field")
+
+
 class ToolPanel(QFrame):
     close_requested = Signal()
 
@@ -204,6 +215,7 @@ class ToolPanel(QFrame):
                 _take_out(page, widget)
         if (page_layout := page.layout()) is not None:
             page_layout.setContentsMargins(0, 0, 0, 0)
+        _tidy_labels(page)
         if input_widget is not None:
             self.add_section(tr("Arquivo"), input_widget)
         # Uma seção própria da ferramenta, com título que ela mesma atualiza (os comentários

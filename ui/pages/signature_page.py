@@ -27,7 +27,7 @@ from core.signature import (
 )
 from ui import i18n
 from ui.area_pick_state import AreaPickState
-from ui.i18n import tr, tr_message
+from ui.i18n import plural, tr, tr_message
 from ui.tasks import call, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -77,8 +77,10 @@ def _describe_changes(info: SignatureInfo) -> str:
         return tr("nenhuma — a assinatura cobre o documento inteiro")
     if info.coverage != "entire_revision":
         return tr("a assinatura não cobre o documento de forma padrão — trate como suspeito")
-    revisions = tr("{count} revisão(ões) gravada(s) depois desta assinatura").format(
-        count=info.revisions_after
+    revisions = plural(
+        info.revisions_after,
+        "1 revisão gravada depois desta assinatura",
+        "{count} revisões gravadas depois desta assinatura",
     )
     return f"{revisions}: {tr(_MODIFICATION_LABELS[info.modification])}"
 

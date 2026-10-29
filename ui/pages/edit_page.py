@@ -27,7 +27,7 @@ from core.edit_text import EditTextArea, TextEditRect
 from core.extract_images import ListEmbeddedImages, ReplaceEmbeddedImage
 from core.links import AddLink, LinkInfo, ListLinks, RemoveLink
 from ui.area_pick_state import AreaPickState
-from ui.i18n import tr, tr_message
+from ui.i18n import plural, tr, tr_message
 from ui.tasks import call, call_with_progress, run_task
 from ui.widgets.color_combo import ColorCombo
 from ui.widgets.current_page import with_current_page_button
@@ -428,7 +428,7 @@ class EditPage(QWidget):
 
         def done(result):
             self.session.open(output_path)
-            message = tr("{count} página(s) editada(s) com sucesso.").format(count=result.pages_edited)
+            message = plural(result.pages_edited, "1 página editada.", "{count} páginas editadas.")
             if result.clipped:
                 areas = ", ".join(str(area_rows[index]) for index in result.clipped)
                 message += "\n\n" + tr(

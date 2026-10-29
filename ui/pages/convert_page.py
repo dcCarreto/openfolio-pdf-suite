@@ -22,7 +22,7 @@ from core.extract_text import ExtractText
 from core.office_convert import SUPPORTED_SUFFIXES, ConvertOfficeToPDF
 from core.pdf_export import ConvertPDFToExcel, ConvertPDFToWord
 from core.xml_convert import ConvertXMLToPDF
-from ui.i18n import tr, tr_message
+from ui.i18n import plural, tr, tr_message
 from ui.page_ranges import format_page_ranges, parse_page_ranges
 from ui.tasks import call, call_with_progress, run_task
 from ui.text_to_pdf import SUFFIXES as TEXT_SUFFIXES
@@ -88,7 +88,7 @@ class ConvertPage(QWidget):
         ):
             self.image_format_combo.addItem(tr(label), value)
         self.image_pages_edit = QLineEdit()
-        self.image_pages_edit.setPlaceholderText(tr("Páginas (vazio = todas), ex: 1, 3-5"))
+        self.image_pages_edit.setPlaceholderText(tr("Todas · ex.: 1-3, 5, 8-"))
         self.image_selection_button = QPushButton(tr("Usar seleção"))
         self.image_selection_button.setToolTip(tr("Preenche com as páginas selecionadas nas miniaturas (Ctrl ou Shift + clique)."))
         self.image_selection_button.clicked.connect(
@@ -313,7 +313,7 @@ class ConvertPage(QWidget):
             notify_success(
                 self,
                 tr("Converter"),
-                tr("{count} imagem(ns) gerada(s) com sucesso.").format(count=len(output_paths)),
+                plural(len(output_paths), "1 imagem gerada.", "{count} imagens geradas."),
             )
 
         run_task(
