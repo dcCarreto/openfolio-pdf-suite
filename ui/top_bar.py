@@ -285,7 +285,7 @@ class CommandLauncher(QPushButton):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 8, 0)
         layout.addStretch()
-        layout.addWidget(self._kbd)
+        layout.addWidget(self._kbd, 0, Qt.AlignmentFlag.AlignVCenter)
         self._compact = False
         self.set_compact(False)
 

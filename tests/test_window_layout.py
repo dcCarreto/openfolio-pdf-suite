@@ -80,7 +80,11 @@ def _show(window, width, height):
 
 def test_every_menu_action_and_shortcut_is_still_there(window):
     found = [(action.objectName(), [key.toString() for key in action.shortcuts()]) for _label, action in window.commands()]
-    assert [command for command in found if command in _COMMANDS_BEFORE] == _COMMANDS_BEFORE
+    menus = [command for command in _COMMANDS_BEFORE if not command[0].startswith("tool.")]
+    assert [command for command in found if command in menus] == menus
+    # As 30 chaves antigas das ferramentas continuam valendo (atalhos gravados): as 23
+    # ferramentas e as telas que viraram modo de uma delas.
+    assert {key for key, _keys in _COMMANDS_BEFORE if key.startswith("tool.")} <= {key for key, _keys in found}
     assert ("edit.run_tool", ["Ctrl+Return", "Ctrl+Enter"]) in found  # novo: a ação da ferramenta
 
 
@@ -154,7 +158,7 @@ def test_the_document_tab_layout(window, tmp_path):
     doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
     _show(window, 1600, 900)
 
-    assert doc.left_rail.width() == 48 and doc.right_rail.width() == 52
+    assert doc.left_rail.width() == 44 and doc.right_rail.width() == 68
     assert doc.viewer.toolbar.parent() is doc.center and doc.viewer.toolbar.height() == 44
     assert window.statusBar().objectName() == "StatusBar" and window.statusBar().height() == 26
     assert doc.splitter.widget(2) is doc.tool_panel

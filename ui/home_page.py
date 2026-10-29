@@ -1,5 +1,5 @@
-"""A aba Início: abrir um PDF (ou soltá-lo em qualquer parte dela), os atalhos de partida e os
-arquivos recentes, com miniatura, pasta, páginas e data."""
+"""A aba Início: abrir um PDF (ou soltá-lo em qualquer parte dela), os atalhos pelo que se quer
+fazer e os arquivos recentes, com miniatura, pasta, páginas e data."""
 
 import os
 import subprocess
@@ -12,7 +12,6 @@ from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -29,19 +28,29 @@ from PySide6.QtWidgets import (
 
 from core.base import open_pdfium
 from core.progress import PDFIUM_LOCK
-from ui import theme
+from ui import sidebar_icons, theme
 from ui.app_events import pdf_paths_from_mime
-from ui.i18n import tr
-from ui.tools import ROW_OF
-from ui.tools_center import ToolCard
+from ui.i18n import plural, tr
+from ui.icon_utils import in_accent
+from ui.sidebar_icons import build_protect_icon
+from ui.tools import TOOLS
 from ui.viewer.render import render_page
 from ui.viewer.viewer_icons import build_file_drop_icon, build_more_icon
+from ui.widgets.flow_layout import FlowLayout
 
-# Os atalhos de partida, ao lado de "Abrir arquivo...": o que se faz sem ter um documento aberto.
-_STARTERS = ["CreatePage", "MergePage", "ConvertPage", "CompressPage"]
-MAX_WIDTH = 960
+# "Ou comece pelo que você quer fazer": (rótulo, ferramenta, modo). "Transformar em Word" abre
+# Converter › Do PDF para…, que começa no Word.
+STARTERS = [
+    ("Juntar PDFs", "MergePage", 0),
+    ("Diminuir o tamanho", "CompressPage", 0),
+    ("Assinar", "FillSignPage", 0),
+    ("Transformar em Word", "ConvertPage", 0),
+    ("Esconder dados pessoais", "RedactionPage", 0),
+    ("Tornar pesquisável", "OCRPage", 0),
+]
+MAX_WIDTH = 880
 ROW_HEIGHT = 52
-THUMB = QSize(28, 36)
+THUMB = QSize(30, 40)
 _PATH = Qt.ItemDataRole.UserRole
 
 # Miniatura e número de páginas de cada recente, por (caminho, data de modificação): o arquivo
@@ -94,6 +103,12 @@ def relative_date(timestamp: float, now: float | None = None) -> str:
     return time.strftime("%d/%m/%Y", then)
 
 
+def short_folder(path: str) -> str:
+    """"Documentos › Clientes": as duas últimas pastas do caminho."""
+    parts = Path(path).parent.parts[-2:]
+    return " › ".join(part.rstrip("\\/") for part in parts if part.rstrip("\\/"))
+
+
 def show_in_folder(path: str) -> None:
     if sys.platform == "win32":
         subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])  # noqa: S603, S607
@@ -116,10 +131,9 @@ class _RecentDelegate(QStyledItemDelegate):
         hovered = option.state & QStyle.StateFlag.State_MouseOver
         selected = option.state & QStyle.StateFlag.State_Selected
         if hovered or selected:
-            painter.fillRect(rect, QColor(t["raised"]))
-        if index.row() > 0:
-            painter.setPen(QPen(QColor(t["border"]), 1))
-            painter.drawLine(rect.topLeft() + QPoint(12, 0), rect.topRight() - QPoint(12, 0))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(t["hover"]))
+            painter.drawRoundedRect(rect.adjusted(0, 1, 0, -1), 8, 8)
 
         pixmap, pages = recent_info(path, painter.device().devicePixelRatioF())
         thumb = QRect(rect.left() + 14, rect.top() + (rect.height() - THUMB.height()) // 2, THUMB.width(), THUMB.height())
@@ -144,14 +158,13 @@ class _RecentDelegate(QStyledItemDelegate):
         small = QFont(option.font)
         small.setPixelSize(12)
         painter.setFont(small)
-        painter.setPen(QColor(t["text2"]))
+        painter.setPen(QColor(t["text3"]))
         folder_rect = QRect(left, name_rect.bottom() + 2, text_right - left, 16)
-        folder = painter.fontMetrics().elidedText(str(Path(path).parent), Qt.TextElideMode.ElideMiddle, folder_rect.width())
+        folder = painter.fontMetrics().elidedText(short_folder(path), Qt.TextElideMode.ElideMiddle, folder_rect.width())
         painter.drawText(folder_rect, Qt.AlignmentFlag.AlignVCenter, folder)
 
-        painter.setPen(QColor(t["text3"]))
         meta = QRect(more.left() - meta_width - 4, rect.top(), meta_width, rect.height())
-        pages_text = tr("{count} página(s)").format(count=pages) if pages else ""
+        pages_text = plural(pages, "1 página", "{count} páginas") if pages else ""
         date = relative_date(_key(path)[1]) if _key(path)[1] else ""
         painter.drawText(meta, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, " · ".join(p for p in (pages_text, date) if p))
         build_more_icon().paint(painter, more.adjusted(6, 6, -6, -6))
@@ -201,7 +214,7 @@ class RecentList(QListWidget):
 
 class HomePage(QScrollArea):
     open_requested = Signal(str)  # o caminho; vazio para escolher o arquivo
-    tool_requested = Signal(int)  # a linha em ui.tools.SECTIONS
+    tool_requested = Signal(str, int)  # a ferramenta (ui.tools.TOOLS) e o modo
     recent_changed = Signal()  # a lista de recentes mudou aqui (limpar, remover)
 
     def __init__(self, preferences, parent=None):
@@ -215,7 +228,7 @@ class HomePage(QScrollArea):
         outer = QWidget()
         outer.setObjectName("homeContent")
         outer_layout = QHBoxLayout(outer)
-        outer_layout.setContentsMargins(40, 40, 40, 40)
+        outer_layout.setContentsMargins(40, 40, 40, 40)  # 40 px no topo, coluna de 880
         content = QWidget()
         content.setMaximumWidth(MAX_WIDTH)
         outer_layout.addStretch()
@@ -224,55 +237,81 @@ class HomePage(QScrollArea):
 
         self._title = QLabel()
         self._title.setObjectName("HomeTitle")
+        self._privacy_icon = QLabel()
         self._subtitle = QLabel()
         self._subtitle.setObjectName("pageSubtitle")
+        privacy = QHBoxLayout()
+        privacy.setSpacing(6)
+        privacy.addWidget(self._privacy_icon)
+        privacy.addWidget(self._subtitle, 1)
 
-        # Zona de soltar, com "Abrir arquivo...".
-        self.drop_zone = QFrame()
-        self.drop_zone.setObjectName("DropZone")
-        self.drop_zone.setMinimumHeight(184)
-        icon = QLabel()
-        icon.setPixmap(build_file_drop_icon().pixmap(QSize(28, 28), QIcon.Mode.Selected))
-        self._drop_title = QLabel()
-        self._drop_title.setObjectName("EmptyTitle")
-        self._drop_hint = QLabel()
-        self._drop_hint.setProperty("ofRole", "secondary")
-        self._open_button = QPushButton()
-        self._open_button.setProperty("ofVariant", "primary")
-        self._open_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._open_button.clicked.connect(lambda: self.open_requested.emit(""))
-        kbd = QLabel("Ctrl+O")
-        kbd.setObjectName("Kbd")
-        open_row = QHBoxLayout()
-        open_row.addStretch()
-        open_row.addWidget(self._open_button)
-        open_row.addWidget(kbd, 0, Qt.AlignmentFlag.AlignVCenter)
-        open_row.addStretch()
-        zone = QVBoxLayout(self.drop_zone)
-        zone.setContentsMargins(24, 24, 24, 24)
-        zone.setSpacing(8)
-        zone.addStretch()
-        zone.addWidget(icon, 0, Qt.AlignmentFlag.AlignHCenter)
-        zone.addWidget(self._drop_title, 0, Qt.AlignmentFlag.AlignHCenter)
-        zone.addWidget(self._drop_hint, 0, Qt.AlignmentFlag.AlignHCenter)
-        zone.addSpacing(6)
-        zone.addLayout(open_row)
-        zone.addStretch()
+        # Zona de soltar: grande e centralizada sem recentes; uma faixa de 96 px com eles. As
+        # duas ficam prontas e só uma aparece (`drop_zone` é a que está à mostra).
+        self._zones: dict[bool, QFrame] = {}
+        self._zone_texts: list[tuple[QLabel, QLabel, QPushButton]] = []
+        for compact in (False, True):
+            zone = QFrame()
+            zone.setObjectName("DropZone")
+            zone.setFixedHeight(96 if compact else 240)
+            icon = QLabel()
+            size = 28 if compact else 36
+            icon.setPixmap(build_file_drop_icon().pixmap(QSize(size, size), QIcon.Mode.Selected))
+            title = QLabel()
+            title.setObjectName("EmptyTitle")
+            hint = QLabel()
+            hint.setProperty("ofRole", "secondary")
+            button = QPushButton()
+            button.setProperty("ofVariant", "primary")
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.clicked.connect(lambda: self.open_requested.emit(""))
+            kbd = QLabel("Ctrl O")
+            kbd.setObjectName("Kbd")
+            open_row = QHBoxLayout()
+            open_row.setSpacing(8)
+            open_row.addWidget(button)
+            open_row.addWidget(kbd, 0, Qt.AlignmentFlag.AlignVCenter)
+            texts = QVBoxLayout()
+            texts.setSpacing(2)
+            texts.addWidget(title, 0, Qt.AlignmentFlag.AlignLeft if compact else Qt.AlignmentFlag.AlignHCenter)
+            texts.addWidget(hint, 0, Qt.AlignmentFlag.AlignLeft if compact else Qt.AlignmentFlag.AlignHCenter)
+            if compact:
+                layout_zone = QHBoxLayout(zone)
+                layout_zone.setContentsMargins(24, 0, 24, 0)
+                layout_zone.setSpacing(16)
+                layout_zone.addWidget(icon)
+                layout_zone.addLayout(texts, 1)
+                layout_zone.addLayout(open_row)
+            else:
+                column = QVBoxLayout(zone)
+                column.setContentsMargins(24, 24, 24, 24)
+                column.setSpacing(8)
+                column.addStretch()
+                column.addWidget(icon, 0, Qt.AlignmentFlag.AlignHCenter)
+                column.addLayout(texts)
+                column.addSpacing(8)
+                open_row.insertStretch(0)
+                open_row.addStretch()
+                column.addLayout(open_row)
+                column.addStretch()
+            self._zones[compact] = zone
+            self._zone_texts.append((title, hint, button))
+        self.drop_zone = self._zones[False]
 
-        shortcuts = QGridLayout()
-        shortcuts.setSpacing(8)
-        self.starter_cards: list[ToolCard] = []
-        for position, class_name in enumerate(_STARTERS):
-            card = ToolCard(ROW_OF[class_name], compact=True)
-            card.clicked.connect(lambda _checked=False, r=card.row: self.tool_requested.emit(r))
-            shortcuts.addWidget(card, position // 2, position % 2)
-            self.starter_cards.append(card)
-        top = QGridLayout()
-        top.setHorizontalSpacing(16)
-        top.addWidget(self.drop_zone, 0, 0)
-        top.addLayout(shortcuts, 0, 1)
-        top.setColumnStretch(0, 13)  # zona de soltar : atalhos = 1,3 : 2
-        top.setColumnStretch(1, 20)
+        # Ou comece pelo que você quer fazer.
+        self._starters_title = QLabel()
+        self._starters_title.setProperty("ofRole", "section")
+        starters = QWidget()
+        starters_layout = FlowLayout(starters, spacing=8)
+        self.starter_buttons: list[QPushButton] = []
+        for label, tool_id, mode in STARTERS:
+            button = QPushButton(in_accent(getattr(sidebar_icons, TOOLS[tool_id].icon)()), "")
+            button.setObjectName("StarterButton")
+            button.setIconSize(QSize(18, 18))
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setProperty("label", label)
+            button.clicked.connect(lambda _checked=False, t=tool_id, m=mode: self.tool_requested.emit(t, m))
+            starters_layout.addWidget(button)
+            self.starter_buttons.append(button)
 
         self._recent_title = QLabel()
         self._recent_title.setObjectName("sectionTitle")
@@ -283,27 +322,29 @@ class HomePage(QScrollArea):
         recent_head.addWidget(self._recent_title)
         recent_head.addStretch()
         recent_head.addWidget(self._clear_button)
-        self.recent_box = QFrame()
-        self.recent_box.setObjectName("RecentBox")
         self.recent_list = RecentList()
         self.recent_list.open_requested.connect(self.open_requested)
         self.recent_list.menu_requested.connect(self._show_menu)
-        box = QVBoxLayout(self.recent_box)
-        box.setContentsMargins(1, 1, 1, 1)
-        box.addWidget(self.recent_list)
+        self.recent_box = self.recent_list  # nome antigo
         self._empty_label = QLabel()
-        self._empty_label.setObjectName("pageSubtitle")
+        self._empty_label.setProperty("ofRole", "help")
+        self._empty_label.setWordWrap(True)
 
         layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         layout.addWidget(self._title)
-        layout.addWidget(self._subtitle)
-        layout.addSpacing(20)
-        layout.addLayout(top)
+        layout.addLayout(privacy)
+        layout.addSpacing(22)
+        layout.addWidget(self._zones[False])
+        layout.addWidget(self._zones[True])
+        layout.addSpacing(28)
+        layout.addWidget(self._starters_title)
+        layout.addSpacing(4)
+        layout.addWidget(starters)
         layout.addSpacing(28)
         layout.addLayout(recent_head)
-        layout.addWidget(self.recent_box)
+        layout.addWidget(self.recent_list)
         layout.addWidget(self._empty_label)
         layout.addStretch(1)
         self.recent_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -312,15 +353,18 @@ class HomePage(QScrollArea):
 
     def retranslate(self):
         self._title.setText(tr("Olá! Abra um PDF para começar."))
+        self._privacy_icon.setPixmap(build_protect_icon("success").pixmap(QSize(16, 16)))
         self._subtitle.setText(tr("Tudo acontece neste computador. Nenhum arquivo sai daqui."))
-        self._drop_title.setText(tr("Arraste um PDF para cá"))
-        self._drop_hint.setText(tr("ou escolha um arquivo no computador"))
-        self._open_button.setText(tr("Abrir arquivo..."))
+        for title, hint, button in self._zone_texts:
+            title.setText(tr("Arraste um PDF para cá"))
+            hint.setText(tr("ou escolha um arquivo no computador"))
+            button.setText(tr("Abrir arquivo..."))
+        self._starters_title.setText(tr("Ou comece pelo que você quer fazer"))
+        for button in self.starter_buttons:
+            button.setText(tr(button.property("label")))
         self._recent_title.setText(tr("Recentes"))
         self._clear_button.setText(tr("Limpar lista"))
-        self._empty_label.setText(tr("Os PDFs abertos aparecem aqui."))
-        for card in self.starter_cards:
-            card.retranslate()
+        self._empty_label.setText(tr("Os PDFs que você abrir aparecem aqui, para voltar a eles com um clique."))
         self.refresh()
 
     def refresh(self):
@@ -332,8 +376,11 @@ class HomePage(QScrollArea):
             item.setToolTip(path)
             self.recent_list.addItem(item)
         has_recent = self.recent_list.count() > 0
+        self._zones[True].setVisible(has_recent)
+        self._zones[False].setVisible(not has_recent)
+        self.drop_zone = self._zones[has_recent]
         self.recent_list.setFixedHeight(self.recent_list.sizeHint().height())
-        self.recent_box.setVisible(has_recent)
+        self.recent_list.setVisible(has_recent)
         self._clear_button.setVisible(has_recent)
         self._empty_label.setVisible(not has_recent)
         self.recent_list.viewport().update()
@@ -360,9 +407,10 @@ class HomePage(QScrollArea):
     # -- soltar um PDF em qualquer parte do Início --------------------------------------
 
     def _set_drag_over(self, on: bool):
-        self.drop_zone.setProperty("dragOver", on)
-        self.drop_zone.style().unpolish(self.drop_zone)
-        self.drop_zone.style().polish(self.drop_zone)
+        for zone in self._zones.values():
+            zone.setProperty("dragOver", on)
+            zone.style().unpolish(zone)
+            zone.style().polish(zone)
 
     def dragEnterEvent(self, event):
         if pdf_paths_from_mime(event.mimeData()):

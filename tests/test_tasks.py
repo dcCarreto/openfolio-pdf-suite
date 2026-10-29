@@ -216,7 +216,7 @@ def test_language_change_keeps_what_the_user_typed(tmp_path):
         assert new_watermark.output_picker.path() == str(tmp_path / "saida.pdf")
         assert window.page(merge_row).file_list_editor.paths() == ["a.pdf", "b.pdf"]
         assert window.document.current_tool() == watermark_row
-        assert window.tools_center.cards[merge_row].text() == "Merge"
+        assert window.tools_center.cards["MergePage"].text() == "Merge"
     finally:
         window.close()
 

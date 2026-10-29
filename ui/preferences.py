@@ -86,6 +86,36 @@ class Preferences:
     def set_animations(self, enabled: bool) -> None:
         self._set("ui/animations", "true" if enabled else "false")
 
+    # -- ferramentas ------------------------------------------------------------------
+
+    def quick_tools(self) -> list[str]:
+        """As ferramentas fixadas na coluna rápida (ids de `ui.tools.TOOLS`), na ordem dela."""
+        from ui.tools import DEFAULT_QUICK, TOOLS
+
+        value = self._get("tools/quick")
+        if value is None:
+            return list(DEFAULT_QUICK)
+        if isinstance(value, str):
+            value = [value] if value else []  # o QSettings devolve um item só como texto
+        return [tool for tool in value if tool in TOOLS]
+
+    def set_quick_tools(self, tools: list[str]) -> None:
+        self._set("tools/quick", list(tools) or "")
+
+    def tool_uses(self) -> dict[str, int]:
+        """Quantas vezes cada ferramenta foi aberta: daí saem as "Mais usadas"."""
+        from ui.tools import TOOLS
+
+        uses = {}
+        for tool in TOOLS:
+            count = self._get(f"tools/uses/{tool}")
+            if count is not None:
+                uses[tool] = int(count)
+        return uses
+
+    def note_tool_use(self, tool: str) -> None:
+        self._set(f"tools/uses/{tool}", self.tool_uses().get(tool, 0) + 1)
+
     # -- visualizador ---------------------------------------------------------------
 
     def page_layout(self) -> str | None:

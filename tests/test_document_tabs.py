@@ -129,7 +129,7 @@ def test_left_rail_shows_and_hides_the_side_panel(window, tmp_path):
 def test_quick_tool_opens_and_a_second_click_closes_it(window, tmp_path):
     doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
     row = window._row_of["CompressPage"]
-    button = doc._quick_buttons[row]
+    button = doc._quick_buttons["CompressPage"]
 
     button.click()
     assert doc.current_tool() == row and doc.stack.isVisibleTo(doc)
@@ -138,5 +138,5 @@ def test_quick_tool_opens_and_a_second_click_closes_it(window, tmp_path):
 
     doc.all_tools_button.click()
     assert window.tabs.currentWidget() is window.tools_center
-    window.tools_center.cards[row].click()
+    window.tools_center.cards["CompressPage"].click()
     assert window.document is doc and doc.current_tool() == row and window.tabs.currentWidget() is doc

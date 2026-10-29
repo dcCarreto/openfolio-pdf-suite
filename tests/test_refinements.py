@@ -260,5 +260,7 @@ def test_rail_tooltips_show_a_configured_shortcut(window, tmp_path, monkeypatch)
     window._preferences.set_shortcut("tool.CompressPage", "Ctrl+Alt+C")
     window._apply_shortcuts()
     shown = QKeySequence("Ctrl+Alt+C").toString(QKeySequence.SequenceFormat.NativeText)  # "⌥⌘C" no macOS
-    assert doc._quick_buttons[ROW_OF["CompressPage"]].toolTip() == f"Comprimir ({shown})"
-    assert doc._quick_buttons[ROW_OF["MergePage"]].toolTip() == "Mesclar"
+    # A dica rica: o nome com o atalho, em negrito, e uma frase sobre o efeito.
+    assert doc._quick_buttons["CompressPage"].toolTip().startswith(f"<b>Comprimir ({shown})</b><br>Diminua")
+    assert doc._quick_buttons["MergePage"].toolTip().startswith("<b>Mesclar</b><br>")
+    assert doc._quick_buttons["CompressPage"].text() == "Comprimir"  # o rótulo embaixo do ícone

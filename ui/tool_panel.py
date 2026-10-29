@@ -22,6 +22,7 @@ mostra no rodapé um botão que faz o papel do botão de ação do modo visível
 from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QComboBox,
     QFrame,
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -41,6 +42,9 @@ from PySide6.QtWidgets import (
 from ui import motion, theme
 from ui.i18n import tr
 from ui.viewer.viewer_icons import build_close_icon
+from ui.widgets.segmented import Segmented
+
+MODES_WIDTH = 312  # o que cabe no painel de 340 px: mais largo que isso, os modos viram um combo
 
 READY, EMPTY, BUSY, SUCCESS, ERROR, INFO = "ready", "empty", "busy", "success", "error", "info"
 
@@ -178,6 +182,7 @@ class ToolPanel(QFrame):
         self.session = session
         self._tasks = tasks
         self._state = READY
+        self.modes_widget: Segmented | QComboBox | None = None
         self._actions: list[QPushButton] = list(getattr(page, "action_buttons", []))
         input_widget = getattr(page, "source_bar", None)
         output_widget = getattr(page, "output_picker", None)
@@ -284,6 +289,40 @@ class ToolPanel(QFrame):
         self.header_layout.setSpacing(12)
         self.header_layout.addLayout(row)
         return header
+
+    def set_modes(self, labels: list[str], current: int, choose) -> None:
+        """Os modos da ferramenta, abaixo do título: um segmentado se forem até 4 e couberem,
+        senão um combo. `choose(índice)` troca de modo."""
+        if len(labels) < 2:
+            return
+        segmented = Segmented(labels)
+        widget: Segmented | QComboBox
+        if len(labels) <= 4 and segmented.sizeHint().width() <= MODES_WIDTH:
+            segmented.chosen.connect(choose)
+            widget = segmented
+        else:
+            segmented.deleteLater()
+            widget = QComboBox()
+            widget.setObjectName("ModesCombo")
+            widget.addItems(labels)
+            widget.activated.connect(choose)
+        widget.setAccessibleName(tr("Modo"))
+        self.modes_widget = widget
+        self.header_layout.addWidget(widget)
+        self.set_current_mode(current)
+
+    def set_current_mode(self, index: int) -> None:
+        widget = self.modes_widget
+        if isinstance(widget, Segmented):
+            widget.set_current(index)
+        elif widget is not None:
+            widget.setCurrentIndex(index)
+
+    def current_mode(self) -> int:
+        widget = self.modes_widget
+        if isinstance(widget, Segmented):
+            return widget.current()
+        return widget.currentIndex() if widget is not None else 0
 
     def add_section(self, title: str, widget: QWidget, label: QLabel | None = None) -> QLabel:
         if label is None:

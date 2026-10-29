@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QLineEdit, QMessa
 from ui import tool_panel
 from ui.main_window import MainWindow
 from ui.tasks import wait_for_tasks
-from ui.tools import SECTIONS
+from ui.tools import SECTIONS, tool_of_page
 from ui.widgets.file_picker import FilePicker
 
 
@@ -54,7 +54,10 @@ def test_every_tool_follows_the_panel_pattern(window, tmp_path, row):
     expected += [] if SECTIONS[row][4] in _WITHOUT_OPTIONS else [getattr(page, "options_title", "Opções")]
     expected += ["Onde fica o resultado"] if hasattr(page, "output_picker") else []
     assert _section_titles(panel) == expected
-    assert panel.title_label.text() == SECTIONS[row][1] and panel.close_button.isVisibleTo(panel)
+    tool = tool_of_page(SECTIONS[row][4])  # o painel leva o nome da ferramenta (23), não o da tela
+    assert panel.title_label.text() == tool.title and panel.close_button.isVisibleTo(panel)
+    if len(tool.modes) > 1:
+        assert panel.modes_widget is not None and panel.modes_widget.isVisibleTo(panel)
     if getattr(page, "action_buttons", []):
         action = panel.current_action()
         assert panel.primary_button.isVisibleTo(panel) and panel.primary_button.text() == action.text()
@@ -169,7 +172,7 @@ def test_without_a_document_the_tool_waits_for_one(window, tmp_path):
     assert window.tabs.tabText(window.tabs.indexOf(doc)) == "Comprimir"
     assert panel.state() == tool_panel.EMPTY and not panel.primary_button.isEnabled()
     assert panel.empty_caption.isVisibleTo(panel)
-    assert not doc._quick_buttons[row].isEnabled() and not doc.viewer.page_field.isEnabled()
+    assert not doc._quick_buttons["CompressPage"].isEnabled() and not doc.viewer.page_field.isEnabled()
 
     page = doc.page(row)
     page.level_combo.setCurrentIndex(2)
@@ -187,14 +190,14 @@ def test_in_a_narrow_window_the_panel_is_a_drawer(window, tmp_path):
     QApplication.processEvents()
     row = window._row_of["CompressPage"]
 
-    doc._quick_buttons[row].click()
+    doc._quick_buttons["CompressPage"].click()
     QApplication.processEvents()
     assert doc.is_drawer_open() and doc.stack.parentWidget() is doc
     assert doc.stack.geometry().right() < doc.right_rail.mapTo(doc, doc.right_rail.rect().topLeft()).x()
 
     QTest.keyClick(doc, Qt.Key.Key_Escape)
     assert not doc.is_drawer_open() and doc.current_tool() == row  # a ferramenta segue aberta
-    doc._quick_buttons[row].click()
+    doc._quick_buttons["CompressPage"].click()
     assert doc.is_drawer_open()
 
     window.resize(1440, 900)

@@ -71,3 +71,29 @@ def filled(painter: QPainter) -> None:
 
 def hollow(painter: QPainter) -> None:
     painter.setBrush(Qt.BrushStyle.NoBrush)
+
+
+class _AccentIconEngine(QIconEngine):
+    def __init__(self, icon: QIcon):
+        super().__init__()
+        self._icon = icon
+
+    def paint(self, painter: QPainter, rect: QRect, mode: QIcon.Mode, state: QIcon.State) -> None:
+        shown = mode if mode == QIcon.Mode.Disabled else QIcon.Mode.Selected
+        self._icon.paint(painter, rect, Qt.AlignmentFlag.AlignCenter, shown, state)
+
+    def pixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QPixmap:
+        pixmap = QPixmap(size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        self.paint(painter, QRect(0, 0, size.width(), size.height()), mode, state)
+        painter.end()
+        return pixmap
+
+    def clone(self) -> QIconEngine:
+        return _AccentIconEngine(self._icon)
+
+
+def in_accent(icon: QIcon) -> QIcon:
+    """O mesmo ícone sempre no acento (atalhos do Início, "Mais usadas"), seguindo o tema."""
+    return QIcon(_AccentIconEngine(icon))

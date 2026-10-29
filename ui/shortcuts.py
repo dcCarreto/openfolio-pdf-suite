@@ -4,8 +4,6 @@ Os dois diálogos recebem a lista de comandos da janela principal: pares (rótul
 em que o `objectName` da ação é a chave estável usada nas preferências.
 """
 
-import unicodedata
-
 from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QKeySequence, QPainter, QPen
 from PySide6.QtWidgets import (
@@ -33,7 +31,9 @@ from PySide6.QtWidgets import (
 
 from ui import motion, theme
 from ui.i18n import tr
-from ui.tools import CATEGORIES
+from ui import search_index
+from ui.search_index import fold_text  # noqa: F401 (usado por outros módulos daqui)
+from ui.tools import TOOLS, mode_key
 from ui.viewer.viewer_icons import build_search_icon
 
 # Teclas que o visualizador e as abas já usam (ui/viewer/pdf_viewer.py, compare_view.py,
@@ -44,11 +44,7 @@ _RESERVED = (
 )
 
 _NAVIGATION_KEYS = (Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_PageUp, Qt.Key.Key_PageDown)
-
-
-def fold_text(text: str) -> str:
-    """Minúsculas sem acento, para "acoes" achar "Ações"."""
-    return "".join(c for c in unicodedata.normalize("NFD", text.casefold()) if not unicodedata.combining(c))
+TOP = 72  # a caixa da paleta, a esta distância do topo da janela
 
 
 def _portable(sequence: QKeySequence) -> str:
@@ -58,37 +54,25 @@ def _portable(sequence: QKeySequence) -> str:
 # Grupos da paleta, na ordem em que aparecem: (chave, título).
 GROUPS = [
     ("tools", "Ferramentas"),
-    ("view", "Exibir"),
-    ("navigate", "Navegar"),
-    ("recent", "Arquivos recentes"),
-    ("actions", "Ações"),
+    ("commands", "Comandos"),
 ]
-MAX_PER_GROUP = 8  # sem filtro de categoria; com ele (Tab), todos os do grupo
-_NAVIGATION_COMMANDS = {"view.home", "view.tools"}
-_CATEGORY_OF = {class_name: name for name, class_names in CATEGORIES for class_name in class_names}
-ROW_HEIGHT = 40
+MAX_PER_GROUP = 8  # sem nada digitado; com uma busca, todos os que batem
+ROW_HEIGHT = 52
 HEADER_HEIGHT = 26
-# Dados de cada linha (o texto do item, "Menu › Ação    atalho", é o que o leitor de tela lê).
-_NAME, _CONTEXT, _KEYS, _GROUP, _HEADER = (Qt.ItemDataRole.UserRole + n for n in range(5))
+# Dados de cada linha (o texto do item, "nome    atalho", é o que o leitor de tela lê).
+_NAME, _CONTEXT, _KEYS, _GROUP, _HEADER, _REASON, _TOOL = (Qt.ItemDataRole.UserRole + n for n in range(7))
 
 
 def command_group(action) -> str:
-    """O grupo de um comando, pela chave estável dele (`objectName`)."""
+    """O grupo de um comando, pela chave estável dele (`objectName`): as ferramentas e os modos
+    delas, ou os outros comandos (menus, documentos abertos, arquivos recentes)."""
     key = action.objectName()
-    if key.startswith("tool."):
-        return "tools"
-    if key in _NAVIGATION_COMMANDS or key.startswith("navigate."):
-        return "navigate"
-    if key.startswith("view."):
-        return "view"
-    if key.startswith("recent."):
-        return "recent"
-    return "actions"
+    return "tools" if key.startswith(("tool.", "mode.")) else "commands"
 
 
 class _PaletteDelegate(QStyledItemDelegate):
-    """Linha de 40 px: ícone, nome, contexto e a tecla; a primeira de cada grupo leva o título
-    do grupo em cima."""
+    """Linha de 52 px: placa de ícone de 30, nome, uma linha de descrição, o motivo da busca
+    ("por “cpf”") e o atalho; a primeira de cada grupo leva o título do grupo em cima."""
 
     def sizeHint(self, option, index):
         return QSize(option.rect.width(), ROW_HEIGHT + (HEADER_HEIGHT if index.data(_HEADER) else 0))
@@ -106,65 +90,84 @@ class _PaletteDelegate(QStyledItemDelegate):
             painter.setFont(header)
             painter.setPen(QColor(t["text3"]))
             title = dict(GROUPS)[index.data(_GROUP)]
-            painter.drawText(rect.adjusted(14, 8, -14, 0).topLeft() + QPoint(0, 11), tr(title))
+            painter.drawText(rect.adjusted(16, 8, -16, 0).topLeft() + QPoint(0, 11), tr(title))
             rect.setTop(rect.top() + HEADER_HEIGHT)
-        row = rect.adjusted(6, 2, -6, -2)
+        row = rect.adjusted(6, 1, -6, -1)
         current = bool(option.state & QStyle.StateFlag.State_Selected)
         if current:
-            painter.setPen(QPen(QColor(t["accent_line"]), 1))
+            painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(t["accent_fill"]))
             painter.drawRoundedRect(QRectF(row), 8, 8)
         elif option.state & QStyle.StateFlag.State_MouseOver:
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(t["raised"]))
+            painter.setBrush(QColor(t["hover"]))
             painter.drawRoundedRect(QRectF(row), 8, 8)
+        tile = QRectF(row.left() + 10, row.center().y() - 15, 30, 30)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(t["panel" if current else "raised"]))
+        painter.drawRoundedRect(tile, 8, 8)
         icon = index.data(Qt.ItemDataRole.DecorationRole)
-        icon_rect = QRect(row.left() + 10, row.center().y() - 8, 17, 17)
         if isinstance(icon, QIcon) and not icon.isNull():
-            icon.paint(painter, icon_rect, mode=QIcon.Mode.Selected if current else QIcon.Mode.Normal)
-        left = icon_rect.right() + 12
-        keys = index.data(_KEYS) or ""
+            icon.paint(painter, tile.adjusted(6, 6, -6, -6).toRect(), mode=QIcon.Mode.Selected if current else QIcon.Mode.Normal)
+        left = int(tile.right()) + 12
         small = QFont(base)
         small.setPixelSize(11)
-        keys_width = QFontMetrics(small).horizontalAdvance(keys) + 14 if keys else 0
+        right = row.right() - 10
+        if current:  # o "↵" diz que Enter abre
+            painter.setFont(base)
+            painter.setPen(QColor(t["accent_strong"]))
+            painter.drawText(QRect(right - 16, row.top(), 16, row.height()), Qt.AlignmentFlag.AlignCenter, "↵")
+            right -= 24
+        keys = index.data(_KEYS) or ""
         if keys:
-            box = QRectF(row.right() - 10 - keys_width, row.center().y() - 10, keys_width, 20)
+            width = QFontMetrics(small).horizontalAdvance(keys) + 12
+            box = QRectF(right - width, row.center().y() - 10, width, 20)
             painter.setFont(small)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor(t["accent_line" if current else "border_strong"]), 1))
             painter.drawRoundedRect(box, 4, 4)
             painter.setPen(QColor(t["accent_strong" if current else "text2"]))
             painter.drawText(box, Qt.AlignmentFlag.AlignCenter, keys)
+            right = int(box.left()) - 8
+        reason = index.data(_REASON) or ""
+        if reason:
+            reason_font = QFont(base)
+            reason_font.setPixelSize(12)
+            painter.setFont(reason_font)
+            painter.setPen(QColor(t["text3"]))
+            text = tr("por “{word}”").format(word=reason)
+            width = painter.fontMetrics().horizontalAdvance(text)
+            painter.drawText(QRect(right - width, row.top(), width, row.height()), Qt.AlignmentFlag.AlignVCenter, text)
+            right -= width + 10
+        available = max(10, right - left)
         name_font = QFont(base)
         name_font.setPixelSize(13)
-        name_font.setWeight(QFont.Weight.Medium)
+        name_font.setWeight(QFont.Weight.DemiBold if current else QFont.Weight.Medium)
         painter.setFont(name_font)
-        name = index.data(_NAME) or ""
-        name_width = painter.fontMetrics().horizontalAdvance(name)
-        available = row.right() - 20 - keys_width - left
-        painter.setPen(QColor(t["text"]))
-        shown = painter.fontMetrics().elidedText(name, Qt.TextElideMode.ElideRight, available)
-        painter.drawText(QRect(left, row.top(), available, row.height()), Qt.AlignmentFlag.AlignVCenter, shown)
-        context = index.data(_CONTEXT) or ""
-        if context and name_width + 12 < available:
-            context_font = QFont(base)
-            context_font.setPixelSize(12)
-            painter.setFont(context_font)
-            painter.setPen(QColor(t["text3"]))
-            context_rect = QRect(left + name_width + 10, row.top(), available - name_width - 10, row.height())
-            elided = painter.fontMetrics().elidedText(context, Qt.TextElideMode.ElideRight, context_rect.width())
-            painter.drawText(context_rect, Qt.AlignmentFlag.AlignVCenter, elided)
+        painter.setPen(QColor(t["accent_strong" if current else "text"]))
+        name = painter.fontMetrics().elidedText(index.data(_NAME) or "", Qt.TextElideMode.ElideRight, available)
+        description = index.data(_CONTEXT) or ""
+        name_rect = QRect(left, row.top() + (8 if description else 0), available, 18 if description else row.height())
+        painter.drawText(name_rect, Qt.AlignmentFlag.AlignVCenter, name)
+        if description:
+            description_font = QFont(base)
+            description_font.setPixelSize(12)
+            painter.setFont(description_font)
+            painter.setPen(QColor(t["text2"]))
+            shown = painter.fontMetrics().elidedText(description, Qt.TextElideMode.ElideRight, available)
+            painter.drawText(QRect(left, row.top() + 26, available, 18), Qt.AlignmentFlag.AlignVCenter, shown)
         painter.restore()
 
 
 class CommandPalette(QDialog):
-    """Ctrl+K: um campo de busca sobre a janela escurecida e os comandos habilitados, em grupos
-    (Ferramentas, Exibir, Navegar, Arquivos recentes, Ações). Filtra pelo que se digita (nome,
-    menu ou descrição, sem acento); Tab filtra por grupo; Enter ou clique escolhe, e `chosen`
+    """Ctrl+K: um campo de busca sobre a janela escurecida, com as ferramentas (e os modos
+    delas) e os comandos habilitados. Busca pelo índice das ferramentas (nome, descrição,
+    sinônimos e nomes antigos; ver ui/search_index.py) e, nos comandos, pelo nome, o menu e a
+    descrição. Tab entra nos modos da ferramenta destacada; Enter ou clique escolhe, e `chosen`
     fica com a ação.
 
     `extras` são comandos que não estão nos menus (documentos abertos, arquivos recentes), como
-    pares (rótulo, QAction) — o grupo sai do `objectName` ("navigate.", "recent.")."""
+    pares (rótulo, QAction)."""
 
     def __init__(self, commands, parent=None, extras=()):
         super().__init__(parent)
@@ -172,11 +175,11 @@ class CommandPalette(QDialog):
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.chosen = None
-        self._category: str | None = None
+        self._modes_of = ""  # Tab: os modos desta ferramenta
 
         self.frame = QFrame(self)
         self.frame.setObjectName("CommandPalette")
-        self.frame.setFixedWidth(640)
+        self.frame.setFixedWidth(620)
         self.search = QLineEdit()
         self.search.setObjectName("PaletteSearch")
         self.search.setPlaceholderText(tr("Buscar ferramentas e comandos"))
@@ -202,14 +205,14 @@ class CommandPalette(QDialog):
         self.list.setFrameShape(QFrame.Shape.NoFrame)
         self.list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.list.setMinimumHeight(8 * ROW_HEIGHT)
+        self.list.setMinimumHeight(7 * ROW_HEIGHT)
         footer = QWidget()
         footer.setObjectName("PaletteFooter")
         footer.setFixedHeight(36)
-        hints = QLabel(tr("↑ ↓ navegar · Enter executar · Tab filtrar por categoria"))
-        hints.setProperty("ofRole", "secondary")
-        where = QLabel(tr("Atalhos em Editar › Atalhos de teclado"))
-        where.setProperty("ofRole", "secondary")
+        hints = QLabel(tr("↑↓ navegar · Enter abrir · Tab ver modos"))
+        hints.setProperty("ofRole", "help")
+        where = QLabel(tr("Busca também por sinônimos: cpf, word, rubrica…"))
+        where.setProperty("ofRole", "help")
         footer_layout = QHBoxLayout(footer)
         footer_layout.setContentsMargins(14, 0, 14, 0)
         footer_layout.addWidget(hints)
@@ -223,25 +226,33 @@ class CommandPalette(QDialog):
         layout.addWidget(footer)
         self.frame.setGraphicsEffect(theme.floating_shadow(self.frame, modal=True))
 
+        index = {}
+        for entry in search_index.entries():
+            key = f"tool.{entry.tool.id}" if entry.mode is None else mode_key(entry.tool, entry.mode)
+            index[key] = entry
         self._actions = []
+        self._entries: list[search_index.Entry | None] = []
         self._haystacks = []
         entries = [(label, action) for label, action in [*commands, *extras] if action.isEnabled()]
         order = {key: position for position, (key, _title) in enumerate(GROUPS)}
         entries.sort(key=lambda entry: order[command_group(entry[1])])  # estável: a ordem dos menus fica
         for label, action in entries:
             keys = action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
-            item = QListWidgetItem(action.icon(), f"{label}    {keys}" if keys else label)
-            context, _sep, _name = label.rpartition(" › ")
-            if command_group(action) == "recent":
-                context = action.statusTip()  # a pasta
-            elif action.objectName().startswith("tool."):
-                context = tr(_CATEGORY_OF.get(action.objectName()[5:], context))
-            item.setData(_NAME, action.text())
-            item.setData(_CONTEXT, context)
+            entry = index.get(action.objectName())
+            if entry is not None:
+                name = entry.title
+                description = tr(entry.tool.description) if entry.mode is None else ""
+            else:
+                name, description = label, action.statusTip()
+            item = QListWidgetItem(action.icon(), f"{name}    {keys}" if keys else name)
+            item.setData(_NAME, name)
+            item.setData(_CONTEXT, description)
             item.setData(_KEYS, keys)
             item.setData(_GROUP, command_group(action))
+            item.setData(_TOOL, entry.tool.id if entry is not None else "")
             self.list.addItem(item)
             self._actions.append(action)
+            self._entries.append(entry)
             self._haystacks.append(fold_text(f"{label} {action.statusTip()}"))
 
         self.search.textChanged.connect(self._filter)
@@ -253,16 +264,27 @@ class CommandPalette(QDialog):
     # -- filtro -----------------------------------------------------------------------
 
     def _filter(self, *_args):
-        words = fold_text(self.search.text()).split()
+        query = self.search.text()
+        words = fold_text(query).split()
         first = -1
         shown: dict[str, int] = {}
         for row, haystack in enumerate(self._haystacks):
             item = self.list.item(row)
             group = item.data(_GROUP)
-            visible = all(word in haystack for word in words) and self._category in (None, group)
-            if visible and self._category is None and shown.get(group, 0) >= MAX_PER_GROUP:
+            entry = self._entries[row]
+            reason = ""
+            if self._modes_of:
+                visible = entry is not None and entry.tool.id == self._modes_of and entry.mode is not None
+                visible = visible and search_index.match(entry, query)[0]
+            elif entry is not None:
+                # Sem nada digitado, só as ferramentas; os modos aparecem na busca ou com Tab.
+                visible, reason = search_index.match(entry, query) if words else (entry.mode is None, "")
+            else:
+                visible = all(word in haystack for word in words)
+            if visible and not words and not self._modes_of and shown.get(group, 0) >= MAX_PER_GROUP:
                 visible = False
             item.setHidden(not visible)
+            item.setData(_REASON, reason)
             item.setData(_HEADER, visible and group not in shown)
             if visible:
                 shown[group] = shown.get(group, 0) + 1
@@ -270,25 +292,28 @@ class CommandPalette(QDialog):
         self.list.doItemsLayout()  # as linhas com título mudaram de altura
         self.list.setCurrentRow(first)
 
-    def set_category(self, category: str | None) -> None:
-        self._category = category
-        title = dict(GROUPS).get(category or "", "")
-        self.category_label.setText(tr(title))
-        self.category_label.setVisible(category is not None)
+    def show_modes(self, tool_id: str) -> None:
+        """Só os modos da ferramenta `tool_id` ("" volta à lista toda)."""
+        self._modes_of = tool_id
+        self.category_label.setText(tr(TOOLS[tool_id].title) if tool_id else "")
+        self.category_label.setVisible(bool(tool_id))
         self._filter()
-
-    def _next_category(self, step: int):
-        keys = [None] + [key for key, _title in GROUPS]
-        self.set_category(keys[(keys.index(self._category) + step) % len(keys)])
 
     def eventFilter(self, watched, event):
         if watched is self.search and event.type() == QEvent.Type.KeyPress:
-            # Setas e PgUp/PgDn andam pela lista, sem tirar o foco do campo; Tab troca o grupo.
+            # Setas e PgUp/PgDn andam pela lista, sem tirar o foco do campo; Tab entra nos
+            # modos da ferramenta destacada e Shift+Tab sai deles.
             if event.key() in _NAVIGATION_KEYS:
                 QApplication.sendEvent(self.list, event)
                 return True
-            if event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab):
-                self._next_category(-1 if event.key() == Qt.Key.Key_Backtab else 1)
+            if event.key() == Qt.Key.Key_Backtab or (event.key() == Qt.Key.Key_Tab and self._modes_of):
+                self.show_modes("")
+                return True
+            if event.key() == Qt.Key.Key_Tab:
+                row = self.list.currentRow()
+                tool = self.list.item(row).data(_TOOL) if row >= 0 else ""
+                if tool and len(TOOLS[tool].modes) > 1:
+                    self.show_modes(tool)
                 return True
         return super().eventFilter(watched, event)
 
@@ -306,11 +331,11 @@ class CommandPalette(QDialog):
             self.setGeometry(owner.geometry())  # cobre a janela: o fundo escurecido
         x = (self.width() - self.frame.width()) // 2
         self.frame.adjustSize()
-        self.frame.move(x, 88)
+        self.frame.move(x, TOP)
         super().showEvent(event)
         self.search.setFocus()
         motion.animate(self, b"windowOpacity", 0.0, 1.0, motion.FAST)
-        motion.animate(self.frame, b"pos", QPoint(x, 80), QPoint(x, 88), motion.MEDIUM)
+        motion.animate(self.frame, b"pos", QPoint(x, TOP - 4), QPoint(x, TOP), motion.MEDIUM)
 
     def paintEvent(self, event):
         painter = QPainter(self)

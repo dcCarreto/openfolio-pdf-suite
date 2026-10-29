@@ -52,7 +52,7 @@ from ui.properties_dialog import DocumentPropertiesDialog
 from ui.shortcuts import CommandPalette, ShortcutsDialog
 from ui.tasks import call, run_task
 from ui.theme import apply_titlebar
-from ui.tools import ROW_OF, SECTIONS
+from ui.tools import ROW_OF, SECTIONS, TOOLS, mode_key
 from ui.tools_center import ToolsCenter
 from ui.top_bar import FIXED_TABS, CommandLauncher, DocumentTabs, LangSwitch, bar_separator
 from ui.update_dialog import UpdateDialog
@@ -66,7 +66,7 @@ logger = logging.getLogger(__name__)
 
 _SECTIONS = SECTIONS  # nome antigo, usado pelos testes que percorrem todas as ferramentas
 _HOME, _TOOLS = 0, 1  # as abas fixas, antes das de documento
-NARROW_WIDTH = 1180  # abaixo disso a barra superior e a do visualizador se compactam
+NARROW_WIDTH = 1100  # abaixo disso a barra superior e a do visualizador se compactam
 MIN_SIZE = (960, 600)
 
 
@@ -142,10 +142,11 @@ class MainWindow(QMainWindow):
 
         self.home = HomePage(self._preferences)
         self.home.open_requested.connect(self._on_home_open)
-        self.home.tool_requested.connect(self.open_tool)
+        self.home.tool_requested.connect(self.open_tool_mode)
         self.home.recent_changed.connect(lambda: self._recent_menu.setEnabled(bool(self._preferences.recent_files())))
         self.tools_center = ToolsCenter()
-        self.tools_center.tool_requested.connect(self.open_tool)
+        self.tools_center.tool_requested.connect(self.open_tool_mode)
+        self.tools_center.quick_tools_requested.connect(self.set_quick_tools)
         self.tabs.addTab(self.home, build_home_icon(), "")
         self.tabs.addTab(self.tools_center, sidebar_icons.build_organize_icon(), "")
         for index, tag in enumerate(FIXED_TABS):
@@ -225,6 +226,7 @@ class MainWindow(QMainWindow):
         self._logo_button.setIcon(build_logo_tile())
         self._logo_button.setIconSize(QSize(30, 30))
         self._logo_button.setFixedSize(32, 32)
+        self._logo_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # a aba Início já é alcançável pelo teclado
         self._logo_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._logo_button.clicked.connect(lambda: self.tabs.setCurrentWidget(self.home))
         self._new_tab_button = QToolButton()
@@ -307,6 +309,7 @@ class MainWindow(QMainWindow):
         doc.tool_changed.connect(self._update_document_actions)
         doc.tool_changed.connect(lambda d=doc: self._update_tab(d))
         doc.all_tools_requested.connect(lambda: self.tabs.setCurrentIndex(_TOOLS))
+        doc.quick_tools_changed.connect(self.set_quick_tools)
         doc.session.path_changed.connect(lambda d=doc: self._remember_opened_document(d))
         doc.session.current_page_changed.connect(self._update_status_bar)
         doc.viewer.layout_changed.connect(lambda layout, d=doc: self._on_layout_changed(d, layout))
@@ -349,10 +352,24 @@ class MainWindow(QMainWindow):
         return doc
 
     def open_tool(self, row: int) -> QWidget:
-        """Abre a ferramenta na aba de documento atual (numa vazia, se não houver documento)."""
+        """Abre a tela `row` (de ui.tools.SECTIONS) na aba de documento atual (numa vazia, se
+        não houver documento), no modo da ferramenta de que ela faz parte."""
         doc = self.current_document()
         self.tabs.setCurrentWidget(doc)
         return doc.open_tool(row)
+
+    def open_tool_mode(self, tool_id: str, mode: int = 0) -> QWidget:
+        """Abre a ferramenta `tool_id` (de ui.tools.TOOLS) no modo `mode`."""
+        doc = self.current_document()
+        self.tabs.setCurrentWidget(doc)
+        return doc.open_mode(tool_id, mode)
+
+    def set_quick_tools(self, tools: list[str]) -> None:
+        """Fixar ou tirar uma ferramenta da coluna rápida: grava e refaz a de cada documento."""
+        self._preferences.set_quick_tools(tools)
+        for doc in self.documents():
+            doc.set_quick_tools(tools)
+        self.tools_center.refresh_pins()
 
     def close_document(self, doc: DocumentTab) -> bool:
         """Fecha a aba (perguntando antes, se houver operação ou alterações). Devolve False se o
@@ -384,6 +401,9 @@ class MainWindow(QMainWindow):
             self._active = widget
         elif widget is self.home:
             self.home.refresh()
+        # Uma busca visível por vez: na aba Ferramentas, o campo grande dela assume.
+        if hasattr(self, "_command_launcher"):  # a faixa do topo é montada depois das abas
+            self._command_launcher.setVisible(widget is not self.tools_center)
         for doc in self.documents():  # a barra de status mostra a operação do documento da frente
             doc.task_status.setVisible(doc is self.document and doc.tasks.is_busy())
         self._update_document_actions()
@@ -398,8 +418,8 @@ class MainWindow(QMainWindow):
         modified = doc.session.is_modified()
         unsaved = tr("alterações não salvas")
         # Sem documento, com uma ferramenta aberta (Criar, Mesclar...): a aba leva o nome dela.
-        tool = doc.current_tool() if doc.is_empty() else -1
-        self.tabs.setTabText(index, tr(SECTIONS[tool][1]) if tool >= 0 else doc.title())
+        tool = doc.current_tool_id() if doc.is_empty() else ""
+        self.tabs.setTabText(index, tr(TOOLS[tool].title) if tool else doc.title())
         tip = doc.session.source_path() or doc.title()
         self.tabs.setTabToolTip(index, f"{tip}\n{unsaved}" if modified else tip)
         doc.close_button.set_dirty(modified)
@@ -415,8 +435,8 @@ class MainWindow(QMainWindow):
             self.tabs.setTabIcon(index, self._tab_icon(doc))
 
     def _tab_icon(self, doc: DocumentTab) -> QIcon:
-        tool = doc.current_tool() if doc.is_empty() else -1
-        return getattr(sidebar_icons, SECTIONS[tool][0])() if tool >= 0 else build_file_icon()
+        tool = doc.current_tool_id() if doc.is_empty() else ""
+        return getattr(sidebar_icons, TOOLS[tool].icon)() if tool else build_file_icon()
 
     def _on_document_changed(self, doc: DocumentTab):
         self._update_tab(doc)
@@ -586,20 +606,34 @@ class MainWindow(QMainWindow):
         help_menu.addSeparator()
         command(help_menu, "help.about", tr("Sobre o OpenFolio PDF Suite")).triggered.connect(self._show_about)
 
-        # Uma ação por ferramenta, fora dos menus (a aba Ferramentas já as lista), para a paleta
-        # e para quem quiser um atalho direto para ela.
-        for action in getattr(self, "_tool_actions", []):
+        # Uma ação por ferramenta e uma por modo, fora dos menus (a aba Ferramentas já as lista),
+        # para a paleta e para quem quiser um atalho direto. A chave de uma ferramenta é a da
+        # tela principal dela ("tool.ConvertPage"); a das telas que viraram modo também fica
+        # ("tool.ExtractTextPage" abre Converter › Extrair texto): atalhos já gravados valem.
+        for action in getattr(self, "_tool_actions", {}).values():
             self.removeAction(action)
             action.deleteLater()
-        self._tool_actions = []
-        for row, (icon, title, subtitle, _module, class_name) in enumerate(SECTIONS):
-            action = QAction(getattr(sidebar_icons, icon)(), tr(title), self)
-            action.setObjectName(f"tool.{class_name}")
-            action.setStatusTip(tr(subtitle))
-            action.triggered.connect(lambda _checked=False, r=row: self.open_tool(r))
+        self._tool_actions: dict[str, QAction] = {}
+        for tool in TOOLS.values():
+            action = QAction(getattr(sidebar_icons, tool.icon)(), tr(tool.title), self)
+            action.setObjectName(f"tool.{tool.id}")
+            action.setStatusTip(tr(tool.description))
+            action.triggered.connect(lambda _checked=False, t=tool.id: self.open_tool_mode(t, 0))
             self.addAction(action)
-            self._tool_actions.append(action)
+            self._tool_actions[tool.id] = action
             self._commands.append((tr("Ferramentas"), action))
+        for tool in TOOLS.values():
+            if len(tool.modes) < 2:
+                continue
+            for index, mode in enumerate(tool.modes):
+                key = mode_key(tool, index)
+                action = QAction(getattr(sidebar_icons, tool.icon)(), tr(mode.label), self)
+                action.setObjectName(key)
+                action.setStatusTip(tr(tool.description))
+                action.triggered.connect(lambda _checked=False, t=tool.id, i=index: self.open_tool_mode(t, i))
+                self.addAction(action)
+                self._tool_actions[key] = action
+                self._commands.append((tr(tool.title), action))
 
         # Uma tecla por ferramenta de marcação (V, H, U...): só com o foco no visualizador e
         # Anotações aberta, e nunca num campo de texto (que fica com a tecla).
@@ -666,11 +700,12 @@ class MainWindow(QMainWindow):
         for doc in self.documents():
             doc.set_tool_shortcuts(tool_keys)
 
-    def _tool_shortcut_texts(self) -> dict[int, str]:
+    def _tool_shortcut_texts(self) -> dict[str, str]:
+        """O atalho de cada ferramenta (id), para as dicas da coluna rápida."""
         return {
-            row: action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
-            for row, action in enumerate(getattr(self, "_tool_actions", []))
-            if not action.shortcut().isEmpty()
+            tool: action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
+            for tool, action in getattr(self, "_tool_actions", {}).items()
+            if tool in TOOLS and not action.shortcut().isEmpty()
         }
 
     def _organizer(self):
@@ -725,6 +760,9 @@ class MainWindow(QMainWindow):
                 return
 
     def show_command_palette(self):
+        if self.tabs.currentWidget() is self.tools_center:
+            self.tools_center.focus_search()  # nesta aba, o campo grande faz o papel da paleta
+            return
         commands = [c for c in self.commands() if c[1] is not self._palette_action]
         palette = CommandPalette(commands, self, extras=self._palette_extras())
         if palette.exec() and palette.chosen is not None:

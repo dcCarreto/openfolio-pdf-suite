@@ -1073,6 +1073,106 @@ QLineEdit#ToolSearch {{
     font-size: 14px;
 }}
 
+/* Aba Ferramentas: cartões de grupo (4 x 2), linhas de ferramenta e "Mais usadas". */
+QFrame#GroupCard {{
+    background-color: {t["panel"]};
+    border-radius: 12px;
+}}
+
+QLabel#GroupTitle {{
+    font-size: 14px;
+    font-weight: 600;
+}}
+
+QToolButton#ToolRow {{
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 0 6px;
+    color: {t["text"]};
+    text-align: left;
+}}
+
+QToolButton#ToolRow:hover {{
+    background-color: {t["hover"]};
+}}
+
+QToolButton#ToolRow:pressed {{
+    background-color: {t["pressed"]};
+}}
+
+QToolButton#ToolRow:focus {{
+    border: 2px solid {t["focus"]};
+    padding: 0 5px;
+}}
+
+QLabel#ToolReason {{
+    font-size: 12px;
+    color: {t["text3"]};
+}}
+
+QToolButton#FavoritePill {{
+    min-height: 32px;
+    max-height: 32px;
+    padding: 0 12px;
+    border-radius: 16px;
+    border: 1px solid transparent;
+    background-color: {t["panel"]};
+    color: {t["text"]};
+}}
+
+QToolButton#FavoritePill:hover {{
+    background-color: {t["hover"]};
+}}
+
+QToolButton#FavoritePill:focus {{
+    border: 2px solid {t["focus"]};
+}}
+
+/* Início: "Ou comece pelo que você quer fazer". */
+QPushButton#StarterButton {{
+    min-height: 36px;
+    max-height: 36px;
+    padding: 0 14px;
+    background-color: {t["raised"]};
+}}
+
+QPushButton#StarterButton:hover {{
+    background-color: {t["hover"]};
+}}
+
+/* Coluna rápida: ícone de 20 e rótulo de 11 px; ativo em accent_fill com o rótulo forte. */
+QToolButton#QuickTool {{
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 4px 0 2px 0;
+    font-size: 11px;
+    color: {t["text2"]};
+    background: transparent;
+}}
+
+QToolButton#QuickTool:hover {{
+    background-color: {t["hover"]};
+    color: {t["text"]};
+}}
+
+QToolButton#QuickTool:pressed {{
+    background-color: {t["pressed"]};
+}}
+
+QToolButton#QuickTool:checked {{
+    background-color: {t["accent_fill"]};
+    color: {t["accent_strong"]};
+    font-weight: 600;
+}}
+
+QToolButton#QuickTool:focus {{
+    border: 2px solid {t["focus"]};
+}}
+
+QComboBox#ModesCombo {{
+    min-height: 32px;
+}}
+
 /* -- Organizar páginas (ui/pages/organize_page.py) ------------------------------- */
 
 #OrganizerToolbar {{
