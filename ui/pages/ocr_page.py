@@ -34,7 +34,8 @@ _MODES = [
     ("force", "Todas (forçar OCR)"),
     ("redo", "Refazer o OCR (tira o texto reconhecido antes)"),
 ]
-# Os instaladores do app trazem o Tesseract; isto só aparece rodando do código-fonte.
+
+
 def natural_list(items: list[str]) -> str:
     """"português e inglês", "a, b e c" ("a, b and c" em inglês)."""
     if len(items) < 2:
@@ -42,12 +43,11 @@ def natural_list(items: list[str]) -> str:
     return tr("{items} e {last}").format(items=", ".join(items[:-1]), last=items[-1])
 
 
+# Os instaladores do app trazem o motor de OCR; isto só aparece rodando do código-fonte. O nome
+# dele e os comandos ficam no README, e não na interface.
 _INSTALL_HELP = (
-    "Os instaladores do app já trazem o Tesseract. Rodando o código-fonte, instale-o no "
-    "sistema: no Windows, pelo instalador em https://github.com/UB-Mannheim/tesseract/wiki "
-    '(marque o idioma Portuguese e "Orientation and script detection"); no Linux, sudo apt '
-    "install tesseract-ocr tesseract-ocr-por; no macOS, brew install tesseract "
-    "tesseract-lang. Depois, reabra o app."
+    "Os instaladores do app já trazem o reconhecimento de texto. Rodando do código-fonte, ele "
+    'precisa ser instalado à parte: os passos estão no README, em "Requisitos". Depois, reabra o app.'
 )
 
 

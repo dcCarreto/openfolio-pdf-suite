@@ -544,8 +544,11 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Trocar os marcadores da lista pelos {count} títulos encontrados?": (
         "Replace the bookmarks in the list with the {count} headings found?"
     ),
-    'A página "{page}" do marcador "{title}" não existe: o documento tem {total} página(s).': (
-        'Page "{page}" of bookmark "{title}" does not exist: the document has {total} page(s).'
+    'A página "{page}" do marcador "{title}" não existe: o documento tem 1 página.': (
+        'Page "{page}" of bookmark "{title}" does not exist: the document has 1 page.'
+    ),
+    'A página "{page}" do marcador "{title}" não existe: o documento tem {count} páginas.': (
+        'Page "{page}" of bookmark "{title}" does not exist: the document has {count} pages.'
     ),
     "Procurando os títulos": "Looking for the headings",
     "Falha ao salvar marcadores: {error}": "Failed to save bookmarks: {error}",
@@ -802,7 +805,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Veja, adicione, remova ou extraia arquivos anexados.": "View, add, remove or extract attached files.",
     "Visual": "Visual",
     "por “{word}”": "by “{word}”",
-    "Áreas e textos": "Areas and text",
+    "Áreas": "Areas",
+    "Textos e padrões": "Text and patterns",
     "↑↓ navegar · Enter abrir · Tab ver modos": "↑↓ navigate · Enter open · Tab see modes",
     # Painel da ferramenta e Comprimir
     "Quanto comprimir": "How much to compress",
@@ -1167,6 +1171,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "1 anotação sem aparência definida (/AP).": "1 annotation without a defined appearance (/AP).",
     "{count} anotações sem aparência definida (/AP).": "{count} annotations without a defined appearance (/AP).",
     "Assinatura com validade criptográfica: quem receber o PDF consegue conferir quem assinou e se ele mudou depois.": "A signature with cryptographic validity: whoever gets the PDF can check who signed it and whether it changed afterwards.",
+    "Revise a lista antes de aplicar.": "Review the list before applying.",
     # Annotations: tools
     "Selecionar": "Select",
     "Realce": "Highlight",
@@ -1224,24 +1229,20 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Redigir": "Redact",
     "Sanitizar": "Sanitize",
     "Modo:": "Mode:",
-    "Arraste no visualizador para marcar as áreas a apagar. Cada página marcada "
-    "vira uma imagem, com as áreas pintadas de preto na própria imagem — e perde "
-    "a camada de texto pesquisável inteira, não só a área marcada. O resultado é "
-    "conferido antes de ser salvo.": (
-        "Drag over the viewer to mark the areas to erase. Each marked page becomes an "
-        "image, with the areas painted black in the image itself — and it loses the "
-        "entire searchable text layer, not just the marked area. The result is checked "
-        "before it is saved."
+    "Arraste no visualizador para marcar as áreas a apagar.": "Drag over the viewer to mark the areas to erase.",
+    "Cada página marcada vira uma imagem, com as áreas pintadas de preto na própria "
+    "imagem — e perde a camada de texto pesquisável inteira, não só a área marcada. "
+    "O resultado é conferido antes de ser salvo.": (
+        "Each marked page becomes an image, with the areas painted black in the image itself "
+        "— and it loses the entire searchable text layer, not just the marked area. The result "
+        "is checked before it is saved."
     ),
-    "Ou procure um texto para marcar todas as ocorrências (maiúsculas e acentos não "
-    "importam; separe vários com ;):": (
-        "Or search for a text to mark every occurrence (case and accents don't matter; separate "
-        "several with ;):"
+    "Textos a procurar": "Text to search for",
+    "Todas as ocorrências são marcadas. Maiúsculas e acentos não importam; separe vários com ;": (
+        "Every occurrence is marked. Case and accents don't matter; separate several with ;"
     ),
     "Ex.: Maria da Silva; Rua das Flores": "E.g.: John Smith; Main Street",
-    "E/ou detecte padrões de dado sensível no texto do PDF:": (
-        "And/or detect sensitive data patterns in the PDF's text:"
-    ),
+    "Padrões de dado sensível": "Sensitive data patterns",
     "Texto buscado": "Searched text",
     "CPF": "CPF",
     "CNPJ": "CNPJ",
@@ -1253,11 +1254,10 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "Type a text to search for, check a pattern or enter a regular expression."
     ),
     "Falha ao detectar padrões: {error}": "Failed to detect patterns: {error}",
-    "{count} ocorrência(s) encontrada(s), {added} nova(s) marcada(s) para redação. "
-    "Revise a lista antes de aplicar.": (
-        "{count} occurrence(s) found, {added} new one(s) marked for redaction. "
-        "Review the list before applying."
-    ),
+    "1 ocorrência encontrada": "1 occurrence found",
+    "{count} ocorrências encontradas": "{count} occurrences found",
+    "1 nova marcada para redação.": "1 new one marked for redaction.",
+    "{count} novas marcadas para redação.": "{count} new ones marked for redaction.",
     "Expressão personalizada": "Custom expression",
     "área marcada à mão": "area marked by hand",
     "Selecione uma área para vê-la destacada no visualizador.": (
@@ -1293,13 +1293,17 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "PDF sanitizado com sucesso.": "PDF sanitized successfully.",
     "Removido:": "Removed:",
     "Nada perigoso foi encontrado no documento.": "Nothing dangerous was found in the document.",
-    "{count} ação(ões) que abrem arquivos ou programas, enviam dados ou acessam "
-    "conteúdo externo": (
-        "{count} action(s) that open files or programs, send data, or access external content"
+    "1 ação que abre arquivos ou programas, envia dados ou acessa conteúdo externo": (
+        "1 action that opens files or programs, sends data, or accesses external content"
     ),
-    "{count} item(ns) de dados privados de aplicativos, miniaturas ou metadados "
-    "de páginas e imagens": (
-        "{count} item(s) of private application data, thumbnails, or page and image metadata"
+    "{count} ações que abrem arquivos ou programas, enviam dados ou acessam conteúdo externo": (
+        "{count} actions that open files or programs, send data, or access external content"
+    ),
+    "1 item de dados privados de aplicativos, miniaturas ou metadados de páginas e imagens": (
+        "1 item of private application data, thumbnails, or page and image metadata"
+    ),
+    "{count} itens de dados privados de aplicativos, miniaturas ou metadados de páginas e imagens": (
+        "{count} items of private application data, thumbnails, or page and image metadata"
     ),
     "metadados do documento (título, autor e outros)": "document metadata (title, author, and others)",
     "formulário XFA (pode conter scripts)": "XFA form (may contain scripts)",
@@ -1603,8 +1607,11 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Ajustar sem distorcer (sobra transparente)': 'Fit without distortion (transparent margins)',
     'Esticar para ocupar a área toda': 'Stretch to fill the whole area',
     'Se a proporção for diferente:': 'If the proportions differ:',
-    'A mesma imagem também aparecia na(s) página(s) {pages}, que mudaram junto.': (
-        'The same image also appeared on page(s) {pages}, which changed too.'
+    'A mesma imagem também aparecia na página {pages}, que mudou junto.': (
+        'The same image also appeared on page {pages}, which changed too.'
+    ),
+    'A mesma imagem também aparecia nas páginas {pages}, que mudaram junto.': (
+        'The same image also appeared on pages {pages}, which changed too.'
     ),
     'Arraste no visualizador para marcar cada área. As coordenadas (em pontos PDF) podem ser ajustadas na tabela.': (
         'Drag over the viewer to mark each area. The coordinates (in PDF points) can be adjusted in the table.'
@@ -1623,8 +1630,11 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Direita': 'Right',
     'Topo': 'Top',
     'Esquerda / Base / Direita / Topo (pontos PDF):': 'Left / Bottom / Right / Top (PDF points):',
-    'O texto não coube inteiro na(s) área(s) {areas}: o que não coube ficou de fora. Aumente a área ou diminua a fonte.': (
-        'The text did not fit entirely in area(s) {areas}: what did not fit was left out. Enlarge the area or reduce the font.'
+    'O texto não coube inteiro na área {areas}: o que não coube ficou de fora. Aumente a área ou diminua a fonte.': (
+        'The text did not fit entirely in area {areas}: what did not fit was left out. Enlarge the area or reduce the font.'
+    ),
+    'O texto não coube inteiro nas áreas {areas}: o que não coube ficou de fora. Aumente as áreas ou diminua a fonte.': (
+        'The text did not fit entirely in areas {areas}: what did not fit was left out. Enlarge the areas or reduce the font.'
     ),
     'https://exemplo.com': 'https://example.com',
     'Esta imagem está gravada dentro do conteúdo da página (imagem inline) e não pode ser substituída sem reescrever a página. Use Editar texto ou a redação para cobri-la.': (
@@ -1689,8 +1699,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Corrigir páginas digitalizadas de lado': 'Fix pages scanned sideways',
     'Detecta páginas digitalizadas de lado ou de cabeça para baixo.': 'Detects pages scanned sideways or upside down.',
     'Marque pelo menos um idioma do texto.': 'Check at least one text language.',
-    'Os instaladores do app já trazem o Tesseract. Rodando o código-fonte, instale-o no sistema: no Windows, pelo instalador em https://github.com/UB-Mannheim/tesseract/wiki (marque o idioma Portuguese e "Orientation and script detection"); no Linux, sudo apt install tesseract-ocr tesseract-ocr-por; no macOS, brew install tesseract tesseract-lang. Depois, reabra o app.': (
-        'The app installers already include Tesseract. When running from source, install it on the system: on Windows, with the installer at https://github.com/UB-Mannheim/tesseract/wiki (check the Portuguese language and "Orientation and script detection"); on Linux, sudo apt install tesseract-ocr tesseract-ocr-por; on macOS, brew install tesseract tesseract-lang. Then reopen the app.'
+    'Os instaladores do app já trazem o reconhecimento de texto. Rodando do código-fonte, ele precisa ser instalado à parte: os passos estão no README, em "Requisitos". Depois, reabra o app.': (
+        'The app installers already include text recognition. When running from source, it has to be installed separately: the steps are in the README, under "Requisitos" (Requirements). Then reopen the app.'
     ),
     'O DPI do OCR precisa estar entre 72 e 1200.': 'OCR DPI must be between 72 and 1200.',
     'Escolha pelo menos um idioma de reconhecimento.': 'Choose at least one recognition language.',
@@ -2100,7 +2110,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Não (fonte padrão)": "No (standard font)",
     "(sem nome)": "(no name)",
     "Nenhuma fonte: o documento não tem texto (escaneado ou só imagens).": "No fonts: the document has no text (scanned or images only).",
-    "{count} não embutida(s): em outro computador, o texto pode aparecer com outra fonte.": "{count} not embedded: on another computer, the text may show in a different font.",
+    "1 não embutida: em outro computador, o texto pode aparecer com outra fonte.": "1 not embedded: on another computer, the text may show in a different font.",
+    "{count} não embutidas: em outro computador, o texto pode aparecer com outra fonte.": "{count} not embedded: on another computer, the text may show in a different font.",
     "Tamanho": "Size",
     "Personalizada": "Custom",
     # A14 — tema

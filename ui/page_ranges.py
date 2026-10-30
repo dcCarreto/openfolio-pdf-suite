@@ -49,7 +49,8 @@ def parse_page_ranges(text: str, total_pages: int | None = None) -> list[int]:
             if page < 1:
                 raise ValueError("As páginas começam em 1.")
             if total_pages is not None and page > total_pages:
-                raise ValueError(f"A página {page} não existe: o documento tem {total_pages} página(s).")
+                pages_text = "1 página" if total_pages == 1 else f"{total_pages} páginas"
+                raise ValueError(f"A página {page} não existe: o documento tem {pages_text}.")
         step = 1 if end >= start else -1
         pages.extend(index - 1 for index in range(start, end + step, step))
     return pages

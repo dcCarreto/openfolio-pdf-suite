@@ -131,4 +131,4 @@ def test_searching_a_text_marks_every_occurrence_for_review(monkeypatch, tmp_pat
     assert [page.pending_list.item(i).text() for i in range(page.pending_list.count())] == [
         "Página 1 — Texto buscado: conteudo"
     ]
-    assert shown and "1 ocorrência(s)" in shown[0]
+    assert shown and "1 ocorrência encontrada" in shown[0]

@@ -48,6 +48,7 @@ from ui.viewer.markup_bar import TOP_INSET, MarkupBar
 from ui.viewer.pdf_viewer import PdfViewer
 from ui.viewer.viewer_icons import build_print_icon, build_thumbnails_icon
 from ui.widget_state import capture_state, restore_state
+from ui.widgets.rich_tip import set_rich_tip
 from ui.widgets.task_status import TaskStatus
 
 PANEL_WIDTH = 340
@@ -366,10 +367,9 @@ class DocumentTab(QWidget):
         for tool_id, button in self._quick_buttons.items():
             tool = TOOLS[tool_id]
             name = tr(tool.title)
-            title = f"{name} ({keys[tool_id]})" if keys.get(tool_id) else name
-            button.setToolTip(f"<b>{title}</b><br>{tr(tool.description)}")
+            set_rich_tip(button, name, tr(tool.description), keys.get(tool_id, ""), side="left")
             button.setAccessibleName(name)
-        self.all_tools_button.setToolTip(tr("Todas as ferramentas"))
+        set_rich_tip(self.all_tools_button, tr("Todas as ferramentas"), side="left")
         self.all_tools_button.setAccessibleName(tr("Todas as ferramentas"))
 
     def _update_side_header(self, *_args):
@@ -545,8 +545,10 @@ class DocumentTab(QWidget):
             if appearing:
                 self._slide_drawer_in()
         else:
-            # Formulário mais largo que os 344 px (uma lista, uma tabela): o painel alarga até 480.
-            body = self.panel(row).body.minimumSizeHint().width()
+            # Formulário mais largo que os 344 px (uma lista, uma tabela): o painel alarga até 480,
+            # contando a barra de rolagem, que come a largura do formulário quando aparece.
+            panel = self.panel(row)
+            body = panel.body.minimumSizeHint().width() + panel.scroll_area.verticalScrollBar().sizeHint().width()
             wanted = max(PANEL_WIDTH, min(PANEL_MAX_WIDTH, body))
             sizes = self.splitter.sizes()
             if appearing:

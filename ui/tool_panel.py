@@ -26,6 +26,7 @@ from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractButton,
     QComboBox,
+    QFormLayout,
     QFrame,
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -223,6 +224,20 @@ def _tidy_labels(page: QWidget) -> None:
                 label.setProperty("ofRole", "field")
 
 
+def _labels_above(page: QWidget) -> None:
+    """Rótulo acima do campo (seção 7), e não ao lado, em todos os formulários das ferramentas:
+    8 px do rótulo ao campo e 12 entre um campo e o rótulo seguinte (a margem de cima do rótulo)."""
+    for form in page.findChildren(QFormLayout):
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        form.setVerticalSpacing(8)
+        for row in range(1, form.rowCount()):
+            item = form.itemAt(row, QFormLayout.ItemRole.LabelRole)
+            label = item.widget() if item is not None else None
+            if isinstance(label, QLabel):
+                label.setContentsMargins(0, 4, 0, 0)
+
+
 class ToolPanel(QFrame):
     close_requested = Signal()
 
@@ -256,6 +271,7 @@ class ToolPanel(QFrame):
         if (page_layout := page.layout()) is not None:
             page_layout.setContentsMargins(0, 0, 0, 0)
         _tidy_labels(page)
+        _labels_above(page)
         _explain_terms(page)
         if input_widget is not None:
             self.add_section(tr("Arquivo"), input_widget)

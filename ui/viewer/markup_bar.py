@@ -24,6 +24,7 @@ from ui.annotation_state import TOOLS, AnnotationState
 from ui.i18n import EN_US, get_language, plural, tr
 from ui.top_bar import bar_separator
 from ui.viewer.viewer_icons import build_caret_down_icon, build_markup_icon, build_minus_icon, build_plus_icon
+from ui.widgets.rich_tip import set_rich_tip
 
 TOOL_LABELS = {
     "select": "Selecionar",
@@ -80,12 +81,6 @@ SPLIT_WIDTH = 14  # a área do ▾ nos botões de grupo
 def format_width(width: float) -> str:
     text = f"{width:g}"
     return f"{text if get_language() == EN_US else text.replace('.', ',')} pt"
-
-
-def tool_tip(tool: str, key: str) -> str:
-    """A dica rica: o nome, a tecla e o que a ferramenta faz."""
-    title = f"<b>{tr(TOOL_LABELS[tool])}</b>" + (f"&nbsp;&nbsp;({key})" if key else "")
-    return f"{title}<br>{tr(TOOL_PHRASES[tool])}"
 
 
 class ColorSwatch(QToolButton):
@@ -185,11 +180,11 @@ class ToolGroup(QWidget):
 
     def retranslate(self, keys: dict[str, str]) -> None:
         name = tr(TOOL_LABELS[self.current])
-        tip = tool_tip(self.current, keys.get(self.current, ""))
+        tip = tr(TOOL_PHRASES[self.current])
         if self.menu is not None:
             more = tr(MORE_LABELS[self.tools[0]])
-            tip += "<br>" + tr("{more}: no ▾ (ou seta para baixo).").format(more=more)
-        self.button.setToolTip(tip)
+            tip += "\n" + tr("{more}: no ▾ (ou seta para baixo).").format(more=more)
+        set_rich_tip(self.button, name, tip, keys.get(self.current, ""), side="below")
         self.button.setAccessibleName(name)
         for tool, action in self.tool_actions.items():
             key = keys.get(tool, "")
@@ -407,7 +402,7 @@ class MarkupBar(QFrame):
         self.width_down.setAccessibleName(tr("Diminuir a espessura"))
         self.width_up.setToolTip(tr("Aumentar a espessura"))
         self.width_up.setAccessibleName(tr("Aumentar a espessura"))
-        self.style_button.setToolTip(f"<b>{tr('Estilo')}</b><br>{tr('A cor e a espessura das próximas marcações.')}")
+        set_rich_tip(self.style_button, tr("Estilo"), tr("A cor e a espessura das próximas marcações."), side="below")
         self.style_button.setAccessibleName(tr("Estilo: cor e espessura"))
         self.save_button.setText(tr("Gravar"))
         self.save_button.setToolTip(tr("Gravar as marcações pendentes como uma versão do documento (Ctrl+Z desfaz)"))

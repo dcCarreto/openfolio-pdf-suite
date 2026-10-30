@@ -63,10 +63,11 @@ def format_sanitize_report(report: SanitizeReport) -> str:
         items.append(plural(report.javascript, "1 script ou ação de JavaScript", "{count} scripts ou ações de JavaScript"))
     if report.external_actions:
         items.append(
-            tr(
-                "{count} ação(ões) que abrem arquivos ou programas, enviam dados ou acessam "
-                "conteúdo externo"
-            ).format(count=report.external_actions)
+            plural(
+                report.external_actions,
+                "1 ação que abre arquivos ou programas, envia dados ou acessa conteúdo externo",
+                "{count} ações que abrem arquivos ou programas, enviam dados ou acessam conteúdo externo",
+            )
         )
     if report.embedded_files:
         items.append(plural(report.embedded_files, "1 arquivo embutido", "{count} arquivos embutidos"))
@@ -74,10 +75,11 @@ def format_sanitize_report(report: SanitizeReport) -> str:
         items.append(plural(report.annotations_removed, "1 anotação", "{count} anotações"))
     if report.private_data:
         items.append(
-            tr(
-                "{count} item(ns) de dados privados de aplicativos, miniaturas ou metadados "
-                "de páginas e imagens"
-            ).format(count=report.private_data)
+            plural(
+                report.private_data,
+                "1 item de dados privados de aplicativos, miniaturas ou metadados de páginas e imagens",
+                "{count} itens de dados privados de aplicativos, miniaturas ou metadados de páginas e imagens",
+            )
         )
     if report.metadata_removed:
         items.append(tr("metadados do documento (título, autor e outros)"))
@@ -106,7 +108,9 @@ class RedactionPage(QWidget):
         self.source_bar = DocumentSourceBar(session)
 
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems([tr("Redigir"), tr("Sanitizar")])
+        # Áreas e Textos e padrões marcam áreas na mesma lista e aplicam a mesma redação: só
+        # muda como elas são marcadas. O índice 1 continua sendo Sanitizar.
+        self.mode_combo.addItems([tr("Áreas"), tr("Sanitizar"), tr("Textos e padrões")])
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
 
         self.stack = QStackedWidget()
@@ -125,30 +129,32 @@ class RedactionPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
+        self.drag_hint = QLabel(tr("Arraste no visualizador para marcar as áreas a apagar."))
+        self.drag_hint.setWordWrap(True)
         instructions = QLabel(
             tr(
-                "Arraste no visualizador para marcar as áreas a apagar. Cada página marcada "
-                "vira uma imagem, com as áreas pintadas de preto na própria imagem — e perde "
-                "a camada de texto pesquisável inteira, não só a área marcada. O resultado é "
-                "conferido antes de ser salvo."
+                "Cada página marcada vira uma imagem, com as áreas pintadas de preto na própria "
+                "imagem — e perde a camada de texto pesquisável inteira, não só a área marcada. "
+                "O resultado é conferido antes de ser salvo."
             )
         )
+        instructions.setObjectName("pageSubtitle")
         instructions.setWordWrap(True)
 
-        search_label = QLabel(
-            tr(
-                "Ou procure um texto para marcar todas as ocorrências (maiúsculas e acentos não "
-                "importam; separe vários com ;):"
-            )
-        )
-        search_label.setWordWrap(True)
+        search_label = QLabel(tr("Textos a procurar"))
+        search_label.setProperty("ofRole", "field")
         self.search_text_edit = QLineEdit()
         self.search_text_edit.setPlaceholderText(tr("Ex.: Maria da Silva; Rua das Flores"))
-
-        detect_label = QLabel(
-            tr("E/ou detecte padrões de dado sensível no texto do PDF:")
+        search_label.setBuddy(self.search_text_edit)
+        search_help = QLabel(
+            tr("Todas as ocorrências são marcadas. Maiúsculas e acentos não importam; separe vários com ;")
         )
-        detect_label.setWordWrap(True)
+        search_help.setProperty("ofRole", "help")
+        search_help.setWordWrap(True)
+        self.search_text_edit.setAccessibleDescription(search_help.text())
+
+        detect_label = QLabel(tr("Padrões de dado sensível"))
+        detect_label.setProperty("ofRole", "field")
 
         self.pattern_checkboxes: dict[str, QCheckBox] = {}
         for kind, label in _PATTERN_CHECKBOX_LABELS:
@@ -202,14 +208,24 @@ class RedactionPage(QWidget):
         self.action_buttons.append(redact_button)
         redact_button.clicked.connect(self._apply_redaction)
 
-        layout.addWidget(instructions)
-        layout.addWidget(search_label)
-        layout.addWidget(self.search_text_edit)
-        layout.addWidget(detect_label)
+        # A procura só aparece no modo Textos e padrões; o resto é das duas formas de marcar.
+        self.search_box = QWidget()
+        search_layout = QVBoxLayout(self.search_box)
+        search_layout.setContentsMargins(0, 0, 0, 0)
+        search_layout.addWidget(search_label)
+        search_layout.addWidget(self.search_text_edit)
+        search_layout.addWidget(search_help)
+        search_layout.addSpacing(4)
+        search_layout.addWidget(detect_label)
         for checkbox in self.pattern_checkboxes.values():
-            layout.addWidget(checkbox)
-        layout.addWidget(self.custom_pattern_edit)
-        layout.addWidget(detect_button)
+            search_layout.addWidget(checkbox)
+        search_layout.addWidget(self.custom_pattern_edit)
+        search_layout.addWidget(detect_button)
+        self.search_box.hide()
+
+        layout.addWidget(self.drag_hint)
+        layout.addWidget(self.search_box)
+        layout.addWidget(instructions)
         layout.addWidget(self.pending_label)
         layout.addWidget(self.pending_list)
         layout.addLayout(pending_buttons)
@@ -254,7 +270,9 @@ class RedactionPage(QWidget):
         return widget
 
     def _on_mode_changed(self, index: int):
-        self.stack.setCurrentIndex(index)
+        self.stack.setCurrentIndex(1 if index == 1 else 0)
+        self.drag_hint.setVisible(index == 0)
+        self.search_box.setVisible(index == 2)
 
     # -- lista de áreas pendentes -------------------------------------------------------
 
@@ -340,10 +358,11 @@ class RedactionPage(QWidget):
             notify_success(
                 self,
                 tr("Redigir"),
-                tr(
-                    "{count} ocorrência(s) encontrada(s), {added} nova(s) marcada(s) para redação. "
-                    "Revise a lista antes de aplicar."
-                ).format(count=len(rects), added=added),
+                plural(len(rects), "1 ocorrência encontrada", "{count} ocorrências encontradas")
+                + ", "
+                + plural(added, "1 nova marcada para redação.", "{count} novas marcadas para redação.")
+                + " "
+                + tr("Revise a lista antes de aplicar."),
             )
 
         run_task(

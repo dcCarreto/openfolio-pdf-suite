@@ -188,6 +188,7 @@ class FillSignPage(QWidget):
         image_layout.setContentsMargins(0, 0, 0, 0)
         self.image_preview = QLabel()
         self.image_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_preview.setWordWrap(True)  # o aviso de "nada guardado" não alarga o painel
         self.image_preview.setFixedHeight(70)
         self.image_preview.setStyleSheet("background-color: white; color: #707070; border: 1px solid #b0b0b0;")
         self.draw_button = QPushButton(tr("Desenhar..."))
@@ -257,7 +258,7 @@ class FillSignPage(QWidget):
         pixmap = QPixmap()
         if pixmap.loadFromData(preferences().saved_image(_IMAGE_KEYS[kind])):
             self.image_preview.setPixmap(
-                pixmap.scaled(320, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                pixmap.scaled(260, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             )
         else:
             self.image_preview.setText(tr("Nada guardado ainda: desenhe ou escolha uma imagem."))

@@ -29,6 +29,11 @@ _RESTRICTED = (
 )
 
 
+def _plural(count: int, one: str, many: str) -> str:
+    """"1 arquivo" / "3 arquivos": nunca "arquivo(s)"."""
+    return (one if count == 1 else many).format(count=count)
+
+
 class _Failure(Exception):
     """Erro que a CLI explica com a própria mensagem (sem traceback)."""
 
@@ -107,7 +112,7 @@ def _merge(args):
         interleave=args.intercalar,
         reverse_second=args.versos_invertidos,
     )
-    return f"{len(args.inputs)} arquivo(s) juntado(s) em {args.output}."
+    return _plural(len(args.inputs), "1 arquivo juntado", "{count} arquivos juntados") + f" em {args.output}."
 
 
 def _split(args):
@@ -136,7 +141,7 @@ def _split(args):
         if args.paginas_por_arquivo < 1:
             raise _Failure("--paginas-por-arquivo precisa ser pelo menos 1.")
         paths = SplitPDF().run(args.input, folder, pages_per_file=args.paginas_por_arquivo)
-    return f"{len(paths)} arquivo(s) em {args.output}.{note}"
+    return _plural(len(paths), "1 arquivo", "{count} arquivos") + f" em {args.output}.{note}"
 
 
 def _rotate(args):
@@ -159,7 +164,7 @@ def _extract(args):
 
     pages = _pages(args, args.input, args.paginas)
     ArrangePages().run(args.input, _output(args), [(page, 0) for page in pages])
-    return f"{len(pages)} página(s) extraída(s) para {args.output}."
+    return _plural(len(pages), "1 página extraída", "{count} páginas extraídas") + f" para {args.output}."
 
 
 def _compress(args):
@@ -250,7 +255,7 @@ def _ocr(args):
         straighten=args.endireitar,
         progress=_progress(args),
     )
-    return f"Texto reconhecido em {count} página(s): {args.output}."
+    return "Texto reconhecido em " + _plural(count, "1 página", "{count} páginas") + f": {args.output}."
 
 
 def _pdfa(args):
@@ -285,7 +290,7 @@ def _images(args):
         image_format=args.formato,
         pages=sorted(set(pages)) if pages is not None else None,
     )
-    return f"{len(paths)} imagem(ns) em {args.output}."
+    return _plural(len(paths), "1 imagem", "{count} imagens") + f" em {args.output}."
 
 
 def _json_default(value):

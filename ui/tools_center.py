@@ -2,7 +2,7 @@
 inteira em 1280 x 720, com as "Mais usadas" em cima e um campo de busca grande que filtra os
 cartões no lugar (com sinônimos; ver ui/search_index.py)."""
 
-from PySide6.QtCore import QEvent, QPoint, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QFrame,
@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QToolButton,
-    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -25,6 +24,7 @@ from ui.icon_utils import in_accent
 from ui.preferences import preferences
 from ui.tools import GROUPS, TOOLS
 from ui.viewer.viewer_icons import build_pin_icon, build_search_icon
+from ui.widgets.rich_tip import set_rich_tip
 
 MAX_WIDTH = 1200
 COLUMNS = 4
@@ -40,12 +40,11 @@ def most_used(count: int = 5) -> list[str]:
 
 
 def tool_tip(tool_id: str) -> str:
-    """A dica rica de uma ferramenta: o nome, uma frase sobre o efeito e os modos."""
+    """O texto da dica rica de uma ferramenta: uma frase sobre o efeito e os modos."""
     tool = TOOLS[tool_id]
-    text = f"<b>{tr(tool.title)}</b><br>{tr(tool.description)}"
+    text = tr(tool.description)
     if len(tool.modes) > 1:
-        modes = ", ".join(tr(mode.label) for mode in tool.modes)
-        text += "<br><span>" + tr("Modos: {modes}").format(modes=modes) + "</span>"
+        text += "\n" + tr("Modos: {modes}").format(modes=", ".join(tr(mode.label) for mode in tool.modes))
     return text
 
 
@@ -82,9 +81,8 @@ class ToolRow(QToolButton):
     def retranslate(self):
         tool = TOOLS[self.tool_id]
         self.name = tr(tool.title)
-        self.setToolTip(tool_tip(self.tool_id))
+        set_rich_tip(self, self.name, tool_tip(self.tool_id))
         self.setAccessibleName(self.name)
-        self.setAccessibleDescription(tr(tool.description))
         self._fit_name()
 
     def text(self) -> str:  # type: ignore[override]
@@ -112,12 +110,6 @@ class ToolRow(QToolButton):
         self.reason.setText(tr("por “{word}”").format(word=reason) if reason else "")
         self.reason.setVisible(bool(reason))
         self._fit_name()
-
-    def focusInEvent(self, event):
-        super().focusInEvent(event)
-        # No foco do teclado, a dica rica aparece à direita da linha, como com o mouse.
-        if event.reason() in (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason, Qt.FocusReason.OtherFocusReason):
-            QToolTip.showText(self.mapToGlobal(QPoint(self.width() + 4, 0)), self.toolTip(), self)
 
 
 class GroupCard(QFrame):

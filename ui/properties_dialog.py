@@ -307,9 +307,11 @@ class DocumentPropertiesDialog(QDialog):
         else:
             summary = plural(len(p.fonts), "1 fonte.", "{count} fontes.")
             if missing:
-                summary += " " + tr(
-                    "{count} não embutida(s): em outro computador, o texto pode aparecer com outra fonte."
-                ).format(count=missing)
+                summary += " " + plural(
+                    missing,
+                    "1 não embutida: em outro computador, o texto pode aparecer com outra fonte.",
+                    "{count} não embutidas: em outro computador, o texto pode aparecer com outra fonte.",
+                )
         widget = QWidget()
         layout = QVBoxLayout(widget)
         label = QLabel(summary)

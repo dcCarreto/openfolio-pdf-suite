@@ -1224,10 +1224,13 @@ QToolButton#FavoritePill:focus {{
 }}
 
 /* Início: "Ou comece pelo que você quer fazer". */
+/* Os seis atalhos do Início cabem numa linha da coluna de 880 px também em português: texto de
+   12 px e um respiro menor do lado do ícone, que já tem folga dentro dos 16 px dele. */
 QPushButton#StarterButton {{
     min-height: 36px;
     max-height: 36px;
-    padding: 0 14px;
+    padding: 0 10px 0 8px;
+    font-size: 12px;
     background-color: {t["raised"]};
 }}
 
@@ -1600,6 +1603,23 @@ QToolTip {{
     border: 1px solid {t["border"]};
     border-radius: 8px;
     padding: 6px 10px;
+}}
+
+/* Dica rica (ui/widgets/rich_tip.py): cartão em raised, com o nome em 600 e a frase em 12 px. */
+QFrame#RichTip {{
+    background-color: {t["raised"]};
+    border: 1px solid {t["border"]};
+    border-radius: 8px;
+}}
+
+QLabel#RichTipTitle {{
+    font-weight: 600;
+    color: {t["text"]};
+}}
+
+QLabel#RichTipBody {{
+    font-size: 12px;
+    color: {t["text2"]};
 }}
 
 QProgressBar {{

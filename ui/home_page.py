@@ -45,7 +45,7 @@ STARTERS = [
     ("Diminuir o tamanho", "CompressPage", 0),
     ("Assinar", "FillSignPage", 0),
     ("Transformar em Word", "ConvertPage", 0),
-    ("Esconder dados pessoais", "RedactionPage", 0),
+    ("Esconder dados pessoais", "RedactionPage", 1),
     ("Tornar pesquisável", "OCRPage", 0),
 ]
 MAX_WIDTH = 880
@@ -303,12 +303,12 @@ class HomePage(QScrollArea):
         self._starters_title = QLabel()
         self._starters_title.setProperty("ofRole", "section")
         starters = QWidget()
-        starters_layout = FlowLayout(starters, spacing=8)
+        starters_layout = FlowLayout(starters, spacing=6)
         self.starter_buttons: list[QPushButton] = []
         for label, tool_id, mode in STARTERS:
             button = QPushButton(in_accent(getattr(sidebar_icons, TOOLS[tool_id].icon)()), "")
             button.setObjectName("StarterButton")
-            button.setIconSize(QSize(18, 18))
+            button.setIconSize(QSize(16, 16))
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.setProperty("label", label)
             button.clicked.connect(lambda _checked=False, t=tool_id, m=mode: self.tool_requested.emit(t, m))
