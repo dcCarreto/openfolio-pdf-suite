@@ -140,11 +140,46 @@ def test_unknown_named_actions_and_other_kinds_of_file_stay_out(tmp_path):
 
 def test_safe_pdf_file_refuses_the_network_and_other_types(tmp_path):
     assert safe_pdf_file(" capitulo.pdf ") == "capitulo.pdf"
-    for blocked in ("a.exe", "http://x/a.pdf", "\\\\servidor\\a.pdf", "\\servidor\\a.pdf", "//servidor/a.pdf", ""):
+    for blocked in (
+        "a.exe",
+        "http://x/a.pdf",
+        "\\\\servidor\\a.pdf",
+        "\\servidor\\a.pdf",
+        "//servidor/a.pdf",
+        "::servidor:a.pdf",  # como o pdfium reescreve no macOS
+        "",
+    ):
         assert safe_pdf_file(blocked) == ""
     (tmp_path / "b.pdf").write_bytes(b"%PDF")
     assert linked_pdf_path("b.pdf", str(tmp_path)) == str(tmp_path / "b.pdf")
     assert linked_pdf_path("nao_existe.pdf", str(tmp_path)) == ""
+
+
+def _first_file(path):
+    document = pdfium.PdfDocument(path)
+    page = document[0]
+    try:
+        return [link.file for link in page_links(document, page, path, 0)]
+    finally:
+        page.close()
+        document.close()
+
+
+def test_the_file_name_comes_as_written_in_the_pdf_on_every_system(tmp_path):
+    path = _with_links(_pdf(tmp_path / "doc.pdf"), (OTHER, _remote("sub/pasta/outro.pdf")))
+    assert _first_file(path) == ["sub/pasta/outro.pdf"]
+
+
+def test_a_file_specification_dictionary_is_read_too(tmp_path):
+    specification = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Filespec"),
+            NameObject("/F"): TextStringObject("antigo.pdf"),
+            NameObject("/UF"): TextStringObject("outro.pdf"),
+        }
+    )
+    path = _with_links(_pdf(tmp_path / "doc.pdf"), (OTHER, {**_remote("x.pdf"), "/F": specification}))
+    assert _first_file(path) == ["outro.pdf"]
 
 
 @pytest.mark.parametrize(

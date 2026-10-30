@@ -98,10 +98,11 @@ def safe_url(url: str) -> str:
 
 def safe_pdf_file(name: str) -> str:
     """O nome, se for de um PDF local; endereços de rede ficam de fora (abrir um caminho de
-    rede já entrega as credenciais do Windows ao servidor). Tudo o que começa com barra sai junto:
-    o pdfium reescreve "//servidor/a.pdf" como "\\servidor\\a.pdf"."""
+    rede já entrega as credenciais do Windows ao servidor). Tudo o que começa com barra sai junto,
+    e também com dois-pontos: conforme o sistema, o pdfium reescreve "//servidor/a.pdf" como
+    "\\servidor\\a.pdf" ou "::servidor:a.pdf"."""
     name = name.strip()
-    if not name.lower().endswith(".pdf") or "://" in name or name.startswith(("\\", "/")):
+    if not name.lower().endswith(".pdf") or "://" in name or name.startswith(("\\", "/", ":")):
         return ""
     return name
 
@@ -214,13 +215,28 @@ def _named_links(path: str, page_index: int) -> list[PageLink]:
 
 
 def _with_file_destinations(links: list[PageLink], path: str, page_index: int) -> list[PageLink]:
-    """O pdfium não sabe o destino dentro do outro arquivo (resolveria um nome neste aqui)."""
+    """O nome do arquivo como está no PDF e o destino dentro dele. O pdfium reescreve o nome
+    conforme o sistema ("sub/a.pdf" vira "sub:a.pdf" no macOS) e não sabe o destino: resolveria
+    um nome neste documento, não no outro."""
     actions = _link_actions(path, page_index, "/GoToR")
     result = []
     for link in links:
         action = next((a for rect, a in actions if _same_rect(rect, link.rect)), None) if link.file else None
-        result.append(_with_file_destination(link, action.get("/D")) if action else link)
+        if action is None:
+            result.append(link)
+            continue
+        name = safe_pdf_file(_file_specification(action.get("/F")))
+        if name:
+            result.append(_with_file_destination(replace(link, file=name), action.get("/D")))
     return result
+
+
+def _file_specification(specification) -> str:
+    """O nome em /F: um texto ou um dicionário de arquivo (ISO 32000-1, 7.11.3)."""
+    specification = specification.get_object() if specification is not None else None
+    if isinstance(specification, dict):
+        specification = specification.get("/UF") or specification.get("/F")
+    return str(specification) if isinstance(specification, str) else ""
 
 
 def _same_rect(a: Rect, b: Rect) -> bool:
