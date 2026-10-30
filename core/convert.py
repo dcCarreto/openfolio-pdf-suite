@@ -7,6 +7,7 @@ from PIL import Image, ImageOps, TiffImagePlugin
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 
+from .messages import DOC_PAGES, plural_message
 from .base import READ, atomic_output, open_pdfium, open_reader, render_scale
 from .progress import PDFIUM_LOCK, Progress, ensure_progress
 
@@ -50,7 +51,7 @@ class ConvertToImages:
             if not pages:
                 raise ValueError("Informe as páginas a converter.")
             if not all(0 <= index < total_pages for index in pages):
-                raise ValueError(f"O documento tem {total_pages} página(s): confira as páginas informadas.")
+                raise ValueError(plural_message(total_pages, *DOC_PAGES))
 
             def rendered():
                 for index in progress.steps(pages, len(pages), "Convertendo páginas"):

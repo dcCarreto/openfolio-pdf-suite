@@ -91,12 +91,12 @@ def test_a_drawing_tool_goes_back_to_single_page(viewer):
     changes = []
     viewer.layout_changed.connect(changes.append)
     viewer.set_layout(BOOK)
-    assert viewer.book_button.isChecked()
+    assert viewer.book_action.isChecked()
 
     viewer.annotation_state.set_page_active(True)
     viewer.annotation_state.set_tool("highlight")
 
-    assert viewer.page_layout() == SINGLE and viewer.single_page_button.isChecked()
+    assert viewer.page_layout() == SINGLE and viewer.single_page_action.isChecked()
     assert changes == [BOOK, SINGLE]
 
 
@@ -109,7 +109,7 @@ def test_view_menu_follows_the_toolbar(tmp_path):
     window.session.open(_pdf(tmp_path / "doc.pdf"))
     assert window._presentation_action.isEnabled()
 
-    window.viewer.continuous_button.click()
+    window.viewer.continuous_action.trigger()
     assert window._layout_actions[CONTINUOUS].isChecked()
     window._layout_actions[BOOK].trigger()
     assert window.viewer.page_layout() == BOOK
@@ -131,7 +131,7 @@ def test_the_chosen_layout_is_remembered_but_not_the_one_a_drawing_tool_forces(t
     reopened = MainWindow(settings=settings)
     assert reopened.viewer.page_layout() == BOOK and reopened._layout_actions[BOOK].isChecked()
     reopened.session.open(_pdf(tmp_path / "doc.pdf"))  # sem documento, a barra fica desligada
-    reopened.viewer.continuous_button.click()  # pela barra do visualizador
+    reopened.viewer.continuous_action.trigger()  # pela barra do visualizador
     reopened.session.clear()
     reopened.close()
     assert MainWindow(settings=settings).viewer.page_layout() == CONTINUOUS

@@ -111,7 +111,7 @@ class PageNumbersPage(QWidget):
         self.skip_first_spin.setToolTip(tr("A capa e as páginas de abertura ficam sem número; a contagem começa depois delas."))
 
         self.number_pages_edit = QLineEdit()
-        self.number_pages_edit.setPlaceholderText(tr("Páginas (vazio = todas), ex: 1, 3-5"))
+        self.number_pages_edit.setPlaceholderText(tr("Todas · ex.: 1-3, 5, 8-"))
         self.number_selection_button = QPushButton(tr("Usar seleção"))
         self.number_selection_button.setToolTip(
             tr("Preenche com as páginas selecionadas nas miniaturas (Ctrl ou Shift + clique).")

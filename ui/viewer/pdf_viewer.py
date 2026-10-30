@@ -7,10 +7,9 @@ from pathlib import Path
 
 import pypdfium2 as pdfium
 from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QIcon, QIntValidator, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
+from PySide6.QtGui import QActionGroup, QColor, QIcon, QIntValidator, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
-    QButtonGroup,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -33,6 +32,7 @@ from core.form_fields import FillFormFields, FormWidget, ListFormWidgets
 from core.geometry import PageGeometry
 from core.progress import PDFIUM_LOCK
 from core.redaction import RedactionRect
+from ui import theme
 from ui.annotation_state import AnnotationState
 from ui.document_session import DocumentSession
 from ui.errors import show_error
@@ -52,16 +52,14 @@ from ui.viewer.thumbnail_list import ThumbnailList
 from ui.top_bar import bar_separator as _separator
 from ui.viewer.viewer_icons import (
     build_book_icon,
+    build_close_icon,
     build_continuous_page_icon,
     build_double_page_icon,
     build_file_icon,
-    build_fit_page_icon,
     build_fit_width_icon,
     build_more_icon,
     build_next_page_icon,
-    build_open_icon,
     build_prev_page_icon,
-    build_rotate_icon,
     build_search_icon,
     build_single_page_icon,
     build_thumbnails_icon,
@@ -79,6 +77,9 @@ _TEXT_SELECTION_COLOR = QColor(33, 150, 243, 90)
 _FORM_FIELD_COLOR = QColor(100, 149, 237, 45)  # campos preenchíveis, como nos leitores de PDF
 _DRAWING_TOOLS = ("highlight", "underline", "strikeout", "note", "ink", "square", "circle", "arrow", "stamp")
 _SHAPE_TOOLS = ("square", "circle", "arrow")
+# A marcação pendente (só na ferramenta, ainda não gravada) ganha este contorno tracejado, igual
+# nos dois temas: é uma cor das marcações sobre a página, não da interface.
+PENDING_OUTLINE = "#b07800"
 _RESIZE_HANDLE = 10  # pixels em volta do canto inferior direito que redimensionam
 # Rolagem contínua: páginas a mais de N alturas de tela da área visível têm a imagem
 # descartada (voltam a ser renderizadas se o usuário rolar até elas). Antes nenhuma página
@@ -103,6 +104,7 @@ class PdfViewer(QWidget):
     preenchido vira uma versão do documento, que Ctrl+Z desfaz e "Salvar" grava."""
 
     verify_signatures_requested = Signal()
+    remove_password_requested = Signal()
     layout_changed = Signal(str)
 
     def __init__(
@@ -163,6 +165,7 @@ class PdfViewer(QWidget):
         self._form_widgets: list[FormWidget] = []
         self._field_editor: tuple[QLineEdit, FormWidget] | None = None
         self._translatable_tooltips: list[tuple[QWidget, str]] = []
+        self._dismissed_notices: set[str] = set()  # avisos fechados com o "x" (até outro documento)
         # Rolagem contínua: (página, fração da altura dela) a mostrar no topo assim que o
         # layout novo existir (depois de zoom ou troca de modo).
         self._pending_scroll: tuple[int, float] | None = None
@@ -228,19 +231,14 @@ class PdfViewer(QWidget):
         self.search_bar.closed.connect(self._close_search)
         layout.addWidget(self.search_bar)
 
-        # Aviso sobre o documento aberto (protegido, assinado, com formulário ou camadas).
+        # Avisos sobre o documento aberto, uma faixa de 36 px por aviso, na cor do tipo:
+        # protegido (com "Remover senha"), assinado (com "Ver"), formulário e camadas.
         self.notice_bar = QWidget()
-        self.notice_bar.setObjectName("documentNotice")
-        notice_layout = QHBoxLayout(self.notice_bar)
-        notice_layout.setContentsMargins(10, 4, 10, 4)
-        self.notice_label = QLabel()
-        self.notice_label.setWordWrap(True)
-        self.verify_button = QPushButton(tr("Verificar"))
-        self.verify_button.setToolTip(tr("Verificar as assinaturas na aba Assinatura"))
-        self.verify_button.clicked.connect(self.verify_signatures_requested)
-        notice_layout.addWidget(self.notice_label, 1)
-        notice_layout.addWidget(self.verify_button)
+        self._notice_layout = QVBoxLayout(self.notice_bar)
+        self._notice_layout.setContentsMargins(0, 0, 0, 0)
+        self._notice_layout.setSpacing(0)
         self.notice_bar.hide()
+        self.verify_button: QPushButton | None = None
         layout.addWidget(self.notice_bar)
 
         body = QWidget()
@@ -325,18 +323,17 @@ class PdfViewer(QWidget):
         self.search_bar.retranslate()
         self.thumbnail_list.retranslate()
         self.side_panel.retranslate()
-        self.verify_button.setText(tr("Verificar"))
-        self.verify_button.setToolTip(tr("Verificar as assinaturas na aba Assinatura"))
         if getattr(self, "_notices", None) is not None:
-            self.notice_label.setText("  ·  ".join(tr_message(message) for message in self._notices.messages))
+            self._show_notices()
         self._update_page_indicator()
 
     def _build_toolbar(self) -> QWidget:
-        """A barra sobre o documento (44 px), em grupos:
+        """A barra sobre o documento (44 px), em grupos separados por traços:
 
-            [abrir salvar imprimir] ... [< página de N >] | [- 120% +] | [ajustes girar][modos] ... [buscar]
+            [< página de N >] | [- 120% +] | [ajuste ▾] | [modo ▾] | [buscar] ... (imprimir e o selo de estado)
 
-        Estreita (`set_compact`), os ajustes, o girar e os modos vão para o menu "...".
+        Abrir fica no "+" das abas e em Arquivo; a aba de documento põe Imprimir e o selo de
+        estado (com "Salvar") na ponta. Estreita (`set_compact`), ajuste e modo vão para o "...".
         """
         toolbar = QWidget()
         toolbar.setObjectName("ViewerBar")
@@ -345,11 +342,6 @@ class PdfViewer(QWidget):
         layout.setContentsMargins(8, 0, 8, 0)
         layout.setSpacing(4)
 
-        open_button = self._tool_button(build_open_icon(), "Abrir PDF...")
-        open_button.clicked.connect(self._browse_open)
-        layout.addWidget(open_button)  # a aba de documento põe Salvar e Imprimir logo depois
-        layout.addStretch()
-
         prev_button = self._tool_button(build_prev_page_icon(), "Página anterior")
         prev_button.clicked.connect(self._go_prev)
         next_button = self._tool_button(build_next_page_icon(), "Próxima página")
@@ -357,12 +349,12 @@ class PdfViewer(QWidget):
         # O número da página atual, editável: Enter vai direto para a página digitada.
         self.page_field = QLineEdit()
         self.page_field.setObjectName("PageField")
-        self.page_field.setFixedWidth(40)
+        self.page_field.setFixedWidth(34)
         self.page_field.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.page_field.setValidator(QIntValidator(1, 99999, self.page_field))
         self.page_field.returnPressed.connect(self._go_to_typed_page)
         self.page_total = QLabel()
-        self.page_total.setProperty("ofRole", "secondary")
+        self.page_total.setProperty("ofRole", "help")
         layout.addWidget(prev_button)
         layout.addWidget(self.page_field)
         layout.addWidget(self.page_total)
@@ -391,95 +383,73 @@ class PdfViewer(QWidget):
         layout.addWidget(self.zoom_button)
         layout.addWidget(zoom_in_button)
 
-        fit_width_button = self._tool_button(build_fit_width_icon(), "Ajustar à largura")
-        fit_width_button.clicked.connect(self._fit_width)
-        fit_page_button = self._tool_button(build_fit_page_icon(), "Ajustar à página (Ctrl+0)")
-        fit_page_button.clicked.connect(self._fit_page)
-        rotate_button = self._tool_button(build_rotate_icon(), "Girar a visualização (o arquivo não muda)")
-        rotate_button.clicked.connect(self._rotate_view)
-
-        # Os modos de exibição, só ícones, num segmentado: um marcado por vez.
-        modes = QWidget()
-        modes.setObjectName("Segmented")
-        modes.setFixedHeight(32)
-        modes_layout = QHBoxLayout(modes)
-        modes_layout.setContentsMargins(2, 2, 2, 2)
-        modes_layout.setSpacing(2)
-        self._mode_group = QButtonGroup(self)
-        self._mode_group.setExclusive(True)
-        self._mode_buttons = {}
-        for key, icon, tooltip in (
-            (SINGLE, build_single_page_icon(), "Página única"),
-            (CONTINUOUS, build_continuous_page_icon(), "Rolagem contínua"),
-            (DOUBLE, build_double_page_icon(), "Página dupla"),
-            (BOOK, build_book_icon(), "Livro (capa sozinha)"),
-        ):
-            button = QToolButton()
-            button.setIcon(icon)
-            button.setIconSize(QSize(16, 16))
-            button.setFixedSize(28, 26)
-            button.setCheckable(True)
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.setToolTip(tr(tooltip))
-            button.setAccessibleName(tr(tooltip))
-            self._translatable_tooltips.append((button, tooltip))
-            button.clicked.connect(lambda _checked=False, k=key: self.set_layout(k))
-            self._mode_group.addButton(button)
-            modes_layout.addWidget(button)
-            self._mode_buttons[key] = button
-        self.single_page_button = self._mode_buttons[SINGLE]
-        self.continuous_button = self._mode_buttons[CONTINUOUS]
-        self.double_page_button = self._mode_buttons[DOUBLE]
-        self.book_button = self._mode_buttons[BOOK]
-        self.single_page_button.setChecked(True)
-
-        view_separator = _separator()
-        layout.addWidget(view_separator)
-        layout.addWidget(fit_width_button)
-        layout.addWidget(fit_page_button)
-        layout.addWidget(rotate_button)
-        layout.addSpacing(4)
-        layout.addWidget(modes)
-        self._view_widgets = [view_separator, fit_width_button, fit_page_button, rotate_button, modes]
-
-        # Janela estreita: o mesmo que os botões acima, num menu.
-        self.more_button = self._tool_button(build_more_icon(), "Mais opções de exibição")
-        self.more_button.setObjectName("MoreButton")
-        self.more_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        more_menu = QMenu(self.more_button)
+        # Ajuste (largura, página, girar) e modo de exibição: um botão com menu cada. O mesmo
+        # menu serve ao "..." da janela estreita.
         self._more_actions = []
+        fit_menu = QMenu(self)
         for handler, text in (
             (self._fit_width, "Ajustar à largura"),
             (self._fit_page, "Ajustar à página (Ctrl+0)"),
             (self._rotate_view, "Girar a visualização (o arquivo não muda)"),
         ):
-            action = more_menu.addAction("")
+            action = fit_menu.addAction("")
             action.triggered.connect(handler)
             self._more_actions.append((action, text))
-        more_menu.addSeparator()
-        for key, text in (
-            (SINGLE, "Página única"),
-            (CONTINUOUS, "Rolagem contínua"),
-            (DOUBLE, "Página dupla"),
-            (BOOK, "Livro (capa sozinha)"),
+        mode_menu = QMenu(self)
+        self._mode_group = QActionGroup(self)
+        self._mode_group.setExclusive(True)
+        self._mode_actions = {}
+        for key, icon, text in (
+            (CONTINUOUS, build_continuous_page_icon(), "Rolagem contínua"),
+            (SINGLE, build_single_page_icon(), "Página única"),
+            (DOUBLE, build_double_page_icon(), "Página dupla"),
+            (BOOK, build_book_icon(), "Livro (capa sozinha)"),
         ):
-            action = more_menu.addAction("")
+            action = mode_menu.addAction(icon, "")
+            action.setCheckable(True)
             action.triggered.connect(lambda _checked=False, k=key: self.set_layout(k))
+            self._mode_group.addAction(action)
+            self._mode_actions[key] = action
             self._more_actions.append((action, text))
+        self.single_page_action = self._mode_actions[SINGLE]
+        self.continuous_action = self._mode_actions[CONTINUOUS]
+        self.double_page_action = self._mode_actions[DOUBLE]
+        self.book_action = self._mode_actions[BOOK]
+        self.single_page_action.setChecked(True)
+
+        self.fit_button = self._menu_button(build_fit_width_icon(), "Ajuste e rotação", fit_menu)
+        self.mode_button = self._menu_button(build_single_page_icon(), "Modo de exibição", mode_menu)
+        fit_separator, mode_separator = _separator(), _separator()
+        layout.addWidget(fit_separator)
+        layout.addWidget(self.fit_button)
+        layout.addWidget(mode_separator)
+        layout.addWidget(self.mode_button)
+        self._view_widgets = [fit_separator, self.fit_button, mode_separator, self.mode_button]
+
+        # Janela estreita: ajuste e modo juntos num menu só.
+        self.more_button = self._tool_button(build_more_icon(), "Mais opções de exibição")
+        self.more_button.setObjectName("MoreButton")
+        self.more_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        more_menu = QMenu(self.more_button)
+        more_menu.addActions(fit_menu.actions())
+        more_menu.addSeparator()
+        more_menu.addActions(mode_menu.actions())
         self.more_button.setMenu(more_menu)
         self.more_button.hide()
         layout.addWidget(self.more_button)
+        layout.addWidget(_separator())
+
+        search_button = self._tool_button(build_search_icon(), "Buscar (Ctrl+F)")
+        search_button.clicked.connect(self._toggle_search)
+        layout.addWidget(search_button)
         layout.addStretch()
 
+        # Escondido: a coluna da esquerda da aba de documento faz o papel dele.
         self.thumbnails_button = self._tool_button(build_thumbnails_icon(), "Painel lateral (miniaturas, marcadores, anexos)")
         self.thumbnails_button.setCheckable(True)
         self.thumbnails_button.setChecked(True)
         self.thumbnails_button.clicked.connect(self._toggle_thumbnails)
         layout.addWidget(self.thumbnails_button)
-
-        search_button = self._tool_button(build_search_icon(), "Buscar (Ctrl+F)")
-        search_button.clicked.connect(self._toggle_search)
-        layout.addWidget(search_button)
 
         self._document_dependent_widgets = [
             prev_button,
@@ -487,17 +457,24 @@ class PdfViewer(QWidget):
             zoom_out_button,
             zoom_in_button,
             self.zoom_button,
-            fit_width_button,
-            fit_page_button,
-            rotate_button,
+            self.fit_button,
+            self.mode_button,
             self.page_field,
-            *self._mode_buttons.values(),
             self.more_button,
             self.thumbnails_button,
             search_button,
         ]
         self._retranslate_toolbar_menus()
         return toolbar
+
+    def _menu_button(self, icon, tooltip: str, menu: QMenu) -> QToolButton:
+        """Ícone + seta, abrindo `menu` (ajuste, modo de exibição)."""
+        button = self._tool_button(icon, tooltip)
+        button.setObjectName("MenuButton")
+        button.setFixedSize(44, 32)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        button.setMenu(menu)
+        return button
 
     def _retranslate_toolbar_menus(self):
         self._zoom_fit_width_action.setText(tr("Ajustar à largura"))
@@ -611,11 +588,69 @@ class PdfViewer(QWidget):
         self._rebuild_canvas()
 
     def _update_notices(self, path: str):
-        notices = document_notices(path)
-        self._notices = notices
-        self.notice_label.setText("  ·  ".join(tr_message(message) for message in notices.messages))
-        self.verify_button.setVisible(notices.signature_count > 0)
-        self.notice_bar.setVisible(bool(notices.messages))
+        if self.session.last_change() != "version":
+            self._dismissed_notices = set()  # outro documento: os avisos voltam
+        self._notices = document_notices(path)
+        self._show_notices()
+
+    def _show_notices(self):
+        while self._notice_layout.count():
+            item = self._notice_layout.takeAt(0)
+            if item is not None and item.widget() is not None:
+                item.widget().hide()
+                item.widget().deleteLater()
+        self.verify_button = None
+        shown = 0
+        for kind, message in zip(self._notices.kinds, self._notices.messages):
+            if kind in self._dismissed_notices:
+                continue
+            self._notice_layout.addWidget(self._notice_row(kind, tr_message(message)))
+            shown += 1
+        self.notice_bar.setVisible(shown > 0)
+
+    def _notice_row(self, kind: str, text: str) -> QWidget:
+        row = QFrame()
+        row.setObjectName("documentNotice")
+        row.setProperty("kind", kind)
+        row.setFixedHeight(36)
+        label = QLabel(text)
+        label.setObjectName("NoticeText")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(12, 0, 4, 0)
+        layout.setSpacing(8)
+        layout.addWidget(label, 1)
+        actions = {
+            "signed": ("Ver", "Verificar as assinaturas", self.verify_signatures_requested),
+            "protected": ("Remover senha", "Remover senha", self.remove_password_requested),
+        }
+        if kind in actions:
+            text, tip, signal = actions[kind]
+            button = QPushButton(tr(text))
+            button.setProperty("ofVariant", "ghost")
+            button.setProperty("ofSize", "mini")
+            button.setToolTip(tr(tip))
+            button.clicked.connect(signal)
+            layout.addWidget(button)
+            if kind == "signed":
+                self.verify_button = button
+        # Fora de _tool_button: a faixa é refeita a cada aviso, e a lista de dicas a traduzir
+        # guardaria botões já apagados.
+        close = QToolButton()
+        close.setObjectName("NoticeClose")
+        close.setProperty("ofRole", "icon")
+        close.setIcon(build_close_icon())
+        close.setIconSize(QSize(16, 16))
+        close.setFixedSize(28, 28)
+        close.setCursor(Qt.CursorShape.PointingHandCursor)
+        close.setToolTip(tr("Fechar aviso"))
+        close.setAccessibleName(tr("Fechar aviso"))
+        close.clicked.connect(lambda _checked=False, k=kind: self._dismiss_notice(k))
+        layout.addWidget(close)
+        return row
+
+    def _dismiss_notice(self, kind: str):
+        self._dismissed_notices.add(kind)
+        self._show_notices()
 
     def _show_empty_state(self):
         self.content_stack.setCurrentIndex(0)
@@ -867,10 +902,14 @@ class PdfViewer(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         for spec in specs:
             self._paint_pending_spec(painter, page_index, spec)
-        if comment is not None:
-            painter.setPen(QPen(QColor("#ff5252"), 2))
+            outline = QPen(QColor(PENDING_OUTLINE), 1.5, Qt.PenStyle.DashLine)
+            painter.setPen(outline)
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRect(self._user_rect_to_screen(page_index, comment[1]).adjusted(-3, -3, 3, 3))
+            painter.drawRoundedRect(self._user_rect_to_screen(page_index, spec_rect(spec)).adjusted(-3, -3, 3, 3), 2, 2)
+        if comment is not None:  # a escolhida na lista: um anel de 2 px no acento
+            painter.setPen(QPen(theme.color("accent"), 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(self._user_rect_to_screen(page_index, comment[1]).adjusted(-4, -4, 4, 4), 3, 3)
         painter.end()
         return result
 
@@ -1317,8 +1356,9 @@ class PdfViewer(QWidget):
         if layout not in LAYOUTS:
             raise ValueError(f"Layout inválido: {layout}")
         continuous, spread = layout != SINGLE, layout if layout in (DOUBLE, BOOK) else None
-        if hasattr(self, "_mode_buttons"):
-            self._mode_buttons[layout].setChecked(True)
+        if hasattr(self, "_mode_actions"):
+            self._mode_actions[layout].setChecked(True)
+            self.mode_button.setIcon(self._mode_actions[layout].icon())
         if (continuous, spread) == (self._continuous, self._spread):
             return
         page = self._current_page
@@ -1591,7 +1631,7 @@ class PdfViewer(QWidget):
             self._comment_drag_rect = new_rect
             preview = QPixmap(self._comment_preview_base)
             painter = QPainter(preview)
-            painter.setPen(QPen(QColor("#ff5252"), 2, Qt.PenStyle.DashLine))
+            painter.setPen(QPen(theme.color("accent"), 2, Qt.PenStyle.DashLine))  # como o anel da escolhida
             painter.drawRect(new_rect)
             painter.end()
             self._page_labels[0].setPixmap(preview)

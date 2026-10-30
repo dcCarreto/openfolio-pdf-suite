@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from core.base import READ, open_reader
 from core.split import SplitAtBlankPages, SplitByBookmarks, SplitByRanges, SplitBySize, SplitPDF
-from ui.i18n import tr
+from ui.i18n import plural, tr
 from ui.page_ranges import format_page_ranges, parse_page_ranges
 from ui.tasks import run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -164,7 +164,7 @@ class SplitPage(QWidget):
             return
 
         def done(output_paths):
-            message = tr("PDF dividido em {count} arquivo(s).").format(count=len(output_paths))
+            message = plural(len(output_paths), "PDF dividido em 1 arquivo.", "PDF dividido em {count} arquivos.")
             extra = describe(output_paths) if describe else ""
             notify_success(self, tr("Dividir"), f"{message}\n\n{extra}" if extra else message)
 

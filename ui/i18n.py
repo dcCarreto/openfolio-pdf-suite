@@ -42,6 +42,17 @@ def tr(text: str) -> str:
     return _EN_TRANSLATIONS.get(text, text)
 
 
+def literal(text: str) -> str:
+    """O texto para um botão ou uma aba sem que o "&" vire atalho ("Fill & sign", "A&B.pdf")."""
+    return text.replace("&", "&&")
+
+
+def plural(count: int, one: str, many: str, **params) -> str:
+    """"1 página" / "25 páginas": `one` sem {count} no singular, `many` com {count}; os outros
+    valores do texto ("{folder}") vêm em `params`."""
+    return tr(one if count == 1 else many).format(count=count, **params)
+
+
 def tr_message(text) -> str:
     """Traduz um texto vindo do `core`: uma `core.messages.Message` (modelo + valores) ou um
     texto fixo, procurado no dicionário como qualquer outro."""
@@ -210,11 +221,9 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Personalizado": "Custom",
     # Merge
     "Selecionar PDFs": "Select PDFs",
-    "Arquivos a mesclar (na ordem desejada):": "Files to merge (in the desired order):",
     "todas (ex.: 1-3, 5)": "all (e.g. 1-3, 5)",
     "Páginas do arquivo selecionado:": "Pages of the selected file:",
     "Um marcador por arquivo (com os marcadores dele dentro)": "One bookmark per file (with its bookmarks inside)",
-    "Intercalar frentes e versos escaneados à parte": "Interleave fronts and backs scanned separately",
     "Junta dois arquivos página a página: a 1ª do primeiro, a 1ª do segundo, a 2ª do primeiro...": (
         "Joins two files page by page: the 1st of the first, the 1st of the second, the 2nd of the first..."
     ),
@@ -222,11 +231,9 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Para intercalar, deixe na lista só dois arquivos: o das frentes e o dos versos.": "To interleave, keep only two files in the list: the fronts and the backs.",
     "Adicione pelo menos um arquivo.": "Add at least one file.",
     "Falha ao mesclar: {error}": "Failed to merge: {error}",
-    "PDFs mesclados com sucesso.": "PDFs merged successfully.",
     # Split
     "Páginas por arquivo:": "Pages per file:",
     "Falha ao dividir: {error}": "Failed to split: {error}",
-    "PDF dividido em {count} arquivo(s).": "PDF split into {count} file(s).",
     "Por número de páginas": "By page count",
     "Por marcadores": "By bookmarks",
     "Um arquivo por marcador de nível superior do sumário — cada arquivo vai da "
@@ -363,7 +370,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Escolha o PDF de origem das páginas.": "Choose the source PDF for the pages.",
     "Ângulo:": "Angle:",
     "Páginas a rotacionar:": "Pages to rotate:",
-    "Páginas (vazio = todas), ex: 1, 3-5": "Pages (empty = all), e.g.: 1, 3-5",
     "90° no sentido horário": "90° clockwise",
     "180°": "180°",
     "90° no sentido anti-horário": "90° counterclockwise",
@@ -377,12 +383,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Informe a nova ordem das páginas.": "Enter the new page order.",
     "Informe quais páginas remover.": "Enter which pages to remove.",
     "Falha ao processar: {error}": "Processing failed: {error}",
-    "Operação concluída com sucesso.": "Operation completed successfully.",
     # Compress
-    "Falha ao comprimir: {error}": "Failed to compress: {error}",
-    "PDF comprimido: {original} KB -> {compressed} KB ({reduction}% menor).": (
-        "PDF compressed: {original} KB -> {compressed} KB ({reduction}% smaller)."
-    ),
     # Convert
     "Direção:": "Direction:",
     "PDF para imagens": "PDF to images",
@@ -396,7 +397,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Arquivo Word, Excel ou PowerPoint de entrada:": "Input Word, Excel, or PowerPoint file:",
     "Arquivo XML de entrada:": "Input XML file:",
     "Falha ao converter: {error}": "Failed to convert: {error}",
-    "{count} imagem(ns) gerada(s) com sucesso.": "{count} image(s) generated successfully.",
     "Adicione pelo menos uma imagem.": "Add at least one image.",
     "Escolha o arquivo PDF de saída.": "Choose the output PDF file.",
     "PDF gerado com sucesso.": "PDF generated successfully.",
@@ -499,7 +499,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     # Extract images
     "Falha ao extrair imagens: {error}": "Failed to extract images: {error}",
     "Nenhuma imagem encontrada no PDF.": "No images found in the PDF.",
-    "{count} imagem(ns) extraída(s) com sucesso.": "{count} image(s) extracted successfully.",
     # Crop / Resize
     "Cortar margens": "Crop margins",
     "Redimensionar": "Resize",
@@ -545,8 +544,11 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Trocar os marcadores da lista pelos {count} títulos encontrados?": (
         "Replace the bookmarks in the list with the {count} headings found?"
     ),
-    'A página "{page}" do marcador "{title}" não existe: o documento tem {total} página(s).': (
-        'Page "{page}" of bookmark "{title}" does not exist: the document has {total} page(s).'
+    'A página "{page}" do marcador "{title}" não existe: o documento tem 1 página.': (
+        'Page "{page}" of bookmark "{title}" does not exist: the document has 1 page.'
+    ),
+    'A página "{page}" do marcador "{title}" não existe: o documento tem {count} páginas.': (
+        'Page "{page}" of bookmark "{title}" does not exist: the document has {count} pages.'
     ),
     "Procurando os títulos": "Looking for the headings",
     "Falha ao salvar marcadores: {error}": "Failed to save bookmarks: {error}",
@@ -625,24 +627,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "O XMP não é um XML válido: {error}": "The XMP is not valid XML: {error}",
     # Anotações (M27)
     "Seta": "Arrow",
-    "O nome que os leitores mostram em cada comentário novo. Fica guardado.": (
-        "The name readers show on each new comment. It is remembered."
-    ),
-    "Trocar a cor dos selecionados": "Change the color of the selected ones",
-    "Aplica aos comentários selecionados a cor escolhida na barra de marcação.": (
-        "Applies the color chosen on the markup bar to the selected comments."
-    ),
-    "Com Selecionar/Apagar, arraste o comentário escolhido no visualizador para movê-lo, "
-    "ou o canto inferior direito dele para mudar o tamanho.": (
-        "With Select/Erase, drag the chosen comment in the viewer to move it, "
-        "or its bottom right corner to change its size."
-    ),
     "Trocar a cor": "Change the color",
     "Mover comentário": "Move comment",
-    "Cor trocada em {count} comentário(s).": "Color changed on {count} comment(s).",
-    "{count} ficou(aram) como estava(m): carimbos, textos livres e polígonos têm o desenho fixo.": (
-        "{count} stayed as they were: stamps, free texts and polygons have a fixed drawing."
-    ),
     "A anotação ficaria pequena demais.": "The annotation would be too small.",
     # Formulários (M26)
     "Editar campos existentes": "Edit existing fields",
@@ -685,9 +671,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Arquivo FDF com os dados:": "FDF file with the data:",
     "Escolha o arquivo de dados.": "Choose the data file.",
     "Falha ao exportar dados: {error}": "Failed to export data: {error}",
-    "{count} campo(s) exportado(s) com sucesso.": "{count} field(s) exported successfully.",
     "Falha ao importar dados: {error}": "Failed to import data: {error}",
-    "{count} campo(s) preenchido(s) com sucesso.": "{count} field(s) filled in successfully.",
     # Form fields: flatten
     "Achatar formulário": "Flatten form",
     "Grava o valor atual de cada campo preenchido como conteúdo estático da "
@@ -697,11 +681,9 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "removes the interactive widgets. Fields with no value set are left as they are."
     ),
     "Falha ao achatar formulário: {error}": "Failed to flatten the form: {error}",
-    "{count} campo(s) achatado(s) com sucesso.": "{count} field(s) flattened successfully.",
     # Menu bar: open PDF
     "Abrir PDF...": "Open PDF...",
     # Document source bar (shared "open document" indicator on tool panels)
-    "Abrir...": "Open...",
     "Abrir outro arquivo PDF": "Open another PDF file",
     "Nenhum PDF aberto": "No PDF open",
     "Abra um PDF para começar.": "Open a PDF to get started.",
@@ -724,24 +706,174 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "alterações não salvas": "unsaved changes",
     "Executar a ação da ferramenta": "Run the tool's action",
     # Tool panel (ui/tool_panel.py) and its input/output widgets
-    "Entrada": "Input",
     "Opções": "Options",
-    "Saída": "Output",
+    "Onde fica o resultado": "Where the result goes",
     "Fechar ferramenta (Esc)": "Close tool (Esc)",
-    "Escolha um PDF de entrada para habilitar.": "Choose an input PDF to enable.",
-    "Você pode continuar lendo enquanto isso.": "You can keep reading meanwhile.",
+    # Ferramentas, grupos, modos, coluna rápida, busca e Início
+    "Achatar": "Flatten",
+    "Anotar": "Annotate",
+    "Apague de vez áreas, textos e dados ocultos que não devem sair do PDF.": "Permanently remove areas, text and hidden data that must not leave the PDF.",
+    "Aplique a mesma operação a todos os PDFs de uma pasta.": "Apply the same operation to every PDF in a folder.",
+    "Assinar à mão": "Sign by hand",
+    "Bates": "Bates",
+    "Busca também por sinônimos: cpf, word, rubrica…": "Also searches synonyms: password, word, initials…",
+    "Cabeçalho e rodapé": "Header and footer",
+    "Certificado digital": "Digital certificate",
+    "Comandos": "Commands",
+    "Comparar versões": "Compare versions",
+    "Converter e reduzir": "Convert and shrink",
+    "Cortar e redimensionar": "Crop and resize",
+    "Corte as margens ou mude o tamanho das páginas.": "Crop the margins or change the page size.",
+    "Criar": "Create",
+    "Crie e edite campos, troque os dados preenchidos ou achate o formulário.": "Create and edit fields, exchange filled-in data or flatten the form.",
+    "Crie um PDF vazio, com uma ou mais páginas.": "Create an empty PDF with one or more pages.",
+    "Dados": "Data",
+    "Dados ocultos": "Hidden data",
+    "Diminua o tamanho do arquivo para enviar por e-mail ou guardar.": "Make the file smaller to email or store it.",
+    "Diminuir o tamanho": "Make it smaller",
+    "Do PDF para…": "From PDF to…",
+    "Editar o conteúdo": "Edit the content",
+    "Editar texto, imagem e links": "Edit text, images and links",
+    "Edite título e autor, converta para PDF/A ou confira a acessibilidade.": "Edit title and author, convert to PDF/A or check accessibility.",
+    "Escaneados e OCR": "Scans and OCR",
+    "Escolha pelo que você quer fazer. Cada grupo diz para que serve.": "Choose by what you want to do. Each group says what it is for.",
+    "Escolha quais camadas do PDF aparecem ao abrir.": "Choose which PDF layers show when it opens.",
+    "Escolha uma pasta e uma operação; no fim, um relatório CSV mostra o que deu certo.": (
+        "Pick a folder and an operation; at the end, a CSV report shows what worked."
+    ),
+    "Esconder dados pessoais": "Hide personal data",
+    "Escreva na página, assine à mão ou com certificado digital.": "Write on the page, sign by hand or with a digital certificate.",
+    "Fixar na coluna rápida": "Pin to the quick column",
+    "Formulários e assinaturas": "Forms and signatures",
+    "Imagem": "Image",
+    "Informações do documento": "Document information",
+    "Informações e metadados": "Information and metadata",
+    "Juntar PDFs": "Combine PDFs",
+    "Juntar, separar e reordenar páginas": "Combine, split and reorder pages",
+    "Junte vários PDFs em um só, na ordem que você escolher.": "Combine several PDFs into one, in the order you choose.",
+    "Lado a lado": "Side by side",
+    "Links": "Links",
+    "Lote": "Batch",
+    "Mais usadas": "Most used",
+    "Marcar, comparar versões e medir": "Mark up, compare versions and measure",
+    "Medir": "Measure",
+    "Medir distâncias": "Measure distances",
+    "Meça a distância entre dois pontos da página.": "Measure the distance between two points on the page.",
+    "Modo": "Mode",
+    "Modos: {modes}": "Modes: {modes}",
+    "Montar e organizar": "Assemble and organize",
+    "Monte o sumário de navegação do PDF.": "Build the PDF's navigation outline.",
+    "Mudar formato, tamanho e ler escaneados": "Change format and size, read scans",
+    "Mudar tamanho": "Change size",
+    "Mudar texto, imagens e marcar páginas": "Change text and images, mark pages",
+    "Na coluna rápida": "In the quick column",
+    "Novo PDF": "New PDF",
+    "Novo PDF em branco": "New blank PDF",
+    "Numeração e cabeçalho": "Numbering and header",
+    "Numere as páginas ou ponha um cabeçalho e um rodapé.": "Number the pages or add a header and footer.",
+    "Números de página": "Page numbers",
+    "O que você quer fazer? Ex.: assinar, cpf, word": "What do you want to do? E.g.: sign, password, word",
+    "Organizar": "Organize",
+    "Os PDFs que você abrir aparecem aqui, para voltar a eles com um clique.": "The PDFs you open show up here, so you can get back to them in one click.",
+    "Ou comece pelo que você quer fazer": "Or start with what you want to do",
+    "Para PDF": "To PDF",
+    "Ponha um texto ou um logotipo sobre as páginas.": "Put a text or a logo over the pages.",
+    "Por marcador": "By bookmark",
+    "Por nº de páginas": "By page count",
+    "Por página em branco": "At blank pages",
+    "Por tamanho": "By size",
+    "Preencher": "Fill in",
+    "Propriedades e conformidade": "Properties and compliance",
+    "Proteger e privacidade": "Protection and privacy",
+    "Proteja o PDF com senha ou tire a senha de um PDF protegido.": "Protect the PDF with a password or remove the password of a protected PDF.",
+    "Realce, comente, desenhe e carimbe; depois grave as marcações no PDF.": "Highlight, comment, draw and stamp; then save the markup to the PDF.",
+    "Redigir e limpar": "Redact and clean",
+    "Reescreva um trecho, troque uma imagem ou mude os links do PDF.": "Rewrite a passage, replace an image or change the PDF's links.",
+    "Remover da coluna": "Remove from the column",
+    "Reordene, gire, duplique, exclua ou extraia páginas.": "Reorder, rotate, duplicate, delete or extract pages.",
+    "Repetir em vários arquivos": "Repeat across many files",
+    "Senha e permissões": "Password and permissions",
+    "Senha e remoção de dados sensíveis": "Passwords and removal of sensitive data",
+    "Separe o PDF em vários arquivos menores.": "Split the PDF into several smaller files.",
+    "Sumário": "Outline",
+    "Sumário, anexos e propriedades": "Outline, attachments and properties",
+    "Tornar pesquisável": "Make searchable",
+    "Torne um escaneado pesquisável ou limpe as páginas dele.": "Make a scan searchable or clean up its pages.",
+    "Transformar em Word": "Turn into Word",
+    "Transforme o PDF em Word, Excel, imagens ou texto, ou crie um PDF a partir deles.": "Turn the PDF into Word, Excel, images or text, or create a PDF from them.",
+    "Veja o que mudou entre duas versões de um PDF.": "See what changed between two versions of a PDF.",
+    "Veja, adicione, remova ou extraia arquivos anexados.": "View, add, remove or extract attached files.",
+    "Visual": "Visual",
+    "por “{word}”": "by “{word}”",
+    "Áreas": "Areas",
+    "Textos e padrões": "Text and patterns",
+    "↑↓ navegar · Enter abrir · Tab ver modos": "↑↓ navigate · Enter open · Tab see modes",
+    # Painel da ferramenta e Comprimir
+    "Quanto comprimir": "How much to compress",
+    "Leve": "Light",
+    "Equilibrada": "Balanced",
+    "Forte": "Strong",
+    "recomendada": "recommended",
+    "Quase sem diferença visível. As imagens não perdem qualidade.": "Almost no visible difference. Images keep their quality.",
+    "Boa para enviar por e-mail. Fotos a 150 DPI.": "Good for sending by email. Photos at 150 DPI.",
+    "Menor arquivo; fotos podem perder nitidez. 100 DPI.": "Smallest file; photos may lose sharpness. 100 DPI.",
+    "Leve · sem perda": "Light · lossless",
+    "Equilibrada · boa para e-mail": "Balanced · good for email",
+    "Forte · menor arquivo": "Strong · smallest file",
+    "Comprimir PDF": "Compress PDF",
+    "Tons de cinza · menor, mas perde a cor": "Grayscale · smaller, but loses color",
+    "Pronto: {original} → {compressed}": "Done: {original} → {compressed}",
+    "{reduction}% menor.": "{reduction}% smaller.",
+    "1 imagem recomprimida.": "1 image recompressed.",
+    "{count} imagens recomprimidas.": "{count} images recompressed.",
+    "Aplicado neste documento; salve para gravar no arquivo.": "Applied to this document; save to write it to the file.",
+    "Gravado em {name}.": "Saved to {name}.",
+    "O arquivo não ficaria menor ({original} → {compressed}).": "The file would not get smaller ({original} → {compressed}).",
+    "Nada foi gravado. Tente um nível mais forte.": "Nothing was saved. Try a stronger level.",
+    "Não foi possível comprimir.": "Could not compress.",
+    "Abra ou arraste o PDF que quer diminuir.": "Open or drop the PDF you want to shrink.",
+    "Abra ou arraste o PDF que quer usar.": "Open or drop the PDF you want to use.",
+    "Neste documento": "In this document",
+    "Em um arquivo novo": "In a new file",
+    "O arquivo no disco só muda ao salvar. Ctrl+Z desfaz.": "The file on disk only changes when you save. Ctrl+Z undoes.",
+    "Abra um PDF para continuar.": "Open a PDF to continue.",
+    "Ver detalhes": "See details",
+    "{step}… {current} de {total}": "{step}… {current} of {total}",
+    "1 página": "1 page",
+    # Faixa do topo, barra de status e selo de estado do documento
+    "Ajuste e rotação": "Fit and rotation",
+    "Modo de exibição": "View mode",
+    "Local · nenhum arquivo sai deste computador": "Local · no file leaves this computer",
+    "Salvo às {time}": "Saved at {time}",
+    "Sem alterações": "No changes",
+    "Salvo": "Saved",
+    "Não salvo": "Unsaved",
+    "1 alteração aplicada, não salva": "1 change applied, not saved",
+    "{count} alterações aplicadas, não salvas": "{count} changes applied, not saved",
+    "1 em andamento": "1 running",
+    "{count} em andamento": "{count} running",
+    "1 tarefa em andamento": "1 task running",
+    "{count} tarefas em andamento": "{count} tasks running",
+    "1 concluída": "1 done",
+    "{count} concluídas": "{count} done",
+    "1 falhou": "1 failed",
+    "{count} falharam": "{count} failed",
     "Operação cancelada.": "Operation cancelled.",
     "Nada foi gravado.": "Nothing was saved.",
     "Tentar de novo": "Try again",
     "Concluir": "Done",
-    "Mostrar detalhes": "Show details",
     # Barra de marcação e comentários (Anotações)
     "Barra de marcação": "Markup bar",
     "Marcação": "Markup",
     "Cor: {name}": "Color: {name}",
     "Mais cores...": "More colors...",
     "Cor da marcação": "Markup color",
-    "Cor e espessura": "Color and thickness",
+    "Estilo": "Style",
+    "Estilo: cor e espessura": "Style: color and thickness",
+    "A cor e a espessura das próximas marcações.": "The color and thickness of the next markups.",
+    "Cor": "Color",
+    "Sublinhado e riscado": "Underline and strikethrough",
+    "Círculo e seta": "Circle and arrow",
     "Espessura": "Thickness",
     "Espessura: {width}": "Thickness: {width}",
     "Diminuir a espessura": "Decrease thickness",
@@ -749,7 +881,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Realce, sublinhado e riscado seguem a linha do texto: a espessura vale para caneta, formas e seta.": (
         "Highlight, underline and strikeout follow the text line: thickness applies to the pen, shapes and arrow."
     ),
-    "pendentes": "pending",
+    "1 pendente": "1 pending",
     "{count} pendentes": "{count} pending",
     "Gravar": "Save",
     "Gravar marcações": "Save markups",
@@ -773,7 +905,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "1 tarefa": "1 task",
     "{count} tarefas": "{count} tasks",
     "Limpar concluídas": "Clear finished",
-    "Nenhuma tarefa.": "No tasks.",
     "Em andamento": "Running",
     "Concluída": "Finished",
     "Falhou": "Failed",
@@ -801,41 +932,22 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "hoje, {hora}": "today, {hora}",
     "ontem": "yesterday",
     "há {n} dias": "{n} days ago",
-    "Tudo o que o OpenFolio faz com um PDF, por categoria.": "Everything OpenFolio does with a PDF, by category.",
     "Buscar ferramenta": "Search tools",
-    "Buscar ferramenta (ex.: assinar, cpf, word)": "Search tools (e.g. sign, redact, word)",
     "Todas": "All",
-    "No trilho rápido": "In the quick rail",
     "Documentos abertos": "Open documents",
-    "↑ ↓ navegar · Enter executar · Tab filtrar por categoria": "↑ ↓ navigate · Enter run · Tab filter by category",
-    "Atalhos em Editar › Atalhos de teclado": "Shortcuts in Edit › Keyboard shortcuts",
     "{count} selecionadas": "{count} selected",
     "Em branco": "Blank",
-    "Apagar": "Delete",
-    "Apaga as páginas selecionadas (Delete)": "Deletes the selected pages (Delete)",
     "Tamanho das miniaturas": "Thumbnail size",
     "Alterações pendentes · {count}": "Pending changes · {count}",
-    "Nenhuma alteração ainda.": "No changes yet.",
     "Aplicar {count} alterações": "Apply {count} changes",
     "Volta a grade para o documento como está": "Puts the grid back the way the document is",
     "Desfazer só esta alteração": "Undo just this change",
     "Desfazer: {change}": "Undo: {change}",
-    "Girou {pages} à direita": "Rotated {pages} right",
-    "Girou {pages} à esquerda": "Rotated {pages} left",
-    "Apagou {pages}": "Deleted {pages}",
-    "Duplicou {pages}": "Duplicated {pages}",
-    "Moveu {pages}": "Moved {pages}",
-    "Inseriu uma página em branco": "Inserted a blank page",
     "a página {number}": "page {number}",
     "a página em branco": "the blank page",
     "{count} páginas": "{count} pages",
-    "Nenhum PDF escolhido": "No PDF chosen",
     "Trocar...": "Change...",
-    "{count} página(s)": "{count} page(s)",
-    "No documento aberto": "In the open document",
-    "Arquivo novo": "New file",
     "Gravar o resultado num arquivo novo": "Save the result to a new file",
-    "Ctrl+Z desfaz a operação inteira.": "Ctrl+Z undoes the whole operation.",
     "Nenhum documento aberto": "No document open",
     "Arraste um PDF para cá ou escolha um arquivo no computador.": "Drop a PDF here or choose a file on your computer.",
     "Abrir arquivo...": "Open file...",
@@ -867,12 +979,212 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Meça a distância entre dois pontos de um PDF, arrastando no visualizador central.": (
         "Measure the distance between two points of a PDF by dragging over the central viewer."
     ),
+    "1 comentário excluído, com as respostas.": "1 comment deleted, with its replies.",
+    "{count} comentários excluídos, com as respostas.": "{count} comments deleted, with their replies.",
+    "1 comentário exportado.": "1 comment exported.",
+    "{count} comentários exportados.": "{count} comments exported.",
+    "1 comentário importado.": "1 comment imported.",
+    "{count} comentários importados.": "{count} comments imported.",
+    "1 de tipo que o XFDF não leva (anexo, som...) ficou de fora.": "1 of a type XFDF does not carry (attachment, sound...) was left out.",
+    "{count} de tipo que o XFDF não leva (anexo, som...) ficaram de fora.": "{count} of a type XFDF does not carry (attachment, sound...) were left out.",
+    "1 ficou como estava: carimbos, textos livres e polígonos têm o desenho fixo.": "1 stayed as it was: stamps, free text and polygons have a fixed drawing.",
+    "{count} ficaram como estavam: carimbos, textos livres e polígonos têm o desenho fixo.": "{count} stayed as they were: stamps, free text and polygons have a fixed drawing.",
+    "1 ficou de fora: tipo não suportado, página que não existe ou dados inválidos.": "1 was left out: unsupported type, a page that does not exist or invalid data.",
+    "{count} ficaram de fora: tipo não suportado, página que não existe ou dados inválidos.": "{count} were left out: unsupported type, a page that does not exist or invalid data.",
+    "1 marcação gravada.": "1 markup saved.",
+    "{count} marcações gravadas.": "{count} markups saved.",
+    "1 pág.": "1 p.",
+    "{count} págs.": "{count} pp.",
+    "pág. {number}": "p. {number}",
+    "1 selecionado": "1 selected",
+    "{count} selecionados": "{count} selected",
+    "Arraste uma marcação na página para movê-la. Selecione várias com Ctrl para mudar a cor ou excluir de uma vez.": "Drag a markup on the page to move it. Select several with Ctrl to change the color or delete them at once.",
+    "Autor do comentário": "Comment author",
+    "Autor dos comentários novos": "Author of new comments",
+    "Cor trocada em 1 comentário.": "Color changed on 1 comment.",
+    "Cor trocada em {count} comentários.": "Color changed on {count} comments.",
+    "Descartar {count}": "Discard {count}",
+    "Excluir": "Delete",
+    "Excluir comentários": "Delete comments",
+    "Excluir {count}": "Delete {count}",
+    "Exportar e importar comentários": "Export and import comments",
+    "Gravados {count}": "Saved {count}",
+    "Pendentes {count}": "Pending {count}",
+    "Todos": "All",
+    "Gravar 1 marcação": "Save 1 markup",
+    "Mudar o autor": "Change the author",
+    "Mudar o autor...": "Change the author...",
+    "Nada para gravar": "Nothing to save",
+    "Nenhum comentário ainda. As marcações que você fizer na página aparecem aqui.": "No comments yet. The markups you make on the page show up here.",
+    "Não foi possível exportar os comentários.": "Could not export the comments.",
+    "O nome que os leitores de PDF mostram em cada comentário. Fica guardado.": "The name PDF readers show on each comment. It is remembered.",
+    "O texto deste comentário faz parte do desenho: exclua-o e crie outro.": "This comment's text is part of its drawing: delete it and make another.",
+    "Opções avançadas": "Advanced options",
+    "autor dos comentários": "comment author",
+    "Novas marcações": "New markups",
+    "Remove o carimbo salvo que está escolhido": "Removes the saved stamp that is picked",
+    "Salvar carimbo": "Save stamp",
+    "Salvar texto": "Save text",
+    "Texto da nota": "Note text",
+    "Texto do carimbo": "Stamp text",
+    "comentários": "comments",
+    "Nota adesiva": "Sticky note",
+    "{more}: no ▾ (ou seta para baixo).": "{more}: in the ▾ (or the down arrow).",
+    "Arraste sobre o texto para realçá-lo.": "Drag over the text to highlight it.",
+    "Arraste para desenhar um retângulo.": "Drag to draw a rectangle.",
+    "Arquivo só com os comentários, para levá-los a outro leitor de PDF sem enviar o documento.": "A file with just the comments, to take them to another PDF reader without sending the document.",
+    "Planilha CSV...": "CSV spreadsheet...",
+    "Planilha do Excel...": "Excel spreadsheet...",
+    "XFDF (só os comentários)...": "XFDF (comments only)...",
+    "1 página salva em {name}.": "1 page saved to {name}.",
+    "{count} páginas salvas em {name}.": "{count} pages saved to {name}.",
+    "1 selecionada": "1 selected",
+    "Aplicar 1 alteração": "Apply 1 change",
+    "Desfazer tudo": "Undo all",
+    "Duplicar {pages}": "Duplicate {pages}",
+    "Excluir {pages}": "Delete {pages}",
+    "Gira as selecionadas 90° à direita. À esquerda fica no ▾.": "Rotates the selected pages 90° right. Left is in the ▾.",
+    "Girar": "Rotate",
+    "Girar {pages} em 90°": "Rotate {pages} by 90°",
+    "Girar {pages} em 90° à esquerda": "Rotate {pages} by 90° left",
+    "Inserir em branco": "Insert blank",
+    "Inserir página em branco após a {number}": "Insert a blank page after page {number}",
+    "Inserir página em branco no fim": "Insert a blank page at the end",
+    "Marca as selecionadas para excluir ao aplicar (Delete)": "Marks the selected pages to delete when you apply (Delete)",
+    "Mover {pages} para antes da {number}": "Move {pages} before page {number}",
+    "Mover {pages} para o fim": "Move {pages} to the end",
+    "Nada muda no documento até você aplicar. Para mover, arraste a miniatura; a linha azul mostra onde ela vai entrar.": "Nothing changes in the document until you apply. To move, drag the thumbnail; the blue line shows where it goes.",
+    "Nenhuma alteração ainda. Gire, duplique, exclua ou arraste as páginas na grade.": "No changes yet. Rotate, duplicate, delete or drag the pages in the grid.",
+    "Selecione páginas para girar, duplicar, extrair ou excluir.": "Select pages to rotate, duplicate, extract or delete.",
+    "as páginas {pages} e {last}": "pages {pages} and {last}",
+    "{number} · excluir": "{number} · delete",
+    "{page}, a excluir": "{page}, to delete",
+    "As operações que você rodar aparecem aqui, com o andamento de cada uma.": "The operations you run show up here, with the progress of each one.",
+    "Ver motivo": "See why",
+    "agora": "just now",
+    "cancelada por você": "canceled by you",
+    "há {n} min": "{n} min ago",
+    "{done} de {total}": "{done} of {total}",
+    "1 página enviada para a impressora.": "1 page sent to the printer.",
+    "{count} páginas enviadas para a impressora.": "{count} pages sent to the printer.",
+    "1 anexo extraído.": "1 attachment extracted.",
+    "{count} anexos extraídos.": "{count} attachments extracted.",
+    "1 PDF na pasta.": "1 PDF in the folder.",
+    "{count} PDFs na pasta.": "{count} PDFs in the folder.",
+    "{done} de 1 arquivo processado em {folder}.": "{done} of 1 file processed in {folder}.",
+    "{done} de {count} arquivos processados em {folder}.": "{done} of {count} files processed in {folder}.",
+    "Página {page}: 1 linha diferente — {preview}": "Page {page}: 1 different line — {preview}",
+    "Página {page}: {count} linhas diferentes — {preview}": "Page {page}: {count} different lines — {preview}",
+    "1 imagem gerada.": "1 image created.",
+    "{count} imagens geradas.": "{count} images created.",
+    "1 página editada.": "1 page edited.",
+    "{count} páginas editadas.": "{count} pages edited.",
+    "1 imagem extraída.": "1 image extracted.",
+    "{count} imagens extraídas.": "{count} images extracted.",
+    "1 campo exportado.": "1 field exported.",
+    "{count} campos exportados.": "{count} fields exported.",
+    "1 campo preenchido.": "1 field filled.",
+    "{count} campos preenchidos.": "{count} fields filled.",
+    "1 campo achatado.": "1 field flattened.",
+    "{count} campos achatados.": "{count} fields flattened.",
+    "Texto reconhecido em 1 página.": "Text recognized on 1 page.",
+    "Texto reconhecido em {count} páginas.": "Text recognized on {count} pages.",
+    "1 script ou ação de JavaScript": "1 JavaScript script or action",
+    "{count} scripts ou ações de JavaScript": "{count} JavaScript scripts or actions",
+    "1 arquivo embutido": "1 embedded file",
+    "{count} arquivos embutidos": "{count} embedded files",
+    "1 anotação": "1 annotation",
+    "{count} anotações": "{count} annotations",
+    "1 área marcada para redação": "1 area marked for redaction",
+    "{count} áreas marcadas para redação": "{count} areas marked for redaction",
+    "1 página redigida.": "1 page redacted.",
+    "{count} páginas redigidas.": "{count} pages redacted.",
+    "1 revisão gravada depois desta assinatura": "1 revision saved after this signature",
+    "{count} revisões gravadas depois desta assinatura": "{count} revisions saved after this signature",
+    "PDF dividido em 1 arquivo.": "PDF split into 1 file.",
+    "PDF dividido em {count} arquivos.": "PDF split into {count} files.",
+    "1 campo": "1 field",
+    "{count} campos": "{count} fields",
+    "1 fonte.": "1 font.",
+    "{count} fontes.": "{count} fonts.",
+    "1 diferença no texto.": "1 difference in the text.",
+    "{count} diferenças no texto.": "{count} differences in the text.",
+    "Intercalar frente e verso": "Interleave front and back",
+    "Use quando frentes e versos foram escaneados em arquivos separados.": "Use it when fronts and backs were scanned into separate files.",
+    "Arquivos, na ordem em que vão aparecer": "Files, in the order they will appear",
+    "Mesclar 1 PDF": "Merge 1 PDF",
+    "Mesclar {count} PDFs": "Merge {count} PDFs",
+    "Mesclar PDFs": "Merge PDFs",
+    "1 PDF juntado num só.": "1 PDF combined into one.",
+    "{count} PDFs juntados num só.": "{count} PDFs combined into one.",
+    "O reconhecimento de texto não está instalado neste computador.": "Text recognition is not installed on this computer.",
+    "Nenhum idioma de reconhecimento instalado.": "No recognition language installed.",
+    "Idiomas disponíveis: {languages}.": "Available languages: {languages}.",
+    "Para reconhecer português, instale o idioma português do reconhecimento de texto.": "To recognize Portuguese, install the Portuguese language for text recognition.",
+    "{task}: pronto.": "{task}: done.",
+    "Páginas organizadas. Aplicado neste documento; salve para gravar no arquivo.": "Pages organized. Applied to this document; save to write it to the file.",
+    "Todas · ex.: 1-3, 5, 8-": "All · e.g. 1-3, 5, 8-",
+    "O reconhecimento de texto não está instalado. Instale-o para usar esta ferramenta.": "Text recognition is not installed. Install it to use this tool.",
+    "O reconhecimento de texto não está instalado: veja a ferramenta Escaneados e OCR.": "Text recognition is not installed: see the Scans and OCR tool.",
+    "Requer a detecção de orientação do reconhecimento de texto.": "Needs the orientation detection of text recognition.",
+    "{items} e {last}": "{items} and {last}",
+    "Padrão de assinatura em PDF que mantém a assinatura verificável por muitos anos.": "A PDF signature standard that keeps the signature verifiable for many years.",
+    "Comprova quando o documento foi assinado. Usa a internet: só um resumo do arquivo é enviado, nunca o PDF.": "Proves when the document was signed. Uses the internet: only a digest of the file is sent, never the PDF.",
+    "Numeração sequencial usada em processos (ex.: DOC000123) que continua de um arquivo para o outro.": "Sequential numbering used in legal cases (e.g. DOC000123) that carries on from one file to the next.",
+    "Resolução das imagens. Mais DPI, mais nitidez e arquivo maior. 150 é bom para tela; 300, para impressão.": "Image resolution. More DPI, sharper images and a bigger file. 150 is good for screens; 300 for print.",
+    "1 figura tagueada sem texto alternativo (/Alt).": "1 tagged figure without alternative text (/Alt).",
+    "{count} figuras tagueadas sem texto alternativo (/Alt).": "{count} tagged figures without alternative text (/Alt).",
+    "1 página com links ou campos sem ordem de tabulação pela estrutura (/Tabs /S).": "1 page with links or fields without a tab order by structure (/Tabs /S).",
+    "{count} páginas com links ou campos sem ordem de tabulação pela estrutura (/Tabs /S).": "{count} pages with links or fields without a tab order by structure (/Tabs /S).",
+    "1 campo de formulário sem descrição para leitores de tela (/TU): {names}.": "1 form field without a description for screen readers (/TU): {names}.",
+    "{count} campos de formulário sem descrição para leitores de tela (/TU): {names}.": "{count} form fields without a description for screen readers (/TU): {names}.",
+    "{label} {page} não existe: o documento tem 1 página.": "{label} {page} does not exist: the document has 1 page.",
+    "{label} {page} não existe: o documento tem {count} páginas.": "{label} {page} does not exist: the document has {count} pages.",
+    "O documento tem 1 página: confira as páginas informadas.": "The document has 1 page: check the pages you entered.",
+    "O documento tem {count} páginas: confira as páginas informadas.": "The document has {count} pages: check the pages you entered.",
+    "{name} tem 1 página: confira as páginas escolhidas.": "{name} has 1 page: check the pages you picked.",
+    "{name} tem {count} páginas: confira as páginas escolhidas.": "{name} has {count} pages: check the pages you picked.",
+    "A imagem {number} não existe: a página tem 1 imagem.": "Image {number} does not exist: the page has 1 image.",
+    "A imagem {number} não existe: a página tem {count} imagens.": "Image {number} does not exist: the page has {count} images.",
+    "A camada {number} não existe: o documento tem 1 camada.": "Layer {number} does not exist: the document has 1 layer.",
+    "A camada {number} não existe: o documento tem {count} camadas.": "Layer {number} does not exist: the document has {count} layers.",
+    "O link {number} não existe: a página tem 1 link.": "Link {number} does not exist: the page has 1 link.",
+    "O link {number} não existe: a página tem {count} links.": "Link {number} does not exist: the page has {count} links.",
+    "1 slide com texto demais para uma página continuou na página seguinte.": "1 slide with too much text for one page carried on to the next page.",
+    "{count} slides com texto demais para uma página continuaram na página seguinte.": "{count} slides with too much text for one page carried on to the next page.",
+    "Página repetida na nova ordem: {pages}.": "Page repeated in the new order: {pages}.",
+    "Páginas repetidas na nova ordem: {pages}.": "Pages repeated in the new order: {pages}.",
+    "Posição de inserção inválida: o documento tem 1 página; dá para inserir antes ou depois dela.": "Invalid insert position: the document has 1 page; you can insert before or after it.",
+    "Posição de inserção inválida: o documento tem {count} páginas; dá para inserir antes da página 1 até depois da página {count}.": "Invalid insert position: the document has {count} pages; you can insert from before page 1 to after page {count}.",
+    "Intervalo inválido: a página final precisa vir depois da inicial ({start}) e o documento tem 1 página.": "Invalid range: the last page has to come after the first ({start}) and the document has 1 page.",
+    "Intervalo inválido: a página final precisa vir depois da inicial ({start}) e o documento tem {count} páginas.": "Invalid range: the last page has to come after the first ({start}) and the document has {count} pages.",
+    "1 ação proibida removida (JavaScript, abrir programas, ações automáticas).": "1 forbidden action removed (JavaScript, launching programs, automatic actions).",
+    "{count} ações proibidas removidas (JavaScript, abrir programas, ações automáticas).": "{count} forbidden actions removed (JavaScript, launching programs, automatic actions).",
+    "1 anexo removido: o PDF/A-{part} não permite esse anexo.": "1 attachment removed: PDF/A-{part} does not allow it.",
+    "{count} anexos removidos: o PDF/A-{part} não permite esses anexos.": "{count} attachments removed: PDF/A-{part} does not allow them.",
+    "1 anotação removida (multimídia, escondida ou com anexo não permitido).": "1 annotation removed (multimedia, hidden or with an attachment that is not allowed).",
+    "{count} anotações removidas (multimídia, escondidas ou com anexo não permitido).": "{count} annotations removed (multimedia, hidden or with an attachment that is not allowed).",
+    "1 anotação marcada para impressão, como o PDF/A exige.": "1 annotation marked for printing, as PDF/A requires.",
+    "{count} anotações marcadas para impressão, como o PDF/A exige.": "{count} annotations marked for printing, as PDF/A requires.",
+    "1 stream com compressão LZW recodificado.": "1 LZW-compressed stream re-encoded.",
+    "{count} streams com compressão LZW recodificados.": "{count} LZW-compressed streams re-encoded.",
+    "1 anotação sem aparência definida (/AP).": "1 annotation without a defined appearance (/AP).",
+    "{count} anotações sem aparência definida (/AP).": "{count} annotations without a defined appearance (/AP).",
+    "Assinatura com validade criptográfica: quem receber o PDF consegue conferir quem assinou e se ele mudou depois.": "A signature with cryptographic validity: whoever gets the PDF can check who signed it and whether it changed afterwards.",
+    "Revise a lista antes de aplicar.": "Review the list before applying.",
     # Annotations: tools
-    "Selecionar/Apagar": "Select/Erase",
+    "Selecionar": "Select",
     "Realce": "Highlight",
     "Sublinhado": "Underline",
     "Riscado": "Strikethrough",
-    "Nota adesiva": "Sticky note",
+    "Clique numa marcação para escolhê-la; arraste para movê-la.": "Click a markup to pick it; drag to move it.",
+    "Arraste sobre o texto para sublinhá-lo.": "Drag over the text to underline it.",
+    "Arraste sobre o texto para riscá-lo.": "Drag over the text to strike it through.",
+    "Clique na página para deixar um comentário.": "Click the page to leave a comment.",
+    "Desenhe à mão livre sobre a página.": "Draw freehand on the page.",
+    "Arraste para desenhar um círculo.": "Drag to draw a circle.",
+    "Arraste para desenhar uma seta.": "Drag to draw an arrow.",
+    "Clique na página para pôr o carimbo escolhido no painel.": "Click the page to place the stamp picked in the panel.",
     "Caneta": "Pen",
     "Carimbo": "Stamp",
     # Annotations: colors
@@ -889,24 +1201,15 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "URGENTE": "URGENT",
     # Annotations: page UI
     "Cor:": "Color:",
-    "Texto do carimbo:": "Stamp text:",
     "Adicione pelo menos uma anotação antes de salvar.": "Add at least one annotation before saving.",
     "Falha ao salvar anotações: {error}": "Failed to save annotations: {error}",
-    "Anotações salvas com sucesso.": "Annotations saved successfully.",
     # Annotations: sticky-note dialog (viewer)
     "Texto da nota:": "Note text:",
     # OCR: sidebar section
     "OCR": "OCR",
     # OCR: page UI
     "Reconhecer texto": "Recognize text",
-    "Nenhum idioma de reconhecimento instalado no Tesseract.": (
-        "No recognition language installed in Tesseract."
-    ),
-    "Tesseract encontrado. Idiomas disponíveis: {languages}.": (
-        "Tesseract found. Available languages: {languages}."
-    ),
     "Falha ao reconhecer texto: {error}": "Failed to recognize text: {error}",
-    "Texto reconhecido em {count} página(s).": "Text recognized in {count} page(s).",
     "Nenhuma página precisou de OCR (o PDF já tinha texto).": (
         "No page needed OCR (the PDF already had text)."
     ),
@@ -926,24 +1229,20 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Redigir": "Redact",
     "Sanitizar": "Sanitize",
     "Modo:": "Mode:",
-    "Arraste no visualizador para marcar as áreas a apagar. Cada página marcada "
-    "vira uma imagem, com as áreas pintadas de preto na própria imagem — e perde "
-    "a camada de texto pesquisável inteira, não só a área marcada. O resultado é "
-    "conferido antes de ser salvo.": (
-        "Drag over the viewer to mark the areas to erase. Each marked page becomes an "
-        "image, with the areas painted black in the image itself — and it loses the "
-        "entire searchable text layer, not just the marked area. The result is checked "
-        "before it is saved."
+    "Arraste no visualizador para marcar as áreas a apagar.": "Drag over the viewer to mark the areas to erase.",
+    "Cada página marcada vira uma imagem, com as áreas pintadas de preto na própria "
+    "imagem — e perde a camada de texto pesquisável inteira, não só a área marcada. "
+    "O resultado é conferido antes de ser salvo.": (
+        "Each marked page becomes an image, with the areas painted black in the image itself "
+        "— and it loses the entire searchable text layer, not just the marked area. The result "
+        "is checked before it is saved."
     ),
-    "Ou procure um texto para marcar todas as ocorrências (maiúsculas e acentos não "
-    "importam; separe vários com ;):": (
-        "Or search for a text to mark every occurrence (case and accents don't matter; separate "
-        "several with ;):"
+    "Textos a procurar": "Text to search for",
+    "Todas as ocorrências são marcadas. Maiúsculas e acentos não importam; separe vários com ;": (
+        "Every occurrence is marked. Case and accents don't matter; separate several with ;"
     ),
     "Ex.: Maria da Silva; Rua das Flores": "E.g.: John Smith; Main Street",
-    "E/ou detecte padrões de dado sensível no texto do PDF:": (
-        "And/or detect sensitive data patterns in the PDF's text:"
-    ),
+    "Padrões de dado sensível": "Sensitive data patterns",
     "Texto buscado": "Searched text",
     "CPF": "CPF",
     "CNPJ": "CNPJ",
@@ -955,12 +1254,10 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "Type a text to search for, check a pattern or enter a regular expression."
     ),
     "Falha ao detectar padrões: {error}": "Failed to detect patterns: {error}",
-    "{count} ocorrência(s) encontrada(s), {added} nova(s) marcada(s) para redação. "
-    "Revise a lista antes de aplicar.": (
-        "{count} occurrence(s) found, {added} new one(s) marked for redaction. "
-        "Review the list before applying."
-    ),
-    "{count} área(s) marcada(s) para redação": "{count} area(s) marked for redaction",
+    "1 ocorrência encontrada": "1 occurrence found",
+    "{count} ocorrências encontradas": "{count} occurrences found",
+    "1 nova marcada para redação.": "1 new one marked for redaction.",
+    "{count} novas marcadas para redação.": "{count} new ones marked for redaction.",
     "Expressão personalizada": "Custom expression",
     "área marcada à mão": "area marked by hand",
     "Selecione uma área para vê-la destacada no visualizador.": (
@@ -985,7 +1282,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
         "Mark at least one area in the viewer before applying."
     ),
     "Falha ao redigir: {error}": "Failed to redact: {error}",
-    "{count} página(s) redigida(s) com sucesso.": "{count} page(s) redacted successfully.",
     "Remover metadados": "Remove metadata",
     "Remover anotações e comentários": "Remove annotations and comments",
     "JavaScript, ações que abrem arquivos ou programas ou enviam dados, e arquivos "
@@ -997,16 +1293,17 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "PDF sanitizado com sucesso.": "PDF sanitized successfully.",
     "Removido:": "Removed:",
     "Nada perigoso foi encontrado no documento.": "Nothing dangerous was found in the document.",
-    "{count} script(s) ou ação(ões) de JavaScript": "{count} JavaScript script(s) or action(s)",
-    "{count} ação(ões) que abrem arquivos ou programas, enviam dados ou acessam "
-    "conteúdo externo": (
-        "{count} action(s) that open files or programs, send data, or access external content"
+    "1 ação que abre arquivos ou programas, envia dados ou acessa conteúdo externo": (
+        "1 action that opens files or programs, sends data, or accesses external content"
     ),
-    "{count} arquivo(s) embutido(s)": "{count} embedded file(s)",
-    "{count} anotação(ões)": "{count} annotation(s)",
-    "{count} item(ns) de dados privados de aplicativos, miniaturas ou metadados "
-    "de páginas e imagens": (
-        "{count} item(s) of private application data, thumbnails, or page and image metadata"
+    "{count} ações que abrem arquivos ou programas, enviam dados ou acessam conteúdo externo": (
+        "{count} actions that open files or programs, send data, or access external content"
+    ),
+    "1 item de dados privados de aplicativos, miniaturas ou metadados de páginas e imagens": (
+        "1 item of private application data, thumbnails, or page and image metadata"
+    ),
+    "{count} itens de dados privados de aplicativos, miniaturas ou metadados de páginas e imagens": (
+        "{count} items of private application data, thumbnails, or page and image metadata"
     ),
     "metadados do documento (título, autor e outros)": "document metadata (title, author, and others)",
     "formulário XFA (pode conter scripts)": "XFA form (may contain scripts)",
@@ -1071,9 +1368,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "nenhuma — a assinatura cobre o documento inteiro": "none — the signature covers the whole document",
     "a assinatura não cobre o documento de forma padrão — trate como suspeito": (
         "the signature does not cover the document in the standard way — treat it as suspicious"
-    ),
-    "{count} revisão(ões) gravada(s) depois desta assinatura": (
-        "{count} revision(s) saved after this signature"
     ),
     "sem mudança de conteúdo": "no content change",
     "só manutenção de assinaturas (carimbos de tempo e dados de validação)": (
@@ -1145,7 +1439,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     "Marque pelo menos uma área com texto novo.": "Mark at least one area with new text.",
     "Falha ao editar texto: {error}": "Failed to edit text: {error}",
-    "{count} página(s) editada(s) com sucesso.": "{count} page(s) edited successfully.",
     # Edit: links
     "URL externa": "External URL",
     "Página do documento": "Document page",
@@ -1159,8 +1452,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Falha ao remover link: {error}": "Failed to remove link: {error}",
     "Link removido com sucesso.": "Link removed successfully.",
     # Annotations: export comments
-    "Falha ao exportar comentários: {error}": "Failed to export comments: {error}",
-    "{count} comentário(s) exportado(s) com sucesso.": "{count} comment(s) exported successfully.",
     # Accessibility
     "Corrigir idioma/título": "Fix language/title",
     "Verifica só um subconjunto dos requisitos de PDF/UA (idioma, título, "
@@ -1191,9 +1482,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Escolha os dois arquivos PDF a comparar.": "Choose both PDF files to compare.",
     "Falha ao comparar: {error}": "Failed to compare: {error}",
     "Página {page}: sem alterações": "Page {page}: no changes",
-    "Página {page}: {count} linha(s) diferentes — {preview}": (
-        "Page {page}: {count} different line(s) — {preview}"
-    ),
     "Pasta de saída (imagens de diferença):": "Output folder (difference images):",
     "comparada": "compared",
     "só existe em A": "only exists in A",
@@ -1244,7 +1532,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Anexo removido com sucesso.": "Attachment removed successfully.",
     "Extrair anexos": "Extract attachments",
     "Falha ao extrair anexos: {error}": "Failed to extract attachments: {error}",
-    "{count} anexo(s) extraído(s) com sucesso.": "{count} attachment(s) extracted successfully.",
     # Measure
     "Arraste no visualizador entre dois pontos para medir a distância entre eles.": (
         "Drag over the viewer between two points to measure the distance between them."
@@ -1259,8 +1546,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Limpar medição": "Clear measurement",
     # Annotations: custom stamp library
     "Nome para salvar este carimbo (opcional)": "Name to save this stamp under (optional)",
-    "Salvar carimbo customizado": "Save custom stamp",
-    "Remover carimbo customizado selecionado": "Remove selected custom stamp",
     "Digite o texto do carimbo antes de salvar.": "Enter the stamp text before saving.",
     "Falha ao salvar carimbo: {error}": "Failed to save stamp: {error}",
     "Carimbo salvo com sucesso.": "Stamp saved successfully.",
@@ -1270,7 +1555,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Cancelar': 'Cancel',
     'Cancelando...': 'Cancelling...',
     'Operação cancelada: nada foi gravado.': 'Operation cancelled: nothing was saved.',
-    'Operação concluída.': 'Operation completed.',
     'Operação em andamento': 'Operation in progress',
     '"{task}" ainda está em andamento. Cancelar e sair?': '"{task}" is still running. Cancel it and quit?',
     'Reconhecendo o texto': 'Recognizing text',
@@ -1292,14 +1576,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Buscando...': 'Searching...',
     # Etapa 4: qualidade das ferramentas
     'Nível de compressão:': 'Compression level:',
-    'Leve (sem perda de qualidade)': 'Light (no quality loss)',
-    'Média (imagens a 150 DPI)': 'Medium (images at 150 DPI)',
-    'Forte (imagens a 100 DPI)': 'Strong (images at 100 DPI)',
-    'Converter as imagens para escala de cinza': 'Convert images to grayscale',
-    'O arquivo não ficou menor ({original} KB -> {compressed} KB), então nada foi gravado. Tente um nível mais forte.': (
-        'The file did not get smaller ({original} KB -> {compressed} KB), so nothing was saved. Try a stronger level.'
-    ),
-    '{count} imagem(ns) recomprimida(s).': '{count} image(s) recompressed.',
     'Comprimindo imagens': 'Compressing images',
     'Tamanho da página:': 'Page size:',
     'Margem:': 'Margin:',
@@ -1318,9 +1594,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'A margem é maior que a página.': 'The margin is larger than the page.',
     'As imagens do documento não foram incluídas.': "The document's images were not included.",
     'Cabeçalhos e rodapés não foram incluídos.': 'Headers and footers were not included.',
-    '{count} slide(s) com texto demais para uma página continuaram na página seguinte.': (
-        '{count} slide(s) with too much text for one page continued on the next page.'
-    ),
     'As imagens e gráficos dos slides não foram incluídos.': (
         "The slides' images and charts were not included."
     ),
@@ -1334,8 +1607,11 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Ajustar sem distorcer (sobra transparente)': 'Fit without distortion (transparent margins)',
     'Esticar para ocupar a área toda': 'Stretch to fill the whole area',
     'Se a proporção for diferente:': 'If the proportions differ:',
-    'A mesma imagem também aparecia na(s) página(s) {pages}, que mudaram junto.': (
-        'The same image also appeared on page(s) {pages}, which changed too.'
+    'A mesma imagem também aparecia na página {pages}, que mudou junto.': (
+        'The same image also appeared on page {pages}, which changed too.'
+    ),
+    'A mesma imagem também aparecia nas páginas {pages}, que mudaram junto.': (
+        'The same image also appeared on pages {pages}, which changed too.'
     ),
     'Arraste no visualizador para marcar cada área. As coordenadas (em pontos PDF) podem ser ajustadas na tabela.': (
         'Drag over the viewer to mark each area. The coordinates (in PDF points) can be adjusted in the table.'
@@ -1354,18 +1630,15 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Direita': 'Right',
     'Topo': 'Top',
     'Esquerda / Base / Direita / Topo (pontos PDF):': 'Left / Bottom / Right / Top (PDF points):',
-    'O texto não coube inteiro na(s) área(s) {areas}: o que não coube ficou de fora. Aumente a área ou diminua a fonte.': (
-        'The text did not fit entirely in area(s) {areas}: what did not fit was left out. Enlarge the area or reduce the font.'
+    'O texto não coube inteiro na área {areas}: o que não coube ficou de fora. Aumente a área ou diminua a fonte.': (
+        'The text did not fit entirely in area {areas}: what did not fit was left out. Enlarge the area or reduce the font.'
+    ),
+    'O texto não coube inteiro nas áreas {areas}: o que não coube ficou de fora. Aumente as áreas ou diminua a fonte.': (
+        'The text did not fit entirely in areas {areas}: what did not fit was left out. Enlarge the areas or reduce the font.'
     ),
     'https://exemplo.com': 'https://example.com',
-    'A imagem {number} não existe: a página tem {count} imagem(ns).': (
-        'Image {number} does not exist: the page has {count} image(s).'
-    ),
     'Esta imagem está gravada dentro do conteúdo da página (imagem inline) e não pode ser substituída sem reescrever a página. Use Editar texto ou a redação para cobri-la.': (
         'This image is stored inside the page content (inline image) and cannot be replaced without rewriting the page. Use Edit text or redaction to cover it.'
-    ),
-    'O link {number} não existe: a página tem {count} link(s).': (
-        'Link {number} does not exist: the page has {count} link(s).'
     ),
     'Informe uma URL ou uma página de destino — exatamente uma das duas.': (
         'Provide a URL or a target page — exactly one of them.'
@@ -1425,20 +1698,12 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     'Corrigir páginas digitalizadas de lado': 'Fix pages scanned sideways',
     'Detecta páginas digitalizadas de lado ou de cabeça para baixo.': 'Detects pages scanned sideways or upside down.',
-    'Requer o pacote "osd" do Tesseract.': 'Requires the Tesseract "osd" package.',
     'Marque pelo menos um idioma do texto.': 'Check at least one text language.',
-    'Tesseract OCR não encontrado.': 'Tesseract OCR not found.',
-    'Para reconhecer português, instale o idioma "por" do Tesseract.': (
-        'To recognize Portuguese, install the Tesseract "por" language.'
-    ),
-    'Os instaladores do app já trazem o Tesseract. Rodando o código-fonte, instale-o no sistema: no Windows, pelo instalador em https://github.com/UB-Mannheim/tesseract/wiki (marque o idioma Portuguese e "Orientation and script detection"); no Linux, sudo apt install tesseract-ocr tesseract-ocr-por; no macOS, brew install tesseract tesseract-lang. Depois, reabra o app.': (
-        'The app installers already include Tesseract. When running from source, install it on the system: on Windows, with the installer at https://github.com/UB-Mannheim/tesseract/wiki (check the Portuguese language and "Orientation and script detection"); on Linux, sudo apt install tesseract-ocr tesseract-ocr-por; on macOS, brew install tesseract tesseract-lang. Then reopen the app.'
+    'Os instaladores do app já trazem o reconhecimento de texto. Rodando do código-fonte, ele precisa ser instalado à parte: os passos estão no README, em "Requisitos". Depois, reabra o app.': (
+        'The app installers already include text recognition. When running from source, it has to be installed separately: the steps are in the README, under "Requisitos" (Requirements). Then reopen the app.'
     ),
     'O DPI do OCR precisa estar entre 72 e 1200.': 'OCR DPI must be between 72 and 1200.',
     'Escolha pelo menos um idioma de reconhecimento.': 'Choose at least one recognition language.',
-    'Tesseract OCR não encontrado. Instale o Tesseract para usar esta ferramenta.': (
-        'Tesseract OCR not found. Install Tesseract to use this tool.'
-    ),
     'Numeração de página': 'Page numbering',
     'Marcador desconhecido no texto: {names}. Use {{page}} (número da página) e {{pages}} (total de páginas).': (
         'Unknown placeholder in the text: {names}. Use {{page}} (page number) and {{pages}} (total pages).'
@@ -1457,19 +1722,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'O nível {conformance} não existe no PDF/A-{part} (use {options}).': (
         'Level {conformance} does not exist in PDF/A-{part} (use {options}).'
     ),
-    '{count} ação(ões) proibida(s) removida(s) (JavaScript, abrir programas, ações automáticas).': (
-        '{count} forbidden action(s) removed (JavaScript, launching programs, automatic actions).'
-    ),
-    '{count} anexo(s) removido(s): o PDF/A-{part} não permite esses anexos.': (
-        '{count} attachment(s) removed: PDF/A-{part} does not allow them.'
-    ),
-    '{count} anotação(ões) removida(s) (multimídia, escondidas ou com anexo não permitido).': (
-        '{count} annotation(s) removed (multimedia, hidden or with a disallowed attachment).'
-    ),
-    '{count} anotação(ões) marcada(s) para impressão, como o PDF/A exige.': (
-        '{count} annotation(s) marked for printing, as PDF/A requires.'
-    ),
-    '{count} stream(s) com compressão LZW recodificado(s).': '{count} LZW-compressed stream(s) re-encoded.',
     'Formulário XFA removido (proibido em PDF/A).': 'XFA form removed (forbidden in PDF/A).',
     'Falta o perfil de cor (/OutputIntent).': 'The color profile (/OutputIntent) is missing.',
     'Fontes não embutidas: {fonts}.': 'Fonts not embedded: {fonts}.',
@@ -1487,9 +1739,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     'O nível A exige o idioma do documento (/Lang); defina-o em Acessibilidade.': (
         'Level A requires the document language (/Lang); set it in Accessibility.'
-    ),
-    '{count} anotação(ões) sem aparência definida (/AP).': (
-        '{count} annotation(s) without a defined appearance (/AP).'
     ),
     'O título no dicionário Info e no XMP não são iguais.': (
         'The title in the Info dictionary and in the XMP differ.'
@@ -1536,29 +1785,10 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'O leitor mostra o nome do arquivo em vez do título (falta /DisplayDocTitle).': (
         'Readers show the file name instead of the title (/DisplayDocTitle is missing).'
     ),
-    '{count} figura(s) tagueada(s) sem texto alternativo (/Alt).': (
-        '{count} tagged figure(s) without alternative text (/Alt).'
-    ),
-    '{count} página(s) com links ou campos sem ordem de tabulação pela estrutura (/Tabs /S).': (
-        '{count} page(s) with links or fields without structure tab order (/Tabs /S).'
-    ),
-    '{count} campo(s) de formulário sem descrição para leitores de tela (/TU): {names}.': (
-        '{count} form field(s) without a description for screen readers (/TU): {names}.'
-    ),
     'Informe um idioma (ex.: pt-BR).': 'Provide a language (e.g.: en-US).',
     'Informe um título para o documento.': 'Provide a title for the document.',
-    '{label} {page} não existe: o documento tem {total} página(s).': (
-        '{label} {page} does not exist: the document has {total} page(s).'
-    ),
-    'Página(s) repetida(s) na nova ordem: {pages}.': 'Repeated page(s) in the new order: {pages}.',
     'A nova ordem precisa incluir todas as {total} páginas; faltam: {pages}. Para tirar páginas, use Remover.': (
         'The new order must include all {total} pages; missing: {pages}. To drop pages, use Remove.'
-    ),
-    'Posição de inserção inválida: o documento tem {total} página(s); dá para inserir antes da página 1 até depois da página {total}.': (
-        'Invalid insert position: the document has {total} page(s); you can insert from before page 1 up to after page {total}.'
-    ),
-    'Intervalo inválido: a página final precisa vir depois da inicial ({start}) e o documento tem {total} página(s).': (
-        'Invalid range: the last page must come after the first one ({start}) and the document has {total} page(s).'
     ),
     'O ângulo de rotação precisa ser múltiplo de 90 graus.': (
         'The rotation angle must be a multiple of 90 degrees.'
@@ -1568,9 +1798,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
         'The crop margins exceed the size of page {page}.'
     ),
     'A largura e a altura precisam ser maiores que zero.': 'Width and height must be greater than zero.',
-    'A camada {number} não existe: o documento tem {count} camada(s).': (
-        'Layer {number} does not exist: the document has {count} layer(s).'
-    ),
     'Informe ao menos um arquivo PDF para mesclar.': 'Provide at least one PDF file to merge.',
     "Para intercalar, informe exatamente dois arquivos: o das frentes e o dos versos.": "To interleave, provide exactly two files: the fronts and the backs.",
     "Informe as páginas de cada arquivo (ou nenhuma).": "Provide the pages of each file (or none).",
@@ -1675,16 +1902,15 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Não foi possível salvar o anexo: {error}': 'Could not save the attachment: {error}',
     '(sem título)': '(untitled)',
     'Página {page}': 'Page {page}',
-    'Verificar as assinaturas na aba Assinatura': 'Verify the signatures in the Signature tab',
-    'Assinado digitalmente ({count} assinatura(s)). Alterar o documento invalida a assinatura.': (
-        'Digitally signed ({count} signature(s)). Changing the document invalidates the signature.'
-    ),
-    'Tem formulário ({count} campo(s)): clique num campo para preencher.': 'Has a form ({count} field(s)): click a field to fill it in.',
-    'Tem camadas (veja a aba Camadas).': 'Has layers (see the Layers tab).',
+    'Verificar as assinaturas': 'Verify the signatures',
+    '1 assinatura digital. Alterar o PDF a invalida.': '1 digital signature. Changing the PDF invalidates it.',
+    '{count} assinaturas digitais. Alterar o PDF as invalida.': '{count} digital signatures. Changing the PDF invalidates them.',
+    'Este PDF tem campos de formulário. Clique em um campo para preencher.': 'This PDF has form fields. Click a field to fill it in.',
+    'Este PDF tem camadas: partes que podem ser mostradas ou ocultadas.': 'This PDF has layers: parts that can be shown or hidden.',
     'Protegido por senha.': 'Password-protected.',
-    'O autor restringiu alterações ou cópia (senha de permissões).': (
-        'The author restricted changes or copying (permissions password).'
-    ),
+    'Protegido: o autor bloqueou alterações ou cópia.': 'Protected: the author blocked changes or copying.',
+    'Ver': 'View',
+    'Fechar aviso': 'Dismiss notice',
     'Ocorreu um erro inesperado.': 'An unexpected error occurred.',
     'Não há espaço livre no disco para gravar o arquivo.': 'There is no free disk space to write the file.',
     'Memória insuficiente para concluir a operação. Feche outros programas ou use um arquivo menor.': (
@@ -1705,7 +1931,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Imprimir...': 'Print...',
     'Imprimir': 'Print',
     'Imprimindo páginas': 'Printing pages',
-    '{count} página(s) enviada(s) para a impressora.': '{count} page(s) sent to the printer.',
     'Não foi possível imprimir: {error}': 'Could not print: {error}',
     'Não foi possível iniciar a impressão.': 'Could not start printing.',
     'Nenhuma página escolhida para imprimir.': 'No pages chosen to print.',
@@ -1726,16 +1951,11 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     'Extrair...': 'Extract...',
     'Salva as páginas selecionadas em outro arquivo.': 'Saves the selected pages to another file.',
-    'Arraste as miniaturas para mudar a ordem; Ctrl ou Shift + clique seleciona várias. Nada muda no documento até Aplicar.': (
-        'Drag the thumbnails to change the order; Ctrl or Shift + click selects several. Nothing changes in '
-        'the document until Apply.'
-    ),
     'Página em branco': 'Blank page',
     'edição na grade': 'grid edit',
     'anotação': 'annotation',
     'área de redação': 'redaction area',
     'Extrair páginas': 'Extract pages',
-    '{count} página(s) salva(s) em {path}.': '{count} page(s) saved to {path}.',
     'Preencher formulário': 'Fill form',
     'Preencher e assinar': 'Fill & sign',
     'Coloque texto, data, assinatura desenhada ou em imagem e iniciais na página, sem certificado.': 'Place text, a date, a drawn or image signature and initials on the page, without a certificate.',
@@ -1778,10 +1998,7 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Sem opções: cada arquivo vira PDF/A-2b.': 'No options: each file becomes PDF/A-2b.',
     'Sem pasta de saída, os arquivos vão para "processados", dentro da pasta de entrada.': 'Without an output folder, the files go to "processados", inside the input folder.',
     'Senha para abrir:': 'Password to open:',
-    'Tesseract não encontrado: instale-o para usar o OCR (veja a aba OCR).': 'Tesseract not found: install it to use OCR (see the OCR tab).',
-    '{count} PDF(s) na pasta.': '{count} PDF(s) in the folder.',
     'Falharam: {count}.': 'Failed: {count}.',
-    '{done} de {total} arquivo(s) processado(s) em {folder}.': '{done} of {total} file(s) processed into {folder}.',
     'Limpar escaneados': 'Clean up scans',
     'Remova páginas em branco, endireite páginas tortas e corte as margens brancas de um escaneado.': 'Remove blank pages, straighten skewed pages and crop the white margins of a scan.',
     'Remover páginas em branco': 'Remove blank pages',
@@ -1824,27 +2041,15 @@ _EN_TRANSLATIONS: dict[str, str] = {
     'Removido de A': 'Removed from A',
     'Incluído em B': 'Added in B',
     'Alterado': 'Changed',
-    '{count} diferença(s) no texto.': '{count} difference(s) in the text.',
     'Nenhuma diferença no texto.': 'No differences in the text.',
     'Páginas de {side} sem texto (escaneadas? faça o OCR antes): {pages}': 'Pages of {side} without text (scanned? run OCR first): {pages}',
     'Imagens, formatação e cabeçalhos/rodapés repetidos em todas as páginas não entram na comparação; para eles, use "Comparar visualmente".': 'Images, formatting and headers/footers repeated on every page are not compared; for them, use "Compare visually".',
     # A11 — comentários existentes e XFDF
     "Autor": "Author",
-    "Salvar alteração do comentário": "Save comment change",
-    "Remover comentários selecionados": "Remove selected comments",
     "Importar comentários (XFDF)...": "Import comments (XFDF)...",
     "Importar comentários (XFDF)": "Import comments (XFDF)",
     "Exportar comentários": "Export comments",
-    "Em CSV, Excel ou XFDF, conforme o tipo do arquivo de saída.": "As CSV, Excel or XFDF, by the type of the output file.",
-    "Exportar comentários existentes:": "Export existing comments:",
-    "Nenhum comentário no documento.": "No comments in the document.",
-    "O texto deste comentário faz parte do desenho: remova-o e crie outro.": "This comment's text is part of its drawing: remove it and create another one.",
     "Editar comentário": "Edit comment",
-    "Remover comentários": "Remove comments",
-    "{count} anotação(ões) removida(s), com popups e respostas.": "{count} annotation(s) removed, with popups and replies.",
-    "{count} comentário(s) importado(s).": "{count} comment(s) imported.",
-    "{count} ignorado(s): tipo não suportado, página que não existe ou dados inválidos.": "{count} skipped: unsupported type, page that does not exist or invalid data.",
-    "{count} de tipo que o XFDF daqui não leva (anexo, som...) ficou de fora.": "{count} of a type this XFDF export does not carry (attachment, sound...) left out.",
     "Nota": "Note",
     "Ondulado": "Squiggly",
     "Texto livre": "Free text",
@@ -1881,7 +2086,6 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Segurança": "Security",
     "Fontes": "Fonts",
     "(com as alterações ainda não salvas)": "(with the changes not saved yet)",
-    "{count} campo(s)": "{count} field(s)",
     "XFA (formulário dinâmico, que o app não preenche)": "XFA (dynamic form, which the app does not fill in)",
     "Arquivo:": "File:",
     "Versão do PDF:": "PDF version:",
@@ -1906,8 +2110,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Não (fonte padrão)": "No (standard font)",
     "(sem nome)": "(no name)",
     "Nenhuma fonte: o documento não tem texto (escaneado ou só imagens).": "No fonts: the document has no text (scanned or images only).",
-    "{count} fonte(s).": "{count} font(s).",
-    "{count} não embutida(s): em outro computador, o texto pode aparecer com outra fonte.": "{count} not embedded: on another computer, the text may show in a different font.",
+    "1 não embutida: em outro computador, o texto pode aparecer com outra fonte.": "1 not embedded: on another computer, the text may show in a different font.",
+    "{count} não embutidas: em outro computador, o texto pode aparecer com outra fonte.": "{count} not embedded: on another computer, the text may show in a different font.",
     "Tamanho": "Size",
     "Personalizada": "Custom",
     # A14 — tema
@@ -2003,14 +2207,9 @@ _EN_TRANSLATIONS: dict[str, str] = {
     "Sem documento": "No document",
     "Fechar documento": "Close document",
     "Miniaturas das páginas": "Page thumbnails",
-    "Criar e editar": "Create and edit",
     "Revisar e comentar": "Review and comment",
-    "Formulários e assinatura": "Forms and signature",
-    "Converter e otimizar": "Convert and optimize",
-    "Documento": "Document",
     "Automatizar": "Automate",
     "Recentes": "Recent",
-    "Os PDFs abertos aparecem aqui.": "The PDFs you open show up here.",
     "Salvar (Ctrl+S)": "Save (Ctrl+S)",
     "Imprimir... (Ctrl+P)": "Print... (Ctrl+P)",
 }

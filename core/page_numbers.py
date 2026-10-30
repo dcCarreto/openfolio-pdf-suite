@@ -11,7 +11,7 @@ from pypdf import PdfWriter
 from .base import open_reader, write_pdf
 from .fonts import MONO, SANS, SANS_BOLD, register_fonts
 from .geometry import PageGeometry
-from .messages import Message
+from .messages import DOC_PAGES, Message, plural_message
 from .overlay import materialize_inherited_attributes, visual_overlay
 
 
@@ -110,7 +110,7 @@ class AddPageNumbers:
             if not numbered:
                 chosen = range(total) if pages is None else sorted(set(pages))
                 if not all(0 <= page < total for page in chosen):
-                    raise ValueError(f"O documento tem {total} página(s): confira as páginas informadas.")
+                    raise ValueError(plural_message(total, *DOC_PAGES))
                 numbered.update((page, order) for order, page in enumerate(p for p in chosen if p >= skip_first))
                 if not numbered:
                     raise ValueError("Nenhuma página sobrou para numerar.")

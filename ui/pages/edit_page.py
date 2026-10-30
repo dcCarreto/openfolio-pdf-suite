@@ -27,7 +27,7 @@ from core.edit_text import EditTextArea, TextEditRect
 from core.extract_images import ListEmbeddedImages, ReplaceEmbeddedImage
 from core.links import AddLink, LinkInfo, ListLinks, RemoveLink
 from ui.area_pick_state import AreaPickState
-from ui.i18n import tr, tr_message
+from ui.i18n import plural, tr, tr_message
 from ui.tasks import call, call_with_progress, run_task
 from ui.widgets.color_combo import ColorCombo
 from ui.widgets.current_page import with_current_page_button
@@ -211,9 +211,12 @@ class EditPage(QWidget):
             message = tr("Imagem substituída com sucesso.")
             if result.other_pages:
                 pages = ", ".join(str(index + 1) for index in result.other_pages)
-                message += "\n\n" + tr(
-                    "A mesma imagem também aparecia na(s) página(s) {pages}, que mudaram junto."
-                ).format(pages=pages)
+                message += "\n\n" + plural(
+                    len(result.other_pages),
+                    "A mesma imagem também aparecia na página {pages}, que mudou junto.",
+                    "A mesma imagem também aparecia nas páginas {pages}, que mudaram junto.",
+                    pages=pages,
+                )
             notify_success(self, tr("Substituir imagem"), message)
 
         run_task(
@@ -428,13 +431,17 @@ class EditPage(QWidget):
 
         def done(result):
             self.session.open(output_path)
-            message = tr("{count} página(s) editada(s) com sucesso.").format(count=result.pages_edited)
+            message = plural(result.pages_edited, "1 página editada.", "{count} páginas editadas.")
             if result.clipped:
                 areas = ", ".join(str(area_rows[index]) for index in result.clipped)
-                message += "\n\n" + tr(
-                    "O texto não coube inteiro na(s) área(s) {areas}: o que não coube ficou de fora. "
-                    "Aumente a área ou diminua a fonte."
-                ).format(areas=areas)
+                message += "\n\n" + plural(
+                    len(result.clipped),
+                    "O texto não coube inteiro na área {areas}: o que não coube ficou de fora. "
+                    "Aumente a área ou diminua a fonte.",
+                    "O texto não coube inteiro nas áreas {areas}: o que não coube ficou de fora. "
+                    "Aumente as áreas ou diminua a fonte.",
+                    areas=areas,
+                )
             notify_success(self, tr("Editar texto"), message)
 
         run_task(

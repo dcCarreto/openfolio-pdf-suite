@@ -155,7 +155,7 @@ def english():
     i18n.set_language(i18n.PT_BR)
 
 
-_SAME_TEXT = re.compile(r"^PDF/A-\d$")
+_SAME_TEXT = re.compile(r"^(PDF/A-\d|PDF [AB]|DPI)( ⓘ)?$")  # iguais nos dois idiomas
 
 
 def _collect_tab_texts():

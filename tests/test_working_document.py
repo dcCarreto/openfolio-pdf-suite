@@ -51,7 +51,8 @@ def test_tool_result_goes_to_the_open_document(window, tmp_path, monkeypatch):
     assert session.source_path() == source and session.path() != source
     assert "CONFIDENCIAL" in PdfReader(session.path()).pages[0].extract_text()
     assert "CONFIDENCIAL" not in PdfReader(source).pages[0].extract_text()  # nada salvo ainda
-    assert window.windowTitle().startswith("contrato.pdf *")
+    assert window.windowTitle().startswith("contrato.pdf —")  # o estado fica no selo, não no nome
+    assert window.document.state_badge.property("state") == "unsaved"
     assert window._undo_action.isEnabled() and "Marca" in window._undo_action.text()
     assert window.viewer._current_page == 2  # continua na página em que estava
     assert not list(tmp_path.glob("contrato_*"))

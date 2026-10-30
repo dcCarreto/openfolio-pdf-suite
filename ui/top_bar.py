@@ -9,7 +9,7 @@ com a API de QTabWidget que a janela já usava, ligada à `DocTabBar` da barra.
 from typing import cast
 
 from PySide6.QtCore import QRectF, QSize, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen
+from PySide6.QtGui import QColor, QCursor, QIcon, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractButton,
     QButtonGroup,
@@ -46,6 +46,21 @@ class DocTabBar(QTabBar):
         self.setMovable(True)
         self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         self.setIconSize(QSize(16, 16))
+        self.setMouseTracking(True)  # o "x" das abas aparece com o mouse sobre a aba
+
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        self._update_close_buttons()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._update_close_buttons()
+
+    def _update_close_buttons(self):
+        for index in range(self.count()):
+            button = self.tabButton(index, QTabBar.ButtonPosition.RightSide)
+            if button is not None:
+                button.update()
 
     def mousePressEvent(self, event):
         self.setMovable(self.tabAt(event.position().toPoint()) >= len(FIXED_TABS))
@@ -78,7 +93,7 @@ class DocumentTabs(QStackedWidget):
         """`addTab(widget, texto)` ou `addTab(widget, ícone, texto)`, como no QTabWidget."""
         icon, text = (QIcon(), args[0]) if len(args) == 1 else args
         index = self.addWidget(widget)
-        self._bar.insertTab(index, icon, text)
+        self._bar.insertTab(index, icon, i18n.literal(text))
         return index
 
     def removeTab(self, index: int) -> None:
@@ -97,10 +112,10 @@ class DocumentTabs(QStackedWidget):
         self.setCurrentIndex(self.indexOf(widget))
 
     def tabText(self, index: int) -> str:
-        return self._bar.tabText(index)
+        return self._bar.tabText(index).replace("&&", "&")
 
     def setTabText(self, index: int, text: str) -> None:
-        self._bar.setTabText(index, text)
+        self._bar.setTabText(index, i18n.literal(text))
 
     def setTabToolTip(self, index: int, text: str) -> None:
         self._bar.setTabToolTip(index, text)
@@ -111,6 +126,7 @@ class DocumentTabs(QStackedWidget):
     def _on_bar_changed(self, index: int) -> None:
         if index >= 0:
             super().setCurrentIndex(index)
+        self._bar._update_close_buttons()  # o "x" segue a aba ativa
 
     def _on_tab_moved(self, source: int, target: int) -> None:
         widget = cast(QWidget, self.widget(source))
@@ -122,8 +138,9 @@ class DocumentTabs(QStackedWidget):
 
 
 class TabCloseButton(QAbstractButton):
-    """O "x" da aba de documento. Com alterações não salvas, vira um ponto cheio (o "x" volta
-    com o mouse em cima): o aviso não depende só de cor."""
+    """O "x" da aba de documento: aparece na aba ativa e na que está sob o mouse. Com
+    alterações não salvas, vira um ponto de 8 px no acento (o "x" volta com o mouse em cima):
+    o aviso não depende só de cor, e a dica e o nome acessível dizem o mesmo."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -151,21 +168,33 @@ class TabCloseButton(QAbstractButton):
         self.update()
         super().leaveEvent(event)
 
+    def _tab_state(self) -> tuple[bool, bool]:
+        """(a aba é a ativa, o mouse está sobre a aba)."""
+        bar = self.parentWidget()
+        if not isinstance(bar, QTabBar):
+            return True, False
+        index = next((i for i in range(bar.count()) if bar.tabButton(i, QTabBar.ButtonPosition.RightSide) is self), -1)
+        mouse = bar.mapFromGlobal(QCursor.pos())
+        return index == bar.currentIndex(), index >= 0 and bar.tabAt(mouse) == index
+
     def paintEvent(self, _event):
         t = theme.tokens()
         hover = self.underMouse()
+        current, tab_hover = self._tab_state()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.translate(4, 4)  # o desenho de 20 px no centro dos 28
+        if self._dirty and not (hover or tab_hover):
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(t["accent"]))
+            painter.drawEllipse(QRectF(6, 6, 8, 8))
+            return
+        if not (current or hover or tab_hover):
+            return
         if hover:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(t["pressed"]))
             painter.drawRoundedRect(QRectF(0, 0, 20, 20), 5, 5)
-        if self._dirty and not hover:
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(t["text2"]))
-            painter.drawEllipse(QRectF(6, 6, 8, 8))
-            return
         pen = QPen(QColor(t["text"] if hover else t["text2"]), 1.5)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
@@ -256,14 +285,14 @@ class CommandLauncher(QPushButton):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 8, 0)
         layout.addStretch()
-        layout.addWidget(self._kbd)
+        layout.addWidget(self._kbd, 0, Qt.AlignmentFlag.AlignVCenter)
         self._compact = False
         self.set_compact(False)
 
     def set_compact(self, compact: bool) -> None:
+        """Estreita: só a lupa e o "Ctrl K"."""
         self._compact = compact
-        self._kbd.setVisible(not compact)
-        self.setFixedSize(32 if compact else 300, 32 if compact else 30)
+        self.setFixedSize(84 if compact else 300, 32)
         self.retranslate()
 
     def retranslate(self):

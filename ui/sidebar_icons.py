@@ -162,8 +162,8 @@ def build_watermark_icon() -> QIcon:
     return _build(draw)
 
 
-def build_protect_icon() -> QIcon:
-    """lock-simple."""
+def build_protect_icon(color=None) -> QIcon:
+    """lock-simple (em `color`, um token, no cadeado da privacidade)."""
 
     def draw(p):
         p.drawRoundedRect(QRectF(5, 10, 14, 11), R, R)
@@ -171,7 +171,7 @@ def build_protect_icon() -> QIcon:
         p.drawLine(QPointF(8, 8), QPointF(8, 10))
         p.drawLine(QPointF(16, 8), QPointF(16, 10))
 
-    return _build(draw)
+    return _build(draw, color=color)
 
 
 def build_metadata_icon() -> QIcon:

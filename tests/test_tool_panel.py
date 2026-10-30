@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QLineEdit, QMessa
 from ui import tool_panel
 from ui.main_window import MainWindow
 from ui.tasks import wait_for_tasks
-from ui.tools import SECTIONS
+from ui.tools import SECTIONS, tool_of_page
 from ui.widgets.file_picker import FilePicker
 
 
@@ -35,7 +35,7 @@ def _pdf(path, pages=2):
     return str(path)
 
 
-_WITHOUT_OPTIONS = {"ExtractTextPage", "ExtractImagesPage"}  # só entrada e saída
+_WITHOUT_OPTIONS = {"ExtractTextPage", "ExtractImagesPage", "OrganizePage"}  # só entrada (ou a grade) e saída
 
 
 def _section_titles(panel) -> list[str]:
@@ -49,12 +49,17 @@ def test_every_tool_follows_the_panel_pattern(window, tmp_path, row):
     page = doc.open_tool(row)
     panel = doc.panel(row)
 
-    expected = ["ENTRADA"] if hasattr(page, "source_bar") else []
-    expected += [page.extra_section[0].text()] if hasattr(page, "extra_section") else []  # Comentários
-    expected += [] if SECTIONS[row][4] in _WITHOUT_OPTIONS else ["OPÇÕES"]
-    expected += ["SAÍDA"] if hasattr(page, "output_picker") else []
+    expected = ["Arquivo"] if hasattr(page, "source_bar") else []
+    if hasattr(page, "extra_section"):  # Comentários: o rótulo, ou o cabeçalho com ele e controles à direita
+        header = page.extra_section[0]
+        expected += [header.text() if isinstance(header, QLabel) else header.findChild(QLabel).text()]
+    expected += [] if SECTIONS[row][4] in _WITHOUT_OPTIONS else [getattr(page, "options_title", "Opções")]
+    expected += ["Onde fica o resultado"] if hasattr(page, "output_picker") else []
     assert _section_titles(panel) == expected
-    assert panel.title_label.text() == SECTIONS[row][1] and panel.close_button.isVisibleTo(panel)
+    tool = tool_of_page(SECTIONS[row][4])  # o painel leva o nome da ferramenta (23), não o da tela
+    assert panel.title_label.text() == tool.title and panel.close_button.isVisibleTo(panel)
+    if len(tool.modes) > 1:
+        assert panel.modes_widget is not None and panel.modes_widget.isVisibleTo(panel)
     if getattr(page, "action_buttons", []):
         action = panel.current_action()
         assert panel.primary_button.isVisibleTo(panel) and panel.primary_button.text() == action.text()
@@ -169,7 +174,7 @@ def test_without_a_document_the_tool_waits_for_one(window, tmp_path):
     assert window.tabs.tabText(window.tabs.indexOf(doc)) == "Comprimir"
     assert panel.state() == tool_panel.EMPTY and not panel.primary_button.isEnabled()
     assert panel.empty_caption.isVisibleTo(panel)
-    assert not doc._quick_buttons[row].isEnabled() and not doc.viewer.page_field.isEnabled()
+    assert not doc._quick_buttons["CompressPage"].isEnabled() and not doc.viewer.page_field.isEnabled()
 
     page = doc.page(row)
     page.level_combo.setCurrentIndex(2)
@@ -187,14 +192,14 @@ def test_in_a_narrow_window_the_panel_is_a_drawer(window, tmp_path):
     QApplication.processEvents()
     row = window._row_of["CompressPage"]
 
-    doc._quick_buttons[row].click()
+    doc._quick_buttons["CompressPage"].click()
     QApplication.processEvents()
     assert doc.is_drawer_open() and doc.stack.parentWidget() is doc
     assert doc.stack.geometry().right() < doc.right_rail.mapTo(doc, doc.right_rail.rect().topLeft()).x()
 
     QTest.keyClick(doc, Qt.Key.Key_Escape)
     assert not doc.is_drawer_open() and doc.current_tool() == row  # a ferramenta segue aberta
-    doc._quick_buttons[row].click()
+    doc._quick_buttons["CompressPage"].click()
     assert doc.is_drawer_open()
 
     window.resize(1440, 900)
@@ -219,3 +224,54 @@ def test_outside_a_panel_messages_still_use_dialogs(monkeypatch):
     monkeypatch.setattr(QMessageBox, "information", lambda *args: shown.append(args[2]))
     tool_panel.notify_success(QWidget(), "Título", "Feito.")
     assert shown == ["Feito."]
+
+
+def test_compress_levels_are_cards_that_follow_the_combo_and_shrink_when_space_is_short(window, tmp_path):
+    doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
+    window.resize(1440, 900)
+    window.show()
+    row = window._row_of["CompressPage"]
+    page = doc.open_tool(row)
+    panel = doc.panel(row)
+    QApplication.processEvents()
+    cards = page.level_cards
+
+    assert [card.radio.text() for card in cards.cards] == ["Leve", "Equilibrada", "Forte"]
+    assert cards.cards[1].radio.isChecked() and cards.cards[1].property("selected")  # Equilibrada, recomendada
+    cards.cards[2].radio.setChecked(True)
+    assert page.level_combo.currentData() == "strong"
+    assert cards.cards[0].isVisibleTo(cards) and not page.level_combo.isVisibleTo(cards)
+
+    panel.show_result(tool_panel.ERROR, "Não foi possível comprimir.", "A imagem da página 7 está corrompida.")
+    assert page.level_combo.isVisibleTo(cards) and not cards.cards[0].isVisibleTo(cards)  # a linha compacta
+    assert panel.dismiss_button.isVisibleTo(panel) and panel.result_button.text() == "Tentar de novo"
+    panel.dismiss_button.click()  # "Fechar" volta ao estado Pronto, sem rodar de novo
+    assert panel.state() == tool_panel.READY and cards.cards[0].isVisibleTo(cards)
+    assert page.level_combo.currentData() == "strong"
+
+
+def test_the_busy_panel_dims_its_content(window, tmp_path):
+    doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
+    row = window._row_of["CompressPage"]
+    doc.open_tool(row)
+    panel = doc.panel(row)
+
+    panel.task_started("Comprimir")
+    panel.task_progress(11, 25, "")
+    assert panel.scroll_area.graphicsEffect() is not None and panel.scroll_area.graphicsEffect().opacity() == 0.45
+    assert panel.busy_title.text() == "Comprimir… 12 de 25" and panel.busy_percent.text() == "44%"
+    panel.task_finished("ok")
+    assert panel.scroll_area.graphicsEffect() is None and panel.body.isEnabled()
+
+
+def test_technical_terms_get_an_explanation(window, tmp_path):
+    from PySide6.QtWidgets import QCheckBox
+
+    doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
+    page = doc.open_tool(window._row_of["SignaturePage"])
+    pades = page.pades_check
+    assert pades.text().endswith("ⓘ") and "verificável por muitos anos" in pades.toolTip()
+    assert isinstance(pades, QCheckBox) and pades.accessibleDescription()
+    page = doc.open_tool(window._row_of["OCRPage"])
+    labels = [label.text() for label in page.findChildren(QLabel) if label.text().startswith("DPI")]
+    assert labels == ["DPI ⓘ"]  # sem os dois-pontos, com a ajuda

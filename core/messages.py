@@ -2,7 +2,7 @@
 
 O `core` não depende da interface e escreve as mensagens em português. Uma mensagem fixa
 ("Senha incorreta.") é traduzida pela interface pelo próprio texto. Uma mensagem com valores
-("Página 7 não existe: o documento tem 5 página(s).") não pode ser procurada no dicionário
+("Página 7 não existe: o documento tem 5 páginas.") não pode ser procurada no dicionário
 depois de montada; por isso é criada com `Message(modelo, **valores)`, que se comporta como
 o texto pronto (é um `str`) mas guarda o modelo e os valores para a interface traduzir o
 modelo e montar de novo (`ui.i18n.tr_message`).
@@ -29,3 +29,16 @@ class Message(str):
 
 def _rebuild(template: str, params: dict) -> "Message":
     return Message(template, **params)
+
+
+def plural_message(count: int, one: str, many: str, **params) -> Message:
+    """"1 página" ou "25 páginas": a `Message` no singular (`one`, sem {count}) ou no plural
+    (`many`, com {count}); a interface traduz o modelo escolhido."""
+    return Message(one if count == 1 else many, count=count, **params)
+
+
+# "O documento tem 25 páginas: confira as páginas informadas." (páginas escolhidas fora do documento)
+DOC_PAGES = (
+    "O documento tem 1 página: confira as páginas informadas.",
+    "O documento tem {count} páginas: confira as páginas informadas.",
+)

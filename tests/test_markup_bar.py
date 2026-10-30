@@ -22,7 +22,7 @@ from ui.annotation_state import TOOLS
 from ui.document_tab import DRAWER_WIDTH
 from ui.main_window import MainWindow
 from ui.tasks import wait_for_tasks
-from ui.viewer.markup_bar import DEFAULT_KEYS, TOP_INSET
+from ui.viewer.markup_bar import DEFAULT_KEYS, GROUPS, TOP_INSET
 
 
 @pytest.fixture
@@ -68,18 +68,44 @@ def test_the_bar_shows_only_with_annotations_open_on_a_document(window, tmp_path
     assert not doc.markup_bar.isVisibleTo(doc) and doc.viewer._top_inset == 0
 
 
-def test_every_markup_tool_is_chosen_from_the_bar(window, tmp_path):
+def test_the_bar_is_grouped_on_one_line(window, tmp_path):
     doc, bar, state = _annotations(window, tmp_path)
     _show(window, 1440, 900)
     room = doc.viewer.scroll_area.viewport().width()
     assert not bar.is_compact(), f"barra {bar.full_width()} px, centro {room} px"
+    assert [group.tools for group in bar.groups] == list(GROUPS)
+    assert bar.height() == 42  # uma linha só: botões de 32, 4 de folga e a borda
+    tops = {group.mapTo(bar, QPoint(0, 0)).y() for group in bar.groups}
+    assert len(tops) == 1 and bar.style_button.mapTo(bar, QPoint(0, 0)).y() in tops
 
+
+def test_every_markup_tool_is_chosen_from_the_bar(window, tmp_path):
+    doc, bar, state = _annotations(window, tmp_path)
     for tool in TOOLS:
-        bar.tool_buttons[tool].click()
+        group = bar.group_of[tool]
+        if tool == group.tools[0]:
+            group.button.click()
+        else:
+            group.tool_actions[tool].trigger()  # no ▾ do grupo
         assert state.active_tool() == tool
-        assert [t for t, b in bar.tool_buttons.items() if b.isChecked()] == [tool]
-        assert bar.tool_buttons[tool].text() and bar._kbd[tool].text() == DEFAULT_KEYS[tool]
-        assert all(not b.text() for t, b in bar.tool_buttons.items() if t != tool)  # só a ativa tem nome
+        assert [g.tools for g in bar.groups if g.button.isChecked()] == [group.tools]
+        assert group.current == tool and not group.button.text()  # só ícone
+        assert f"({DEFAULT_KEYS[tool]})" in group.button.toolTip()
+
+    bar.group_of["highlight"].tool_actions["underline"].trigger()
+    state.set_tool("ink")
+    bar.button_for("highlight").click()  # o botão do Realce lembra a última escolhida do grupo
+    assert state.active_tool() == "underline"
+    bar.button_for("underline").click()  # clicar na ativa não a desmarca
+    assert bar.button_for("underline").isChecked()
+
+
+def test_the_group_menus_show_the_keys(window, tmp_path):
+    doc, bar, state = _annotations(window, tmp_path)
+    actions = bar.group_of["highlight"].tool_actions
+    assert actions["underline"].text() == "Sublinhado\tU" and actions["strikeout"].text() == "Riscado\tS"
+    state.set_tool("circle")
+    assert not actions["highlight"].isChecked() and bar.group_of["circle"].tool_actions["circle"].isChecked()
 
 
 def test_color_and_thickness_from_the_bar(window, tmp_path):
@@ -103,23 +129,28 @@ def test_color_and_thickness_from_the_bar(window, tmp_path):
 
     state.set_color("123456")  # um carimbo salvo com cor própria
     assert bar.custom_color_button.isChecked() and bar.custom_color_button.color == "123456"
+    assert bar.style_group.parentWidget() is bar.style_popover  # cor e espessura no popover do Estilo
+    bar.style_button.click()
+    assert bar.style_popover.isVisible()
+    bar.style_popover.hide()
 
 
 def test_the_pending_counter_follows_undo_and_redo(window, tmp_path):
     doc, bar, state = _annotations(window, tmp_path)
-    assert not bar.pending_badge.isVisibleTo(bar) and not bar.save_button.isEnabled()
+    _show(window, 1440, 900)
+    assert not bar.pending_label.isVisibleTo(bar) and not bar.save_button.isEnabled()
 
     state.add_pending(AnnotationSpec(page_index=0, kind="note", position=(50, 50), text="a"))
     state.add_pending(AnnotationSpec(page_index=0, kind="ink", points=[(10, 10), (60, 60)]))
-    assert bar.pending_badge.isVisibleTo(bar) and bar.pending_count.text() == "2"
+    assert bar.pending_label.isVisibleTo(bar) and bar.pending_label.text() == "2 pendentes"
     assert bar.save_button.isEnabled()
 
     window.undo()
-    assert bar.pending_count.text() == "1"
+    assert bar.pending_label.text() == "1 pendente"
     window.redo()
-    assert bar.pending_count.text() == "2"
+    assert bar.pending_label.text() == "2 pendentes"
     state.clear_pending()
-    assert not bar.pending_badge.isVisibleTo(bar) and not bar.save_button.isEnabled()
+    assert not bar.pending_label.isVisibleTo(bar) and not bar.save_button.isEnabled()
 
 
 def test_save_on_the_bar_makes_a_version_that_undo_names(window, tmp_path):
@@ -166,8 +197,8 @@ def test_the_keys_are_configurable_and_the_bar_shows_them(window, tmp_path):
     window._apply_shortcuts()
     state.set_tool("highlight")
 
-    assert bar._kbd["highlight"].text() == "G"
-    assert "(G)" in bar.tool_buttons["highlight"].toolTip()
+    assert "(G)" in bar.button_for("highlight").toolTip()
+    assert bar.group_of["highlight"].tool_actions["highlight"].text() == "Realce\tG"
 
 
 @pytest.mark.parametrize("tool", ["ink", "select"])  # página única (desenho) e rolagem contínua
@@ -186,21 +217,22 @@ def test_the_bar_does_not_cover_the_page(window, tmp_path, tool):
 
 def test_wide_window_full_bar_narrow_window_compact(window, tmp_path):
     doc, bar, state = _annotations(window, tmp_path)
+    state.add_pending(AnnotationSpec(page_index=0, kind="note", position=(50, 50), text="a"))
     _show(window, 1440, 900)
     assert not bar.is_compact() and not doc.viewer.side_panel.isVisible()  # as miniaturas cedem antes
-    assert bar.style_group.parentWidget() is bar
+    wide = bar.style_button.width()
 
-    _show(window, 1024, 720)
-    assert bar.is_compact() and bar.style_button.isVisibleTo(bar)
-    assert bar.style_group.parentWidget() is bar.style_popover  # cor e espessura no popover
+    _show(window, 1000, 640)
     assert doc.is_drawer_open()  # centralizada na parte visível, à esquerda da gaveta
     assert bar.geometry().right() <= doc.viewer.scroll_area.viewport().width() - DRAWER_WIDTH
-    bar.style_button.click()
-    assert bar.style_popover.isVisible()
-    bar.style_popover.hide()
+    assert bar.geometry().left() >= 0 and bar.full_width() <= bar.parentWidget().width() - DRAWER_WIDTH
+
+    bar.set_compact(True)  # sem espaço: o Estilo sem a espessura escrita e o contador só com o número
+    assert bar.style_button.width() < wide and bar.pending_label.text() == "1"
+    assert bar.full_width() > bar.sizeHint().width()  # a inteira continua medida para voltar
 
     _show(window, 1440, 900)
-    assert not bar.is_compact() and bar.style_group.parentWidget() is bar
+    assert not bar.is_compact() and bar.pending_label.text() == "1 pendente"
 
 
 def test_the_bar_fades_while_reading_and_comes_back(window, tmp_path, monkeypatch):
@@ -235,7 +267,7 @@ def test_the_comments_list_marks_pending_and_saved(window, tmp_path):
     state.add_pending(AnnotationSpec(page_index=0, kind="highlight", quads=[(10, 10, 90, 30)], color="ffeb3b"))
 
     rows = [page.comments_list.item(row) for row in range(page.comments_list.count())]
-    assert page.comments_title.text() == "COMENTÁRIOS · 2"
+    assert page.comments_title.text() == "Comentários · 2"
     assert [row.data(Qt.ItemDataRole.UserRole + 1)[4] for row in rows] == [True, False]  # pendente, gravado
     assert "Pendente" in rows[0].text() and "Gravada" not in rows[0].text()
 
@@ -271,28 +303,11 @@ def test_switching_language_translates_the_bar(window, tmp_path):
     _show(window, 1440, 900)
     try:
         i18n.set_language(i18n.EN_US)
-        assert bar.save_button.text() == "Save" and bar.pending_text.text() == "pending"
-        assert bar.tool_buttons["ink"].accessibleName() == "Pen"
+        assert bar.save_button.text() == "Save" and bar.pending_label.text() == "1 pending"
+        assert bar.button_for("ink").accessibleName() == "Pen"
     finally:
         i18n.set_language(i18n.PT_BR)
     assert bar.save_button.text() == "Gravar"
-
-
-def test_short_of_room_the_bar_tightens_before_going_compact(window, tmp_path):
-    doc, bar, state = _annotations(window, tmp_path)
-    state.add_pending(AnnotationSpec(page_index=0, kind="note", position=(50, 50), text="a"))
-    state.set_tool("highlight")
-    _show(window, 1400, 900)  # sem espaço para a inteira, mas maior que 1180 px
-
-    room = doc.viewer.scroll_area.viewport().width()
-    assert bar.full_width() > room - 4 >= bar.tight_width()
-    assert bar.is_tight() and not bar.is_compact()
-    assert not bar.pending_text.isVisibleTo(bar) and bar.pending_count.isVisibleTo(bar)  # fica o número
-    assert not bar._kbd["highlight"].isVisibleTo(bar) and bar.tool_buttons["highlight"].text()  # o nome fica
-    assert bar.geometry().right() <= room
-
-    _show(window, 1920, 1080)
-    assert not bar.is_tight() and bar.pending_text.isVisibleTo(bar)
 
 
 def test_comment_rows_fit_the_list_width(window, tmp_path):

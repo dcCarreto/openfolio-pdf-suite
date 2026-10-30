@@ -6,11 +6,46 @@ depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no avi
 
 ## Próxima atualização
 
+### Visual
+
+- O azul do ícone do app substitui o violeta nos temas escuro e claro, e botões, campos e
+  caixas de marcar seguem um padrão só.
+- O documento mostra o próprio estado: "Salvo" ou "Alterações não salvas" com o botão Salvar
+  na barra sobre a página, um ponto na aba e, na barra de status, "1 alteração aplicada, não
+  salva" ou "Salvo às 14:32".
+- Avisos de formulário, assinatura, senha e camadas aparecem numa faixa sobre a página, cada
+  um com o próprio "x".
+- Dicas novas na coluna da direita, na lista de ferramentas e na barra de marcação: o nome, a
+  tecla de atalho e o que a ferramenta faz, depois de meio segundo com o mouse em cima ou na
+  hora com o Tab.
+- As mensagens dizem "1 página" e "25 páginas", nunca "página(s)", também na linha de comando.
+
+### Ferramentas
+
+- As 23 ferramentas ficam em 8 grupos, com os modos de cada uma num seletor no topo do
+  painel, e uma busca só encontra ferramentas, modos e comandos.
+- O painel de toda ferramenta segue o mesmo desenho: o arquivo, as opções com o rótulo acima
+  do campo, onde fica o resultado e o botão principal, com o andamento e o erro no rodapé.
+- Comprimir escolhe o nível em cartões (Leve, Equilibrada, Forte) que dizem o efeito de cada
+  um, e o resultado mostra o tamanho antes e depois.
+- Redigir e limpar ganha três modos: Áreas, Textos e padrões, Dados ocultos. "Esconder dados
+  pessoais", no Início, abre direto a busca por CPF, e-mail e outros padrões.
+- O painel de tarefas mostra cada operação com o andamento, o resultado ou o motivo da falha.
+
 ### Anotações
 
+- A barra de marcação fica numa linha, em grupos (Realce, Nota, Caneta, Formas, Carimbo e
+  Estilo), e as marcações pendentes aparecem com contorno tracejado até serem gravadas.
+- O comentário escolhido abre no lugar, na lista, com o texto, a cor e Excluir.
 - Na lista de comentários de Anotações, um comentário longo (ou com um autor de nome comprido)
   não empurra mais o selo "Gravado" para fora do painel, nem faz aparecer uma barra de rolagem
   de lado.
+
+### Organizar páginas
+
+- A grade mostra o que está pendente antes de aplicar: páginas giradas, a excluir ou
+  escolhidas, e o painel lista cada alteração em uma frase, com o desfazer só dela.
+- Alt+seta move as páginas escolhidas pelo teclado.
 
 ## 2026-10-25
 

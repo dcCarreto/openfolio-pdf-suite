@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QMenuBar,
     QMessageBox,
@@ -42,15 +43,16 @@ from ui.diagnostics import log_path
 from ui.document_tab import PANEL_MIN_WIDTH, PANEL_WIDTH, SIDE_WIDTH, VIEWER_MIN_WIDTH, DocumentTab
 from ui.errors import show_error
 from ui.home_page import HomePage
-from ui.i18n import tr
-from ui.icon import build_app_icon
+from ui.i18n import plural, tr
+from ui.icon import build_app_icon, build_logo_tile
+from ui.sidebar_icons import build_protect_icon
 from ui.preferences import Preferences, start_folder, use_preferences
 from ui.printing import page_count_for_printing, pages_to_print, print_pages
 from ui.properties_dialog import DocumentPropertiesDialog
 from ui.shortcuts import CommandPalette, ShortcutsDialog
 from ui.tasks import call, run_task
 from ui.theme import apply_titlebar
-from ui.tools import ROW_OF, SECTIONS
+from ui.tools import ROW_OF, SECTIONS, TOOLS, mode_key
 from ui.tools_center import ToolsCenter
 from ui.top_bar import FIXED_TABS, CommandLauncher, DocumentTabs, LangSwitch, bar_separator
 from ui.update_dialog import UpdateDialog
@@ -64,7 +66,7 @@ logger = logging.getLogger(__name__)
 
 _SECTIONS = SECTIONS  # nome antigo, usado pelos testes que percorrem todas as ferramentas
 _HOME, _TOOLS = 0, 1  # as abas fixas, antes das de documento
-NARROW_WIDTH = 1180  # abaixo disso a barra superior e a do visualizador se compactam
+NARROW_WIDTH = 1100  # abaixo disso a barra superior e a do visualizador se compactam
 MIN_SIZE = (960, 600)
 
 
@@ -140,10 +142,11 @@ class MainWindow(QMainWindow):
 
         self.home = HomePage(self._preferences)
         self.home.open_requested.connect(self._on_home_open)
-        self.home.tool_requested.connect(self.open_tool)
+        self.home.tool_requested.connect(self.open_tool_mode)
         self.home.recent_changed.connect(lambda: self._recent_menu.setEnabled(bool(self._preferences.recent_files())))
         self.tools_center = ToolsCenter()
-        self.tools_center.tool_requested.connect(self.open_tool)
+        self.tools_center.tool_requested.connect(self.open_tool_mode)
+        self.tools_center.quick_tools_requested.connect(self.set_quick_tools)
         self.tabs.addTab(self.home, build_home_icon(), "")
         self.tabs.addTab(self.tools_center, sidebar_icons.build_organize_icon(), "")
         for index, tag in enumerate(FIXED_TABS):
@@ -154,12 +157,63 @@ class MainWindow(QMainWindow):
         status_bar = self.statusBar()
         status_bar.setObjectName("StatusBar")
         status_bar.setSizeGripEnabled(False)
-        status_bar.setFixedHeight(28)
-        status_bar.showMessage("OpenFolio PDF Suite")
-        # As tarefas de todos os documentos, no canto direito da barra de status.
+        status_bar.setFixedHeight(26)
+        # À esquerda, a promessa de privacidade e o estado do documento da frente (uma
+        # mensagem passageira toma o lugar deles por alguns segundos).
+        self._privacy_icon = QLabel()
+        self._privacy_label = QLabel()
+        self._doc_state_separator = bar_separator()
+        self._doc_state_separator.setFixedHeight(14)
+        self.doc_state_label = QLabel()
+        self.doc_state_label.setProperty("ofRole", "docState")
+        privacy = QWidget()
+        privacy_layout = QHBoxLayout(privacy)
+        privacy_layout.setContentsMargins(4, 0, 0, 0)
+        privacy_layout.setSpacing(6)
+        privacy_layout.addWidget(self._privacy_icon)
+        privacy_layout.addWidget(self._privacy_label)
+        privacy_layout.addSpacing(4)
+        privacy_layout.addWidget(self._doc_state_separator)
+        privacy_layout.addSpacing(4)
+        privacy_layout.addWidget(self.doc_state_label)
+        privacy_layout.addStretch()
+        status_bar.addWidget(privacy, 1)
+        # À direita, as tarefas de todos os documentos (só quando há) e a página.
         self.task_log = TaskLog(self)
+        self.task_log.view_requested.connect(self._show_task_document)
         self.tasks_button = TasksButton(self.task_log)
         status_bar.addPermanentWidget(self.tasks_button)
+        self.page_status_label = QLabel()
+        status_bar.addPermanentWidget(self.page_status_label)
+        self._retranslate_status_bar()
+
+    def _retranslate_status_bar(self):
+        self._privacy_icon.setPixmap(build_protect_icon("success").pixmap(QSize(14, 14)))
+        self._privacy_label.setText(tr("Local · nenhum arquivo sai deste computador"))
+        self._update_status_bar()
+
+    def _update_status_bar(self):
+        """O estado do documento da frente ("1 alteração aplicada, não salva", "Salvo às
+        14:32") e a página ("Página 1 de 25")."""
+        doc = self.document if isinstance(self.tabs.currentWidget(), DocumentTab) else None
+        session = doc.session if doc is not None else None
+        has_document = session is not None and session.path() is not None
+        text = ""
+        if has_document:
+            if session.is_modified():
+                text = plural(session.unsaved_changes(), "1 alteração aplicada, não salva", "{count} alterações aplicadas, não salvas")
+            elif session.saved_at() is not None:
+                text = tr("Salvo às {time}").format(time=session.saved_at().strftime("%H:%M"))
+            else:
+                text = tr("Sem alterações")
+        self.doc_state_label.setText(text)
+        self.doc_state_label.setVisible(has_document)
+        self._doc_state_separator.setVisible(has_document)
+        pages = doc.viewer._page_count() if has_document else 0
+        self.page_status_label.setText(
+            tr("Página {current} de {total}").format(current=session.current_page() + 1, total=pages) if pages else ""
+        )
+        self.page_status_label.setVisible(bool(pages))
 
     def _build_top_bar(self) -> QWidget:
         """Logo, menus, abas, "+" (abrir), a busca de comandos e o idioma, numa faixa só."""
@@ -170,9 +224,10 @@ class MainWindow(QMainWindow):
         self._menu_bar.setObjectName("MainMenu")
         self._logo_button = QToolButton()
         self._logo_button.setObjectName("LogoButton")
-        self._logo_button.setIcon(build_app_icon())
-        self._logo_button.setIconSize(QSize(18, 18))
-        self._logo_button.setFixedSize(28, 28)
+        self._logo_button.setIcon(build_logo_tile())
+        self._logo_button.setIconSize(QSize(30, 30))
+        self._logo_button.setFixedSize(32, 32)
+        self._logo_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # a aba Início já é alcançável pelo teclado
         self._logo_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._logo_button.clicked.connect(lambda: self.tabs.setCurrentWidget(self.home))
         self._new_tab_button = QToolButton()
@@ -180,6 +235,7 @@ class MainWindow(QMainWindow):
         self._new_tab_button.setProperty("ofRole", "icon")
         self._new_tab_button.setIcon(build_plus_icon())
         self._new_tab_button.setIconSize(QSize(18, 18))
+        self._new_tab_button.setFixedSize(28, 28)
         self._new_tab_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._new_tab_button.clicked.connect(self._open_pdf)
         self._command_launcher = CommandLauncher()
@@ -190,7 +246,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(8, 0, 8, 0)
         layout.setSpacing(4)
         layout.addWidget(self._logo_button)
-        layout.addWidget(self._menu_bar)
+        layout.addWidget(self._menu_bar, 0, Qt.AlignmentFlag.AlignVCenter)  # senão os menus colam no topo
         layout.addWidget(bar_separator())
         layout.addWidget(self.tabs.tabBar(), 1)
         layout.addWidget(self._new_tab_button)
@@ -254,13 +310,15 @@ class MainWindow(QMainWindow):
         doc.tool_changed.connect(self._update_document_actions)
         doc.tool_changed.connect(lambda d=doc: self._update_tab(d))
         doc.all_tools_requested.connect(lambda: self.tabs.setCurrentIndex(_TOOLS))
+        doc.quick_tools_changed.connect(self.set_quick_tools)
         doc.session.path_changed.connect(lambda d=doc: self._remember_opened_document(d))
+        doc.session.current_page_changed.connect(self._update_status_bar)
         doc.viewer.layout_changed.connect(lambda layout, d=doc: self._on_layout_changed(d, layout))
         if self._preferences.page_layout() in viewer_layouts.LAYOUTS:
             doc.viewer.set_layout(self._preferences.page_layout())
         # Só a escolha do usuário fica guardada: uma ferramenta de desenho força a página única.
-        for button in doc.viewer._mode_buttons.values():
-            button.clicked.connect(lambda _checked=False, d=doc: self._remember_page_layout(d))
+        for action in doc.viewer._mode_actions.values():
+            action.triggered.connect(lambda _checked=False, d=doc: self._remember_page_layout(d))
         doc.tasks.finished.connect(lambda outcome, d=doc: self._on_task_finished(d, outcome))
         doc.save_button.clicked.connect(self.save_document)
         doc.set_tool_shortcuts(self._tool_shortcut_texts())
@@ -272,8 +330,8 @@ class MainWindow(QMainWindow):
         doc.print_button.clicked.connect(self.print_document)
         doc.task_status.hide()
         self.statusBar().insertPermanentWidget(0, doc.task_status)  # o "N tarefas" fica na ponta
-        self.task_log.watch(doc.tasks, lambda d=doc: d.title(modified_mark=False))
-        index = self.tabs.addTab(doc, build_file_icon(), doc.title(modified_mark=False))
+        self.task_log.watch(doc.tasks, lambda d=doc: d.title())
+        index = self.tabs.addTab(doc, build_file_icon(), doc.title())
         # O "x" nas cores do tema, no lugar do botão nativo; vira um ponto com alterações.
         doc.close_button.clicked.connect(lambda _checked=False, d=doc: self.close_document(d))
         self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.RightSide, doc.close_button)
@@ -295,10 +353,30 @@ class MainWindow(QMainWindow):
         return doc
 
     def open_tool(self, row: int) -> QWidget:
-        """Abre a ferramenta na aba de documento atual (numa vazia, se não houver documento)."""
+        """Abre a tela `row` (de ui.tools.SECTIONS) na aba de documento atual (numa vazia, se
+        não houver documento), no modo da ferramenta de que ela faz parte."""
         doc = self.current_document()
         self.tabs.setCurrentWidget(doc)
         return doc.open_tool(row)
+
+    def open_tool_mode(self, tool_id: str, mode: int = 0) -> QWidget:
+        """Abre a ferramenta `tool_id` (de ui.tools.TOOLS) no modo `mode`."""
+        doc = self.current_document()
+        self.tabs.setCurrentWidget(doc)
+        return doc.open_mode(tool_id, mode)
+
+    def _show_task_document(self, manager) -> None:
+        """O "Ver" de uma tarefa concluída: a aba do documento em que ela rodou."""
+        doc = next((doc for doc in self.documents() if doc.tasks is manager), None)
+        if doc is not None:
+            self.tabs.setCurrentWidget(doc)
+
+    def set_quick_tools(self, tools: list[str]) -> None:
+        """Fixar ou tirar uma ferramenta da coluna rápida: grava e refaz a de cada documento."""
+        self._preferences.set_quick_tools(tools)
+        for doc in self.documents():
+            doc.set_quick_tools(tools)
+        self.tools_center.refresh_pins()
 
     def close_document(self, doc: DocumentTab) -> bool:
         """Fecha a aba (perguntando antes, se houver operação ou alterações). Devolve False se o
@@ -330,6 +408,9 @@ class MainWindow(QMainWindow):
             self._active = widget
         elif widget is self.home:
             self.home.refresh()
+        # Uma busca visível por vez: na aba Ferramentas, o campo grande dela assume.
+        if hasattr(self, "_command_launcher"):  # a faixa do topo é montada depois das abas
+            self._command_launcher.setVisible(widget is not self.tools_center)
         for doc in self.documents():  # a barra de status mostra a operação do documento da frente
             doc.task_status.setVisible(doc is self.document and doc.tasks.is_busy())
         self._update_document_actions()
@@ -344,8 +425,8 @@ class MainWindow(QMainWindow):
         modified = doc.session.is_modified()
         unsaved = tr("alterações não salvas")
         # Sem documento, com uma ferramenta aberta (Criar, Mesclar...): a aba leva o nome dela.
-        tool = doc.current_tool() if doc.is_empty() else -1
-        self.tabs.setTabText(index, tr(SECTIONS[tool][1]) if tool >= 0 else doc.title(modified_mark=False))
+        tool = doc.current_tool_id() if doc.is_empty() else ""
+        self.tabs.setTabText(index, tr(TOOLS[tool].title) if tool else doc.title())
         tip = doc.session.source_path() or doc.title()
         self.tabs.setTabToolTip(index, f"{tip}\n{unsaved}" if modified else tip)
         doc.close_button.set_dirty(modified)
@@ -361,8 +442,8 @@ class MainWindow(QMainWindow):
             self.tabs.setTabIcon(index, self._tab_icon(doc))
 
     def _tab_icon(self, doc: DocumentTab) -> QIcon:
-        tool = doc.current_tool() if doc.is_empty() else -1
-        return getattr(sidebar_icons, SECTIONS[tool][0])() if tool >= 0 else build_file_icon()
+        tool = doc.current_tool_id() if doc.is_empty() else ""
+        return getattr(sidebar_icons, TOOLS[tool].icon)() if tool else build_file_icon()
 
     def _on_document_changed(self, doc: DocumentTab):
         self._update_tab(doc)
@@ -532,20 +613,34 @@ class MainWindow(QMainWindow):
         help_menu.addSeparator()
         command(help_menu, "help.about", tr("Sobre o OpenFolio PDF Suite")).triggered.connect(self._show_about)
 
-        # Uma ação por ferramenta, fora dos menus (a aba Ferramentas já as lista), para a paleta
-        # e para quem quiser um atalho direto para ela.
-        for action in getattr(self, "_tool_actions", []):
+        # Uma ação por ferramenta e uma por modo, fora dos menus (a aba Ferramentas já as lista),
+        # para a paleta e para quem quiser um atalho direto. A chave de uma ferramenta é a da
+        # tela principal dela ("tool.ConvertPage"); a das telas que viraram modo também fica
+        # ("tool.ExtractTextPage" abre Converter › Extrair texto): atalhos já gravados valem.
+        for action in getattr(self, "_tool_actions", {}).values():
             self.removeAction(action)
             action.deleteLater()
-        self._tool_actions = []
-        for row, (icon, title, subtitle, _module, class_name) in enumerate(SECTIONS):
-            action = QAction(getattr(sidebar_icons, icon)(), tr(title), self)
-            action.setObjectName(f"tool.{class_name}")
-            action.setStatusTip(tr(subtitle))
-            action.triggered.connect(lambda _checked=False, r=row: self.open_tool(r))
+        self._tool_actions: dict[str, QAction] = {}
+        for tool in TOOLS.values():
+            action = QAction(getattr(sidebar_icons, tool.icon)(), tr(tool.title), self)
+            action.setObjectName(f"tool.{tool.id}")
+            action.setStatusTip(tr(tool.description))
+            action.triggered.connect(lambda _checked=False, t=tool.id: self.open_tool_mode(t, 0))
             self.addAction(action)
-            self._tool_actions.append(action)
+            self._tool_actions[tool.id] = action
             self._commands.append((tr("Ferramentas"), action))
+        for tool in TOOLS.values():
+            if len(tool.modes) < 2:
+                continue
+            for index, mode in enumerate(tool.modes):
+                key = mode_key(tool, index)
+                action = QAction(getattr(sidebar_icons, tool.icon)(), tr(mode.label), self)
+                action.setObjectName(key)
+                action.setStatusTip(tr(tool.description))
+                action.triggered.connect(lambda _checked=False, t=tool.id, i=index: self.open_tool_mode(t, i))
+                self.addAction(action)
+                self._tool_actions[key] = action
+                self._commands.append((tr(tool.title), action))
 
         # Uma tecla por ferramenta de marcação (V, H, U...): só com o foco no visualizador e
         # Anotações aberta, e nunca num campo de texto (que fica com a tecla).
@@ -575,6 +670,9 @@ class MainWindow(QMainWindow):
             ("rotate_left", tr("Girar à esquerda"), "Ctrl+[", lambda page: page.rotate_selected(270)),
             ("rotate_right", tr("Girar à direita"), "Ctrl+]", lambda page: page.rotate_selected(90)),
             ("duplicate", tr("Duplicar"), "", lambda page: page.duplicate_selected()),
+            # Mover sem o mouse (arrastar é o jeito de mover com ele).
+            ("move_back", tr("Mover para trás"), "Alt+Left", lambda page: page.move_selected(-1)),
+            ("move_forward", tr("Mover para a frente"), "Alt+Right", lambda page: page.move_selected(1)),
         ):
             action = QAction(label, self)
             action.setObjectName(f"organize.{key}")
@@ -612,11 +710,12 @@ class MainWindow(QMainWindow):
         for doc in self.documents():
             doc.set_tool_shortcuts(tool_keys)
 
-    def _tool_shortcut_texts(self) -> dict[int, str]:
+    def _tool_shortcut_texts(self) -> dict[str, str]:
+        """O atalho de cada ferramenta (id), para as dicas da coluna rápida."""
         return {
-            row: action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
-            for row, action in enumerate(getattr(self, "_tool_actions", []))
-            if not action.shortcut().isEmpty()
+            tool: action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
+            for tool, action in getattr(self, "_tool_actions", {}).items()
+            if tool in TOOLS and not action.shortcut().isEmpty()
         }
 
     def _organizer(self):
@@ -671,6 +770,9 @@ class MainWindow(QMainWindow):
                 return
 
     def show_command_palette(self):
+        if self.tabs.currentWidget() is self.tools_center:
+            self.tools_center.focus_search()  # nesta aba, o campo grande faz o papel da paleta
+            return
         commands = [c for c in self.commands() if c[1] is not self._palette_action]
         palette = CommandPalette(commands, self, extras=self._palette_extras())
         if palette.exec() and palette.chosen is not None:
@@ -751,6 +853,8 @@ class MainWindow(QMainWindow):
         self._preferences.set_language(i18n.get_language())
         self._retranslate_fixed_tabs()
         self._retranslate_top_bar()
+        self._retranslate_status_bar()
+        self.tasks_button.refresh()
         self.home.retranslate()
         self.tools_center.retranslate()
         for doc in self.documents():
@@ -876,6 +980,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_language_switcher"):
             self._language_switcher.setEnabled(not self._any_busy())
 
+        for each in self.documents():
+            each.update_state_badge()
+        self._update_status_bar()
         if doc is not None and session is not None and session.source_path():
             self.setWindowTitle(f"{doc.title()} — OpenFolio PDF Suite")
         else:
@@ -982,7 +1089,7 @@ class MainWindow(QMainWindow):
             tr("Imprimir"),
             lambda progress: print_pages(path, printer, pages, progress),
             on_success=lambda count: self.statusBar().showMessage(
-                tr("{count} página(s) enviada(s) para a impressora.").format(count=count), 8000
+                plural(count, "1 página enviada para a impressora.", "{count} páginas enviadas para a impressora."), 8000
             ),
             error_message=tr("Não foi possível imprimir: {error}"),
         )
@@ -1009,10 +1116,12 @@ class MainWindow(QMainWindow):
         self._preferences.set_theme(key)
         self._theme_actions[key].setChecked(True)
         theme.apply_theme(cast(QApplication, QApplication.instance()), key)
+        self._retranslate_status_bar()  # o cadeado é um pixmap: pinta de novo na cor do tema
 
     def _on_system_color_scheme_changed(self, _scheme) -> None:
         if self._preferences.theme() == theme.SYSTEM:
             theme.apply_theme(cast(QApplication, QApplication.instance()), theme.SYSTEM)
+            self._retranslate_status_bar()
 
     def check_for_updates(self, manual: bool = True) -> bool:
         """Ajuda > Verificar atualizações (e ao iniciar, se o usuário ligou). Consulta a lista
@@ -1164,7 +1273,7 @@ class MainWindow(QMainWindow):
         if outcome == "cancelled":
             self.statusBar().showMessage(tr("Operação cancelada: nada foi gravado."), 8000)
         elif outcome == "ok":
-            self.statusBar().showMessage(tr("Operação concluída."), 5000)
+            self.statusBar().showMessage(tr("{task}: pronto.").format(task=doc.tasks.title()), 5000)
 
     # -- fechar ----------------------------------------------------------------------
 

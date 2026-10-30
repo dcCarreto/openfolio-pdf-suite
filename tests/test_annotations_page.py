@@ -62,9 +62,41 @@ def test_comments_are_listed_and_selecting_one_shows_it(tmp_path, monkeypatch):
     # O texto do carimbo é desenho: não dá para editar pela lista.
     _select(page, 2)
     assert page.comment_text_edit.isReadOnly()
-    _select(page, 0, 1)
-    assert not page.update_comment_button.isEnabled() and page.remove_comments_button.isEnabled()
+    _select(page, 0, 1)  # dois: as ações vão para a barra acima da lista, e nenhum se abre
+    assert page.editor is None and page.comment_text_edit is None
+    assert not page.bulk_bar.isHidden() and page.bulk_delete_button.text() == "Excluir 2"
+    assert page.bulk_label.text() == "2 selecionados"
     assert state.selected_comment() is None
+
+
+def test_the_actions_of_a_comment_exist_only_in_it(tmp_path, monkeypatch):
+    page, _session, _state = _page_with_comments(tmp_path, monkeypatch)
+    assert page.editor is None and page.bulk_bar.isHidden()
+    _select(page, 0)
+    editor = page.editor
+    assert page.comments_list.itemWidget(page.comments_list.item(0)) is editor
+    assert "Ana" in editor.title.text() and "pág. 1" in editor.title.text()  # o autor no cabeçalho
+    assert [editor.color_button.text(), editor.delete_button.text(), editor.save_button.text()] == [
+        "Cor", "Excluir", "Salvar texto",
+    ]  # fmt: skip
+    assert not editor.save_button.isEnabled()  # nada mudou ainda
+    editor.text_edit.setPlainText("Outra")
+    assert editor.save_button.isEnabled()
+    _select(page, 1)
+    assert page.comments_list.itemWidget(page.comments_list.item(0)) is None  # o outro se fecha
+
+
+def test_the_filter_pills_count_and_filter(tmp_path, monkeypatch):
+    page, _session, state = _page_with_comments(tmp_path, monkeypatch)
+    state.add_pending(AnnotationSpec(page_index=0, kind="note", position=(9, 9), text="nova"))
+    pills = page.filter_buttons
+    assert [pills[k].text() for k in ("all", "pending", "saved")] == ["Todos", "Pendentes 1", "Gravados 3"]
+    pills["pending"].click()
+    shown = [row for row in range(page.comments_list.count()) if not page.comments_list.isRowHidden(row)]
+    assert shown == [0]
+    pills["saved"].click()
+    shown = [row for row in range(page.comments_list.count()) if not page.comments_list.isRowHidden(row)]
+    assert shown == [1, 2, 3]
 
 
 def test_editing_and_removing_create_versions_that_undo_reverts(tmp_path, monkeypatch):
@@ -72,12 +104,15 @@ def test_editing_and_removing_create_versions_that_undo_reverts(tmp_path, monkey
 
     _select(page, 0)
     page.comment_text_edit.setPlainText("Corrigida")
-    page.comment_author_edit.setText("Bia")
-    page._update_comment()
+    page.editor.save_button.click()  # "Salvar texto"
     wait_for_tasks()
     first = ListAnnotations().run(session.path())[0]
-    assert (first.content, first.author) == ("Corrigida", "Bia")
+    assert (first.content, first.author) == ("Corrigida", "Ana")
     assert page.comment_text_edit.toPlainText() == "Corrigida"  # a seleção volta depois de recarregar
+
+    page._update_comment(author="Bia")  # "Mudar o autor..." do menu do item
+    wait_for_tasks()
+    assert ListAnnotations().run(session.path())[0].author == "Bia"
 
     _select(page, 0, 1)
     page._remove_comments()
@@ -96,7 +131,7 @@ def test_importing_xfdf_adds_the_comments_to_the_open_document(tmp_path, monkeyp
     blank = tmp_path / "branco.pdf"
     _make_pdf(blank)
     session.open(str(blank))
-    assert page.comments_list.count() == 1  # "Nenhum comentário no documento."
+    assert page.comments_list.count() == 1  # o estado vazio
     assert not page.comments_list.item(0).isSelected()
 
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *args, **kwargs: (str(xfdf), ""))
@@ -189,7 +224,7 @@ def test_recolor_and_author_of_new_annotations(tmp_path, monkeypatch):
     wait_for_tasks()
 
     assert [c.color for c in ListAnnotations().run(session.path())] == ["2196f3", "2196f3", stamp_color]
-    assert "Cor trocada em 2 comentário(s)." in shown[-1] and "1 ficou(aram)" in shown[-1]
+    assert "Cor trocada em 2 comentários." in shown[-1] and "1 ficou como estava" in shown[-1]
 
     page.author_edit.setText("Revisora")
     page.author_edit.editingFinished.emit()

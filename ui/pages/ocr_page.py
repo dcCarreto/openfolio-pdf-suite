@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.ocr import DEFAULT_DPI, OCRDocument, find_tesseract, get_available_languages, has_orientation_data
-from ui.i18n import tr
+from ui.i18n import PT_BR, get_language, plural, tr
 from ui.tasks import call_with_progress, run_task
 from ui.widgets.document_source_bar import DocumentSourceBar
 from ui.widgets.file_picker import FilePicker
@@ -34,13 +34,20 @@ _MODES = [
     ("force", "Todas (forçar OCR)"),
     ("redo", "Refazer o OCR (tira o texto reconhecido antes)"),
 ]
-# Os instaladores do app trazem o Tesseract; isto só aparece rodando do código-fonte.
+
+
+def natural_list(items: list[str]) -> str:
+    """"português e inglês", "a, b e c" ("a, b and c" em inglês)."""
+    if len(items) < 2:
+        return "".join(items)
+    return tr("{items} e {last}").format(items=", ".join(items[:-1]), last=items[-1])
+
+
+# Os instaladores do app trazem o motor de OCR; isto só aparece rodando do código-fonte. O nome
+# dele e os comandos ficam no README, e não na interface.
 _INSTALL_HELP = (
-    "Os instaladores do app já trazem o Tesseract. Rodando o código-fonte, instale-o no "
-    "sistema: no Windows, pelo instalador em https://github.com/UB-Mannheim/tesseract/wiki "
-    '(marque o idioma Portuguese e "Orientation and script detection"); no Linux, sudo apt '
-    "install tesseract-ocr tesseract-ocr-por; no macOS, brew install tesseract "
-    "tesseract-lang. Depois, reabra o app."
+    "Os instaladores do app já trazem o reconhecimento de texto. Rodando do código-fonte, ele "
+    'precisa ser instalado à parte: os passos estão no README, em "Requisitos". Depois, reabra o app.'
 )
 
 
@@ -81,7 +88,7 @@ class OCRPage(QWidget):
             self.orientation_checkbox.setChecked(True)
         else:
             self.orientation_checkbox.setEnabled(False)
-            self.orientation_checkbox.setToolTip(tr('Requer o pacote "osd" do Tesseract.'))
+            self.orientation_checkbox.setToolTip(tr("Requer a detecção de orientação do reconhecimento de texto."))
 
         self.straighten_checkbox = QCheckBox(tr("Endireitar as páginas no documento"))
         self.straighten_checkbox.setToolTip(
@@ -139,19 +146,21 @@ class OCRPage(QWidget):
 
     def _update_tesseract_note(self):
         if self._tesseract is None:
-            self.tesseract_note.setText(tr("Tesseract OCR não encontrado.") + " " + tr(_INSTALL_HELP))
+            self.tesseract_note.setText(tr("O reconhecimento de texto não está instalado neste computador.") + " " + tr(_INSTALL_HELP))
             self.language_list.setEnabled(False)
         elif not self._languages:
             self.tesseract_note.setText(
-                tr("Nenhum idioma de reconhecimento instalado no Tesseract.") + " " + tr(_INSTALL_HELP)
+                tr("Nenhum idioma de reconhecimento instalado.") + " " + tr(_INSTALL_HELP)
             )
             self.language_list.setEnabled(False)
         else:
-            note = tr("Tesseract encontrado. Idiomas disponíveis: {languages}.").format(
-                languages=", ".join(tr(_LANGUAGE_NAMES.get(code, code)) for code in self._languages)
-            )
+            # "Idiomas disponíveis: português e inglês." (em português, os nomes em minúscula)
+            names = [tr(_LANGUAGE_NAMES.get(code, code)) for code in sorted(self._languages, key=lambda c: c != "por")]
+            if get_language() == PT_BR:
+                names = [name.lower() for name in names]
+            note = tr("Idiomas disponíveis: {languages}.").format(languages=natural_list(names))
             if "por" not in self._languages:
-                note += " " + tr('Para reconhecer português, instale o idioma "por" do Tesseract.')
+                note += " " + tr("Para reconhecer português, instale o idioma português do reconhecimento de texto.")
             self.tesseract_note.setText(note)
 
     def _apply(self):
@@ -186,7 +195,7 @@ class OCRPage(QWidget):
                 notify_success(
                     self,
                     tr("OCR"),
-                    tr("Texto reconhecido em {count} página(s).").format(count=pages_ocred),
+                    plural(pages_ocred, "Texto reconhecido em 1 página.", "Texto reconhecido em {count} páginas."),
                 )
             else:
                 notify_info(

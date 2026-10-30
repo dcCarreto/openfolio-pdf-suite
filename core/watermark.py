@@ -9,6 +9,7 @@ from reportlab.lib.colors import Color
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
+from .messages import DOC_PAGES, plural_message
 from .base import open_reader, write_pdf
 from .document import pages_writer
 from .fonts import SANS_BOLD, register_fonts
@@ -85,7 +86,7 @@ def _apply(reader, writer: PdfWriter, source_indices, draw, behind: bool, pages:
     if pages is not None and not pages:
         raise ValueError("Informe as páginas a marcar.")
     if pages is not None and not all(0 <= index < total for index in pages):
-        raise ValueError(f"O documento tem {total} página(s): confira as páginas informadas.")
+        raise ValueError(plural_message(total, *DOC_PAGES))
     chosen = set(range(total) if pages is None else pages)
     materialize_inherited_attributes(writer)
     # Uma sobreposição por geometria de página: o pypdf copia os recursos dela uma vez só,

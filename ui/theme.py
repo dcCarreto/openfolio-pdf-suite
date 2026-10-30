@@ -19,58 +19,69 @@ THEMES = (DARK, LIGHT, SYSTEM)
 
 TOKENS = {
     DARK: {
-        "bg": "#161826",  # janela e barras
-        "canvas": "#11121c",  # fundo do visualizador: a página é o único ponto claro
-        "panel": "#1d1f2d",  # painéis e cartões
-        "raised": "#262838",  # botões, aba ativa
-        "field": "#131522",  # campos de entrada
-        "hover": "#2e3142",
-        "pressed": "#363a4e",
-        "border": "#2f3244",
-        "border_strong": "#45495e",
-        "text": "#e9e9ed",
-        "text2": "#a9adbf",
-        "text3": "#8a8ea3",
-        "accent": "#9184d9",  # "Íris": bordas, foco, ícones
-        "accent_strong": "#b5abfc",  # texto na cor do acento
-        "accent_fill": "#2b2741",  # fundo do que está marcado
-        "accent_line": "#5d5294",  # borda do que está marcado
-        "on_accent": "#161826",
-        "success": "#5cc79a",
-        "success_fill": "#17302a",
-        "warning": "#e6b85c",
-        "danger": "#f08080",
-        "danger_fill": "#3a1f24",
-        "scrim": "rgba(8, 9, 15, 0.62)",
-        "page_shadow": "rgba(0, 0, 0, 0.6)",
+        "bg": "#111821",  # janela, barras, coluna rápida
+        "canvas": "#0b1017",  # fundo do visualizador: a página é o único ponto claro
+        "panel": "#18202b",  # painel da ferramenta, cartões, popovers
+        "raised": "#212b38",  # aba ativa, botão secundário, cartão de entrada
+        "field": "#0e141c",  # campos de entrada
+        "hover": "#283342",
+        "pressed": "#303c4d",
+        "border": "#253040",  # divisões entre regiões (uso mínimo)
+        "border_strong": "#3e4b5e",  # contorno de campo, tracejado, rádio, caixa de seleção
+        "text": "#e8eef5",
+        "text2": "#aab6c6",
+        "text3": "#8593a6",
+        "accent": "#5aa6ee",  # o azul do ícone: ícone ativo, indicadores, progresso
+        "accent_strong": "#a8ccf2",  # texto na cor do acento
+        "accent_fill": "#172c44",  # fundo do selecionado
+        "accent_line": "#2f5f93",  # borda do selecionado
+        "primary": "#2a74c2",  # fundo do botão principal; mais claro, o branco sai do AA
+        "primary_hover": "#2468b0",
+        "on_primary": "#ffffff",
+        "focus": "#a8ccf2",  # borda de foco de 2 px
+        "success": "#5ccb9c",
+        "success_fill": "#15302a",
+        "warning": "#e8bb5e",
+        "warning_fill": "#352c17",
+        "danger": "#f28585",
+        "danger_fill": "#3a1f26",
+        "scrim": "rgba(4, 8, 14, 0.55)",
+        "shadow": "rgba(0, 0, 0, 0.45)",
     },
     LIGHT: {
-        "bg": "#eceef4",
-        "canvas": "#dfe2ea",
-        "panel": "#fafbfd",
-        "raised": "#f0f1f6",
+        "bg": "#eaeff5",
+        "canvas": "#dbe2eb",
+        "panel": "#ffffff",
+        "raised": "#f1f4f8",
         "field": "#ffffff",
-        "hover": "#e4e6ef",
-        "pressed": "#d8dbe7",
-        "border": "#d5d8e3",
-        "border_strong": "#aeb2c4",
-        "text": "#1b1c29",
-        "text2": "#4f5368",
-        "text3": "#676b80",
-        "accent": "#5d5294",
-        "accent_strong": "#4a4180",
-        "accent_fill": "#eceafb",
-        "accent_line": "#b5abfc",
-        "on_accent": "#ffffff",
-        "success": "#1f7a50",
-        "success_fill": "#e3f4ec",
-        "warning": "#8a5b00",
-        "danger": "#b4363c",
-        "danger_fill": "#fbe7e8",
-        "scrim": "rgba(27, 28, 41, 0.35)",
-        "page_shadow": "rgba(27, 28, 41, 0.25)",
+        "hover": "#e3e9f0",
+        "pressed": "#d5dde8",
+        "border": "#d9e0e9",
+        "border_strong": "#a9b5c4",
+        "text": "#141b25",
+        "text2": "#445163",
+        "text3": "#5a687b",
+        "accent": "#2a74c2",
+        "accent_strong": "#1d5a9c",
+        "accent_fill": "#e6f0fb",
+        "accent_line": "#a8ccf2",
+        "primary": "#2a74c2",
+        "primary_hover": "#2366ab",
+        "on_primary": "#ffffff",
+        "focus": "#2a74c2",
+        "success": "#1d7a4e",
+        "success_fill": "#e3f4eb",
+        "warning": "#8a5a00",
+        "warning_fill": "#fbf0d9",
+        "danger": "#b3363b",
+        "danger_fill": "#fbe6e6",
+        "scrim": "rgba(14, 22, 34, 0.35)",
+        "shadow": "rgba(20, 34, 56, 0.18)",
     },
 }
+
+# Cores das marcações sobre a página: iguais nos dois temas, fora dos tokens.
+MARK_COLORS = {"highlight": "#ffe45c", "note": "#f5b942", "shape": "#e0473c", "pending": "#b07800"}
 
 _current = DARK
 
@@ -97,12 +108,14 @@ def color(key: str) -> QColor:
     return QColor(value)
 
 
-def floating_shadow(parent: QWidget) -> QGraphicsDropShadowEffect:
-    """Elevação das superfícies flutuantes (gaveta, barra de marcação, paleta)."""
+def floating_shadow(parent: QWidget, modal: bool = False, leftward: bool = False) -> QGraphicsDropShadowEffect:
+    """Elevação 1 das superfícies flutuantes (gaveta, barra de marcação, popovers) ou, com
+    `modal`, a 2 da paleta e dos diálogos, que têm o véu por trás. A gaveta, presa à direita,
+    joga a sombra para a esquerda (`leftward`)."""
     shadow = QGraphicsDropShadowEffect(parent)
-    shadow.setBlurRadius(24)
-    shadow.setOffset(0, 8)
-    shadow.setColor(QColor(0, 0, 0, 128) if _current == DARK else QColor(27, 28, 41, 46))
+    shadow.setBlurRadius(48 if modal else 24)
+    shadow.setOffset(*((-8, 0) if leftward else (0, 16 if modal else 8)))
+    shadow.setColor(color("shadow"))
     return shadow
 
 
@@ -125,7 +138,7 @@ def icon_color(mode: QIcon.Mode, state: QIcon.State = QIcon.State.Off) -> QColor
         color.setAlphaF(0.45)
         return color
     if mode == QIcon.Mode.Selected or state == QIcon.State.On:
-        return QColor(t["accent_strong"])
+        return QColor(t["accent"])
     return QColor(t["text"] if mode == QIcon.Mode.Active else t["text2"])
 
 
@@ -156,8 +169,14 @@ def _ensure_images() -> None:
     for key, t in TOKENS.items():
         _draw_image(f"{folder}/caret-down-{key}.png", 12, t["text2"], [(3, 4.5), (6, 7.5), (9, 4.5)], 1.5)
         _draw_image(f"{folder}/caret-up-{key}.png", 12, t["text2"], [(3, 7.5), (6, 4.5), (9, 7.5)], 1.5)
-        _draw_image(f"{folder}/check-{key}.png", 12, t["on_accent"], [(2.5, 6.2), (5, 8.6), (9.5, 3.6)], 1.8)
+        _draw_image(f"{folder}/check-{key}.png", 12, t["on_primary"], [(2.5, 6.2), (5, 8.6), (9.5, 3.6)], 1.8)
     QDir.setSearchPaths("of", [folder])
+
+
+def _alpha(hex_color: str, alpha: float) -> str:
+    """Um token #rrggbb com transparência, em rgba() para o QSS."""
+    value = QColor(hex_color)
+    return f"rgba({value.red()}, {value.green()}, {value.blue()}, {alpha})"
 
 
 def build_qss(t: dict, key: str) -> str:
@@ -226,18 +245,24 @@ QPushButton#BorderedGhost {{
 /* -- tarefas (ui/widgets/task_popover.py) ----------------------------------------- */
 
 QToolButton#TasksButton {{
-    background-color: {t["accent_fill"]};
-    color: {t["accent_strong"]};
-    font-weight: 600;
+    background-color: {t["raised"]};
+    color: {t["text2"]};
     border-radius: 6px;
     padding: 0 8px;
-    min-height: 22px;
+    min-height: 20px;
+    max-height: 20px;
+    font-size: 12px;
+}}
+
+QToolButton#TasksButton:checked {{
+    background-color: {t["accent_fill"]};
+    color: {t["accent_strong"]};
 }}
 
 QFrame#TaskPopover {{
     background-color: {t["panel"]};
-    border: 1px solid {t["border_strong"]};
-    border-radius: 14px;
+    border: 1px solid {t["border"]};
+    border-radius: 12px;
 }}
 
 QLabel#TaskPopoverTitle, QLabel#TaskName {{
@@ -249,8 +274,31 @@ QFrame#TaskRow {{
     border-radius: 8px;
 }}
 
-QFrame#TaskRow[running="true"] {{
+QFrame#TaskRow[state="running"] {{
     background-color: {t["raised"]};
+}}
+
+QFrame#TaskRow[state="error"] {{
+    background-color: {t["danger_fill"]};
+}}
+
+QFrame#TaskRow QLabel {{
+    background: transparent;
+}}
+
+QLabel#TaskName[muted="true"] {{
+    color: {t["text2"]};
+    font-weight: 500;
+}}
+
+QLabel#TaskPercent {{
+    font-size: 12px;
+    font-weight: 600;
+    color: {t["text"]};
+}}
+
+QPushButton[ofVariant="ghost"][ofTone="danger"] {{
+    font-weight: 600;
 }}
 
 QProgressBar#TaskProgress {{
@@ -289,8 +337,12 @@ QStatusBar, #StatusBar {{
 }}
 
 QStatusBar QLabel {{
-    color: {t["text2"]};
+    color: {t["text3"]};
     font-size: 12px;
+}}
+
+QStatusBar QLabel[ofRole="docState"] {{
+    color: {t["text2"]};
 }}
 
 #ViewerCanvas, #ViewerCanvas > QWidget, #ViewerCanvas > QWidget > QWidget {{
@@ -310,7 +362,7 @@ QStatusBar QLabel {{
 }}
 
 #ToolStack[drawer="true"] {{
-    border: 1px solid {t["border_strong"]};
+    border: 1px solid {t["border"]};
 }}
 
 #ToolHeader {{
@@ -323,12 +375,55 @@ QLabel#IconTile {{
 }}
 
 QLabel#ToolTitle {{
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
 }}
 
 QLabel#ResultTitle {{
     font-weight: 600;
+}}
+
+/* O atalho dentro do botão principal: on_primary a 80%. */
+QLabel#PrimaryKbd {{
+    font-size: 11px;
+    color: {_alpha(t["on_primary"], 0.8)};
+}}
+
+QLabel#PrimaryKbd:disabled {{
+    color: {t["text3"]};
+}}
+
+QLabel#BusyText {{
+    font-size: 12px;
+    color: {t["text2"]};
+}}
+
+/* Cartões de rádio (Comprimir: Leve, Equilibrada, Forte). */
+QFrame#ChoiceCard {{
+    border: 1px solid {t["border"]};
+    border-radius: 8px;
+}}
+
+QFrame#ChoiceCard:hover {{
+    background-color: {t["hover"]};
+}}
+
+QFrame#ChoiceCard[selected="true"] {{
+    background-color: {t["accent_fill"]};
+    border-color: {t["accent_line"]};
+}}
+
+QFrame#ChoiceCard QRadioButton {{
+    font-weight: 500;
+}}
+
+QLabel#ChoiceBadge {{
+    font-size: 11px;
+    color: {t["accent_strong"]};
+}}
+
+QComboBox#ChoiceCombo {{
+    min-height: 36px;
 }}
 
 #ToolScroll, #ToolScroll > QWidget, #ToolBody {{
@@ -343,18 +438,103 @@ QLabel#ResultTitle {{
 
 QFrame#InputChip {{
     background-color: {t["raised"]};
-    border: 1px solid {t["border"]};
     border-radius: 8px;
 }}
 
 QFrame#InputChip[empty="true"] {{
     background: transparent;
-    border: 1.5px dashed {t["border_strong"]};
+    border: 1px dashed {t["border_strong"]};
 }}
 
+/* -- Anotações: lista de comentários (ui/pages/annotations_page.py) --------------- */
+
+/* As linhas ficam direto no painel: a lista não tem fundo nem moldura próprios. */
+QListWidget#CommentsList {{
+    background: transparent;
+    border: none;
+}}
+
+/* O comentário escolhido, aberto no lugar. */
+QFrame#CommentEditor {{
+    background-color: {t["accent_fill"]};
+    border: 1px solid {t["accent_line"]};
+    border-radius: 8px;
+}}
+
+QFrame#CommentEditor QLabel {{
+    background: transparent;
+}}
+
+/* "3 selecionados · Cor · Excluir 3": só com dois ou mais escolhidos. */
+QFrame#BulkBar {{
+    background-color: {t["raised"]};
+    border-radius: 8px;
+}}
+
+QComboBox#CompactCombo {{
+    min-height: 28px;
+    max-height: 28px;
+    border-color: transparent;
+    background: transparent;
+    color: {t["text2"]};
+}}
+
+QComboBox#CompactCombo:hover {{
+    background-color: {t["hover"]};
+    color: {t["text"]};
+}}
+
+/* Opções avançadas: a linha que abre e fecha a seção. */
+QPushButton#AdvancedToggle {{
+    min-height: 30px;
+    max-height: 30px;
+    padding: 0;
+    background: transparent;
+    text-align: left;
+}}
+
+QPushButton#AdvancedToggle:hover {{
+    background-color: {t["hover"]};
+}}
+
+QPushButton#AdvancedToggle:checked {{
+    background: transparent;
+    border-color: transparent;
+}}
+
+QPushButton#AdvancedToggle:checked:hover {{
+    background-color: {t["hover"]};
+}}
+
+QPushButton#AdvancedToggle:focus {{
+    border: 2px solid {t["focus"]};
+}}
+
+QLabel#AdvancedTitle {{
+    font-weight: 500;
+    color: {t["text"]};
+}}
+
+/* Aviso do documento: formulário (acento), assinado (sucesso), protegido (aviso) e
+   camadas (neutro). */
 #documentNotice {{
     background-color: {t["raised"]};
-    border-bottom: 1px solid {t["border"]};
+}}
+
+#documentNotice[kind="form"] {{
+    background-color: {t["accent_fill"]};
+}}
+
+#documentNotice[kind="signed"] {{
+    background-color: {t["success_fill"]};
+}}
+
+#documentNotice[kind="protected"] {{
+    background-color: {t["warning_fill"]};
+}}
+
+#documentNotice QLabel {{
+    font-size: 12px;
 }}
 
 /* -- botões de ícone (barras e trilhos) --------------------------------------- */
@@ -380,7 +560,7 @@ QToolButton:checked {{
 }}
 
 QToolButton:focus {{
-    border: 2px solid {t["accent"]};
+    border: 2px solid {t["focus"]};
 }}
 
 QToolButton[ofRole="icon"], QToolButton[ofRole="rail"] {{
@@ -417,7 +597,7 @@ QToolButton[ofRole="icon"]:disabled, QToolButton[ofRole="rail"]:disabled {{
 }}
 
 QToolButton[ofRole="icon"]:focus, QToolButton[ofRole="rail"]:focus {{
-    border: 2px solid {t["accent"]};
+    border: 2px solid {t["focus"]};
 }}
 
 QToolButton#ZoomButton {{
@@ -427,7 +607,17 @@ QToolButton#ZoomButton {{
     color: {t["text"]};
 }}
 
-QToolButton#ZoomButton::menu-indicator {{
+/* Ajuste e modo de exibição: ícone + seta, com menu. */
+QToolButton#MenuButton {{
+    padding: 0 14px 0 4px;
+}}
+
+QToolButton#NewTabButton, QToolButton#NoticeClose {{
+    min-width: 28px;
+    min-height: 28px;
+}}
+
+QToolButton#ZoomButton::menu-indicator, QToolButton#MenuButton::menu-indicator {{
     image: url(of:caret-down-{key}.png);
     subcontrol-origin: padding;
     subcontrol-position: right center;
@@ -438,53 +628,55 @@ QToolButton#ZoomButton::menu-indicator {{
 
 /* -- barra de marcação (ui/viewer/markup_bar.py) ---------------------------------- */
 
-QFrame#MarkupBar {{
+/* Com o id do visualizador: senão "#ViewerCanvas > QWidget > QWidget" (o fundo dele) ganha. */
+#ViewerCanvas QFrame#MarkupBar, QFrame#MarkupBar {{
     background-color: {t["panel"]};
-    border: 1px solid {t["border_strong"]};
-    border-radius: 14px;
+    border: 1px solid {t["border"]};
+    border-radius: 12px;
 }}
 
 QFrame#MarkupPopover {{
     background-color: {t["panel"]};
-    border: 1px solid {t["border_strong"]};
-    border-radius: 14px;
+    border: 1px solid {t["border"]};
+    border-radius: 12px;
 }}
 
 QToolButton#MarkupTool {{
     border-radius: 8px;
-    padding: 0 7px;
-    color: {t["text"]};
-    font-size: 12px;
-    font-weight: 600;
+    padding: 0;
 }}
 
+/* A ferramenta ativa: só o fundo e o ícone no acento, sem borda. */
 QToolButton#MarkupTool:checked {{
-    color: {t["accent_strong"]};
-}}
-
-QLabel#Kbd[ofVariant="accent"] {{
-    color: {t["accent_strong"]};
-    border-color: {t["accent_line"]};
-    padding: 1px 4px;
-}}
-
-QFrame#PendingBadge {{
     background-color: {t["accent_fill"]};
-    border-radius: 12px;
+    border-color: transparent;
 }}
 
-QLabel#PendingCount {{
-    background-color: {t["accent"]};
-    color: {t["on_accent"]};
-    border-radius: 8px;
-    font-size: 10px;
-    font-weight: 700;
+QToolButton#MarkupTool:focus {{
+    border: 2px solid {t["focus"]};
+}}
+
+/* Realce e Formas: o ▾ embutido no botão (uma peça só, alvo de 46 x 32). */
+QToolButton#MarkupTool[split="true"] {{
+    padding-right: 14px;
+}}
+
+QToolButton#MarkupTool[split="true"]::menu-button {{
+    width: 14px;
+    border: none;
+    background: transparent;
+}}
+
+QToolButton#MarkupTool[split="true"]::menu-arrow {{
+    image: url(of:caret-down-{key}.png);
+    width: 10px;
+    height: 10px;
 }}
 
 QLabel#PendingText {{
-    color: {t["accent_strong"]};
+    color: {t["warning"]};
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 500;
 }}
 
 QToolButton#MoreButton::menu-indicator {{
@@ -513,18 +705,20 @@ QPushButton#StatusCancel {{
 
 /* -- botões de texto ---------------------------------------------------------- */
 
+/* Secundário (o padrão). A borda transparente de 1 px reserva o lugar da de foco (2 px):
+   no :focus o padding perde 1 px e o layout não pula. */
 QPushButton {{
     min-height: 32px;
     padding: 0 14px;
     border-radius: 8px;
-    border: 1px solid {t["border"]};
+    border: 1px solid transparent;
     background-color: {t["raised"]};
     color: {t["text"]};
+    font-weight: 500;
 }}
 
 QPushButton:hover {{
     background-color: {t["hover"]};
-    border-color: {t["border_strong"]};
 }}
 
 QPushButton:pressed {{
@@ -541,44 +735,34 @@ QPushButton:checked {{
 QPushButton:disabled {{
     color: {t["text3"]};
     background-color: {t["raised"]};
-    border-color: {t["border"]};
+    border-color: transparent;
 }}
 
 QPushButton:focus {{
-    border: 2px solid {t["accent"]};
+    border: 2px solid {t["focus"]};
     padding: 0 13px;
 }}
 
+/* Principal: só um por painel, no rodapé. */
 QPushButton[ofVariant="primary"], QPushButton#primaryButton {{
     min-height: 36px;
     font-weight: 600;
-    background-color: {t["accent_fill"]};
-    border: 1px solid {t["accent"]};
-    color: {t["accent_strong"]};
+    background-color: {t["primary"]};
+    color: {t["on_primary"]};
 }}
 
-QPushButton[ofVariant="primary"]:hover, QPushButton#primaryButton:hover {{
-    background-color: {t["hover"]};
-}}
-
+QPushButton[ofVariant="primary"]:hover, QPushButton#primaryButton:hover,
 QPushButton[ofVariant="primary"]:pressed, QPushButton#primaryButton:pressed {{
-    background-color: {t["pressed"]};
-    border-color: {t["accent_strong"]};
-}}
-
-QPushButton[ofVariant="primary"]:focus, QPushButton#primaryButton:focus {{
-    border: 2px solid {t["accent_strong"]};
+    background-color: {t["primary_hover"]};
 }}
 
 QPushButton[ofVariant="primary"]:disabled, QPushButton#primaryButton:disabled {{
     background-color: {t["raised"]};
-    border-color: {t["border"]};
     color: {t["text3"]};
 }}
 
 QPushButton[ofVariant="ghost"] {{
     background: transparent;
-    border-color: transparent;
     color: {t["text2"]};
 }}
 
@@ -587,8 +771,69 @@ QPushButton[ofVariant="ghost"]:hover {{
     color: {t["text"]};
 }}
 
-QPushButton[ofVariant="ghost"]:focus {{
-    border: 2px solid {t["accent"]};
+QPushButton[ofVariant="ghost"]:pressed {{
+    background-color: {t["pressed"]};
+}}
+
+QPushButton[ofVariant="ghost"]:disabled {{
+    background: transparent;
+}}
+
+QPushButton[ofVariant="danger"] {{
+    background-color: {t["danger_fill"]};
+    color: {t["danger"]};
+    font-weight: 600;
+}}
+
+QPushButton[ofVariant="ghost"][ofTone="danger"] {{
+    color: {t["danger"]};
+}}
+
+QPushButton[ofSize="compact"] {{
+    min-height: 28px;
+    max-height: 28px;
+    padding: 0 10px;
+    border-radius: 6px;
+}}
+
+QPushButton[ofSize="compact"]:focus {{
+    padding: 0 9px;
+}}
+
+QPushButton[ofSize="mini"] {{
+    min-height: 24px;
+    max-height: 24px;
+    padding: 0 10px;
+    border-radius: 6px;
+    font-size: 12px;
+}}
+
+QPushButton[ofSize="mini"]:focus {{
+    padding: 0 9px;
+}}
+
+/* -- selos de estado (pendente, não salvo, salvo) ------------------------------- */
+
+QLabel[ofRole="badge"] {{
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+}}
+
+QLabel[ofRole="badge"][state="pending"] {{
+    border: 1px dashed {t["warning"]};
+    color: {t["warning"]};
+}}
+
+QLabel[ofRole="badge"][state="unsaved"] {{
+    background-color: {t["accent_fill"]};
+    color: {t["accent_strong"]};
+}}
+
+QLabel[ofRole="badge"][state="saved"] {{
+    background-color: {t["success_fill"]};
+    color: {t["success"]};
 }}
 
 /* -- campos ------------------------------------------------------------------- */
@@ -596,8 +841,8 @@ QPushButton[ofVariant="ghost"]:focus {{
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QPlainTextEdit, QTextEdit {{
     min-height: 32px;
     padding: 0 10px;
-    border-radius: 8px;
-    border: 1px solid {t["border"]};
+    border-radius: 6px;
+    border: 1px solid {t["border_strong"]};
     background-color: {t["field"]};
     color: {t["text"]};
     selection-background-color: {t["accent_fill"]};
@@ -610,16 +855,27 @@ QPlainTextEdit, QTextEdit {{
 
 QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover, QDateEdit:hover,
 QPlainTextEdit:hover, QTextEdit:hover {{
-    border-color: {t["border_strong"]};
+    border-color: {t["text3"]};
+}}
+
+/* Campo com erro: a mensagem embaixo diz como corrigir. */
+QLineEdit[state="error"], QPlainTextEdit[state="error"] {{
+    border: 2px solid {t["danger"]};
+    padding: 0 9px;
+}}
+
+QLabel[ofRole="error"] {{
+    font-size: 12px;
+    color: {t["danger"]};
 }}
 
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus {{
-    border: 2px solid {t["accent"]};
+    border: 2px solid {t["focus"]};
     padding: 0 9px;
 }}
 
 QPlainTextEdit:focus, QTextEdit:focus {{
-    border: 2px solid {t["accent"]};
+    border: 2px solid {t["focus"]};
     padding: 5px 9px;
 }}
 
@@ -646,7 +902,7 @@ QComboBox::down-arrow {{
 
 QComboBox QAbstractItemView {{
     background-color: {t["panel"]};
-    border: 1px solid {t["border_strong"]};
+    border: 1px solid {t["border"]};
     border-radius: 8px;
     padding: 4px;
     selection-background-color: {t["accent_fill"]};
@@ -710,15 +966,15 @@ QCheckBox::indicator:hover, QRadioButton::indicator:hover {{
 }}
 
 QCheckBox::indicator:checked {{
-    background-color: {t["accent"]};
-    border-color: {t["accent"]};
+    background-color: {t["primary"]};
+    border-color: {t["primary"]};
     image: url(of:check-{key}.png);
 }}
 
 QCheckBox::indicator:focus, QRadioButton::indicator:focus {{
     width: 12px;
     height: 12px;
-    border: 2px solid {t["accent_strong"]};
+    border: 2px solid {t["focus"]};
 }}
 
 QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {{
@@ -746,7 +1002,7 @@ QRadioButton::indicator:checked {{
 }}
 
 QRadioButton::indicator:checked:focus {{
-    border-color: {t["accent_strong"]};
+    border-color: {t["focus"]};
 }}
 
 /* -- segmentado e chips --------------------------------------------------------- */
@@ -761,7 +1017,7 @@ QRadioButton::indicator:checked:focus {{
 #Segmented QToolButton {{
     min-height: 28px;
     border-radius: 6px;
-    border: 0;
+    border: 1px solid transparent;
     background: transparent;
     color: {t["text2"]};
     padding: 0 10px;
@@ -775,21 +1031,30 @@ QRadioButton::indicator:checked:focus {{
 #Segmented QToolButton:checked {{
     background-color: {t["raised"]};
     color: {t["text"]};
-    font-weight: 600;
-    border: 1px solid {t["border_strong"]};
+    font-weight: 500;
 }}
 
 #Segmented QToolButton:focus {{
-    border: 2px solid {t["accent"]};
+    border: 2px solid {t["focus"]};
+    padding: 0 9px;
 }}
 
+/* Pílula de filtro (28 px; 24 com ofSize="small", só onde não é alvo de clique). */
 QToolButton[ofRole="chip"] {{
     min-height: 28px;
+    max-height: 28px;
     border-radius: 14px;
     padding: 0 12px;
     border: 1px solid {t["border"]};
-    background-color: {t["panel"]};
+    background: transparent;
     color: {t["text2"]};
+}}
+
+QToolButton[ofRole="chip"][ofSize="small"] {{
+    min-height: 24px;
+    max-height: 24px;
+    border-radius: 12px;
+    padding: 0 10px;
 }}
 
 QToolButton[ofRole="chip"]:hover {{
@@ -804,7 +1069,7 @@ QToolButton[ofRole="chip"]:checked {{
 }}
 
 QToolButton[ofRole="chip"]:focus {{
-    border: 2px solid {t["accent"]};
+    border: 2px solid {t["focus"]};
 }}
 
 /* -- listas, árvores e tabelas -------------------------------------------------- */
@@ -830,7 +1095,7 @@ QTreeView::item:hover:!selected {{
 QListWidget::item:selected, QListView::item:selected, QTreeWidget::item:selected, QTreeView::item:selected,
 QTableWidget::item:selected, QTableView::item:selected {{
     background-color: {t["accent_fill"]};
-    color: {t["text"]};
+    color: {t["accent_strong"]};
 }}
 
 QHeaderView::section {{
@@ -856,14 +1121,13 @@ QListWidget#thumbnailList {{
 /* -- Início e Ferramentas (ui/home_page.py, ui/tools_center.py) ------------------- */
 
 QLabel#HomeTitle {{
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 600;
 }}
 
 QFrame#RecentBox {{
     background-color: {t["panel"]};
-    border: 1px solid {t["border"]};
-    border-radius: 14px;
+    border-radius: 12px;
 }}
 
 QListWidget#RecentList, QListWidget#PaletteList {{
@@ -873,7 +1137,7 @@ QListWidget#RecentList, QListWidget#PaletteList {{
 }}
 
 QToolButton#ShortcutCard {{
-    border-radius: 14px;
+    border-radius: 12px;
 }}
 
 QLabel#ShortcutIconTile {{
@@ -898,32 +1162,113 @@ QLabel#ToolGroupTitle {{
 }}
 
 QLineEdit#ToolSearch {{
-    min-height: 34px;
+    min-height: 44px;
+    max-height: 44px;
+    border-radius: 10px;
+    font-size: 14px;
 }}
 
-QToolButton[ofRole="chip"] {{
-    min-height: 26px;
-    border-radius: 14px;
-    padding: 0 12px;
-    border: 1px solid {t["border"]};
+/* Aba Ferramentas: cartões de grupo (4 x 2), linhas de ferramenta e "Mais usadas". */
+QFrame#GroupCard {{
     background-color: {t["panel"]};
-    color: {t["text2"]};
+    border-radius: 12px;
 }}
 
-QToolButton[ofRole="chip"]:hover {{
-    background-color: {t["raised"]};
+QLabel#GroupTitle {{
+    font-size: 14px;
+    font-weight: 600;
+}}
+
+QToolButton#ToolRow {{
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 0 6px;
+    color: {t["text"]};
+    text-align: left;
+}}
+
+QToolButton#ToolRow:hover {{
+    background-color: {t["hover"]};
+}}
+
+QToolButton#ToolRow:pressed {{
+    background-color: {t["pressed"]};
+}}
+
+QToolButton#ToolRow:focus {{
+    border: 2px solid {t["focus"]};
+    padding: 0 5px;
+}}
+
+QLabel#ToolReason {{
+    font-size: 12px;
+    color: {t["text3"]};
+}}
+
+QToolButton#FavoritePill {{
+    min-height: 32px;
+    max-height: 32px;
+    padding: 0 12px;
+    border-radius: 16px;
+    border: 1px solid transparent;
+    background-color: {t["panel"]};
     color: {t["text"]};
 }}
 
-QToolButton[ofRole="chip"]:checked {{
+QToolButton#FavoritePill:hover {{
+    background-color: {t["hover"]};
+}}
+
+QToolButton#FavoritePill:focus {{
+    border: 2px solid {t["focus"]};
+}}
+
+/* Início: "Ou comece pelo que você quer fazer". */
+/* Os seis atalhos do Início cabem numa linha da coluna de 880 px também em português: texto de
+   12 px e um respiro menor do lado do ícone, que já tem folga dentro dos 16 px dele. */
+QPushButton#StarterButton {{
+    min-height: 36px;
+    max-height: 36px;
+    padding: 0 10px 0 8px;
+    font-size: 12px;
+    background-color: {t["raised"]};
+}}
+
+QPushButton#StarterButton:hover {{
+    background-color: {t["hover"]};
+}}
+
+/* Coluna rápida: ícone de 20 e rótulo de 11 px; ativo em accent_fill com o rótulo forte. */
+QToolButton#QuickTool {{
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 4px 0 2px 0;
+    font-size: 11px;
+    color: {t["text2"]};
+    background: transparent;
+}}
+
+QToolButton#QuickTool:hover {{
+    background-color: {t["hover"]};
+    color: {t["text"]};
+}}
+
+QToolButton#QuickTool:pressed {{
+    background-color: {t["pressed"]};
+}}
+
+QToolButton#QuickTool:checked {{
     background-color: {t["accent_fill"]};
-    border-color: {t["accent_line"]};
     color: {t["accent_strong"]};
     font-weight: 600;
 }}
 
-QToolButton[ofRole="chip"]:focus {{
-    border: 2px solid {t["accent"]};
+QToolButton#QuickTool:focus {{
+    border: 2px solid {t["focus"]};
+}}
+
+QComboBox#ModesCombo {{
+    min-height: 32px;
 }}
 
 /* -- Organizar páginas (ui/pages/organize_page.py) ------------------------------- */
@@ -937,13 +1282,14 @@ QListWidget#OrganizerView {{
     background-color: {t["canvas"]};
     border: none;
     outline: none;
+    padding: 24px 28px;
 }}
 
 QLabel#SelectionBadge {{
     background-color: {t["accent_fill"]};
     color: {t["accent_strong"]};
     border-radius: 12px;
-    padding: 3px 10px;
+    padding: 0 10px;
     font-size: 12px;
     font-weight: 600;
 }}
@@ -959,22 +1305,47 @@ QToolButton[ofRole="toolbar"]:disabled {{
     color: {t["text3"]};
 }}
 
+QToolButton[ofRole="toolbar"][ofTone="danger"] {{
+    color: {t["danger"]};
+}}
+
+/* Girar: o ▾ embutido, com "Girar à esquerda". */
+QToolButton[ofRole="toolbar"]::menu-button {{
+    width: 16px;
+    border: none;
+    background: transparent;
+}}
+
+QToolButton[ofRole="toolbar"]::menu-arrow {{
+    image: url(of:caret-down-{key}.png);
+    width: 10px;
+    height: 10px;
+}}
+
+QToolButton[ofRole="toolbar"][popupMode="1"] {{
+    padding-right: 20px;
+}}
+
 QListWidget#ChangesList {{
     background: transparent;
     border: none;
 }}
 
-#ChangeRow {{
+QFrame#ChangeRow {{
     background-color: {t["raised"]};
     border-radius: 8px;
+}}
+
+QFrame#ChangeRow QLabel {{
+    background: transparent;
 }}
 
 /* -- paleta de comandos (ui/shortcuts.py) ---------------------------------------- */
 
 QFrame#CommandPalette {{
     background-color: {t["panel"]};
-    border: 1px solid {t["border_strong"]};
-    border-radius: 14px;
+    border: 1px solid {t["border"]};
+    border-radius: 12px;
 }}
 
 #PaletteField {{
@@ -1056,9 +1427,9 @@ QTabBar#DocTabs {{
 }}
 
 QTabBar#DocTabs::tab {{
-    height: 30px;
+    height: 32px;
     min-width: 64px;
-    max-width: 220px;
+    max-width: 200px;
     padding: 0 6px 0 10px;
     margin: 0 1px;
     border-radius: 8px;
@@ -1074,11 +1445,10 @@ QTabBar#DocTabs::tab:hover:!selected {{
 QTabBar#DocTabs::tab:selected {{
     background-color: {t["raised"]};
     color: {t["text"]};
-    font-weight: 600;
 }}
 
 QTabBar#DocTabs::tab:focus {{
-    border: 2px solid {t["accent"]};
+    border: 2px solid {t["focus"]};
 }}
 
 QTabBar#DocTabs[compact="true"]::tab {{
@@ -1118,7 +1488,7 @@ QPushButton#CommandLauncher:hover {{
 }}
 
 QPushButton#CommandLauncher:focus {{
-    border: 2px solid {t["accent"]};
+    border: 2px solid {t["focus"]};
     padding: 0 9px;
 }}
 
@@ -1143,7 +1513,8 @@ QMenuBar#MainMenu {{
 }}
 
 QMenuBar::item {{
-    padding: 4px 8px;
+    min-height: 28px;
+    padding: 0 8px;
     border-radius: 6px;
     background: transparent;
     color: {t["text2"]};
@@ -1227,11 +1598,28 @@ QAbstractScrollArea::corner {{
 }}
 
 QToolTip {{
-    background-color: {t["panel"]};
+    background-color: {t["raised"]};
     color: {t["text"]};
-    border: 1px solid {t["border_strong"]};
-    border-radius: 6px;
-    padding: 4px 8px;
+    border: 1px solid {t["border"]};
+    border-radius: 8px;
+    padding: 6px 10px;
+}}
+
+/* Dica rica (ui/widgets/rich_tip.py): cartão em raised, com o nome em 600 e a frase em 12 px. */
+QFrame#RichTip {{
+    background-color: {t["raised"]};
+    border: 1px solid {t["border"]};
+    border-radius: 8px;
+}}
+
+QLabel#RichTipTitle {{
+    font-weight: 600;
+    color: {t["text"]};
+}}
+
+QLabel#RichTipBody {{
+    font-size: 12px;
+    color: {t["text2"]};
 }}
 
 QProgressBar {{
@@ -1291,9 +1679,16 @@ QLabel#sectionTitle {{
     font-weight: 600;
 }}
 
-QLabel[ofRole="section"] {{
-    font-size: 11px;
+/* Rótulo de seção em frase normal ("Arquivo", "Onde fica o resultado"), sem caixa alta, e o
+   rótulo de um campo, acima dele e sem dois-pontos ("Texto da nota"). */
+QLabel[ofRole="section"], QLabel[ofRole="field"] {{
+    font-size: 12px;
     font-weight: 600;
+    color: {t["text2"]};
+}}
+
+QLabel[ofRole="help"] {{
+    font-size: 12px;
     color: {t["text3"]};
 }}
 
@@ -1328,24 +1723,26 @@ QToolButton[ofRole="card"]:hover, QToolButton#toolCard:hover {{
 }}
 
 QToolButton[ofRole="card"]:focus, QToolButton#toolCard:focus {{
-    border: 2px solid {t["accent"]};
+    border: 2px solid {t["focus"]};
 }}
 
 QFrame[ofRole="result"][state="success"] {{
     background-color: {t["success_fill"]};
-    border: 1px solid {t["success"]};
     border-radius: 8px;
 }}
 
 QFrame[ofRole="result"][state="error"] {{
     background-color: {t["danger_fill"]};
-    border: 1px solid {t["danger"]};
+    border-radius: 8px;
+}}
+
+QFrame[ofRole="result"][state="warning"] {{
+    background-color: {t["warning_fill"]};
     border-radius: 8px;
 }}
 
 QFrame[ofRole="result"][state="info"] {{
     background-color: {t["raised"]};
-    border: 1px solid {t["border_strong"]};
     border-radius: 8px;
 }}
 
@@ -1360,7 +1757,7 @@ QLabel#EmptyTitle {{
 
 QFrame#DropZone {{
     border: 1.5px dashed {t["border_strong"]};
-    border-radius: 14px;
+    border-radius: 12px;
     background-color: {t["panel"]};
 }}
 
@@ -1390,8 +1787,8 @@ def _palette(t: dict) -> QPalette:
         (roles.Dark, "border_strong"),
         (roles.Link, "accent_strong"),
         (roles.LinkVisited, "accent_strong"),
-        (roles.Highlight, "accent"),
-        (roles.HighlightedText, "on_accent"),
+        (roles.Highlight, "primary"),
+        (roles.HighlightedText, "on_primary"),
         (roles.PlaceholderText, "text3"),
     ):
         palette.setColor(role, QColor(t[key]))

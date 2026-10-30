@@ -19,8 +19,12 @@ from typing import cast
 
 from PySide6.QtCore import QEvent, QPoint, QSize, Qt, Signal
 from PySide6.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
     QLabel,
+    QListView,
+    QMenu,
+    QPushButton,
     QSplitter,
     QStackedWidget,
     QToolButton,
@@ -36,27 +40,30 @@ from ui.i18n import tr
 from ui.measure_state import MeasureState
 from ui.redaction_state import RedactionState
 from ui.tasks import TaskManager
-from ui.tool_panel import ToolPanel
+from ui.tool_panel import ToolPanel, _containing_layout
 from ui.top_bar import BusySpinner, TabCloseButton
-from ui.tools import AREA_PICK_PAGES, QUICK_TOOLS, ROW_OF, SECTIONS
+from ui.preferences import preferences
+from ui.tools import AREA_PICK_PAGES, ROW_OF, SECTIONS, SELECTOR_OF, TOOLS, Mode, mode_for, tool_of_page
 from ui.viewer.markup_bar import TOP_INSET, MarkupBar
 from ui.viewer.pdf_viewer import PdfViewer
-from ui.viewer.viewer_icons import build_print_icon, build_save_icon, build_thumbnails_icon
+from ui.viewer.viewer_icons import build_print_icon, build_thumbnails_icon
 from ui.widget_state import capture_state, restore_state
+from ui.widgets.rich_tip import set_rich_tip
 from ui.widgets.task_status import TaskStatus
 
-PANEL_WIDTH = 344
+PANEL_WIDTH = 340
 PANEL_MIN_WIDTH = 300
 PANEL_MAX_WIDTH = 480
-SIDE_WIDTH = 176
-SIDE_MIN_WIDTH = 140
+SIDE_WIDTH = 150
+SIDE_MIN_WIDTH = 130
 SIDE_MAX_WIDTH = 320
-LEFT_RAIL_WIDTH = 48
-RIGHT_RAIL_WIDTH = 52
+LEFT_RAIL_WIDTH = 44
+RIGHT_RAIL_WIDTH = 68  # a coluna rápida com rótulos; 48 na janela estreita, só com ícones
+RIGHT_RAIL_COMPACT = 48
 VIEWER_MIN_WIDTH = 320
 CENTER_MIN_WIDTH = 640  # menos que isso com uma ferramenta aberta: as miniaturas se recolhem
 CROWDED_WIDTH = 1280  # abaixo disso, ferramenta aberta sempre recolhe as miniaturas
-NARROW_WIDTH = 1180  # abaixo disso, parte da barra do visualizador vai para o "..." e o painel vira gaveta
+NARROW_WIDTH = 1100  # abaixo disso, parte da barra do visualizador vai para o "...", o painel vira gaveta e a coluna rápida perde os rótulos
 DRAWER_WIDTH = 340
 MARKUP_WIDTH = 960  # o centro que a barra de marcação inteira precisa: as miniaturas cedem antes
 
@@ -73,7 +80,7 @@ def _rail_button(icon, tooltip: str) -> QToolButton:
     button.setProperty("ofRole", "rail")
     button.setIcon(icon)
     button.setIconSize(QSize(18, 18))
-    button.setFixedSize(36, 36)
+    button.setFixedSize(32, 32)
     button.setCheckable(True)
     button.setAutoRaise(True)
     button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -86,6 +93,7 @@ class DocumentTab(QWidget):
     changed = Signal()  # nome, histórico ou operação mudaram: a janela atualiza os menus e a aba
     tool_changed = Signal()
     all_tools_requested = Signal()
+    quick_tools_changed = Signal(list)  # "Remover da coluna": a janela grava e refaz as colunas
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -98,14 +106,19 @@ class DocumentTab(QWidget):
         self.tasks = TaskManager(self)  # o run_task das ferramentas acha o da aba subindo pelos pais
         self._pages: dict[int, QWidget] = {}  # linha de SECTIONS -> ferramenta já construída
         self._tool = -1
+        self._tool_id = ""  # a ferramenta aberta (id em ui.tools.TOOLS) e o modo dela
+        self._mode = 0
         self._crowded = False  # ferramenta aberta sem espaço para as miniaturas
         self._side_auto_hidden = False  # as miniaturas se recolheram sozinhas (voltam depois)
         self._drawer = False  # janela estreita: o painel flutua sobre o documento
         self._drawer_hidden = False  # gaveta fechada com Esc ou clique na página (a ferramenta segue aberta)
         self._closing = False  # o painel está encolhendo até sumir
-        self._tool_keys: dict[int, str] = {}  # o atalho de cada ferramenta, para as dicas do trilho
+        self._tool_keys: dict[str, str] = {}  # o atalho de cada ferramenta, para as dicas da coluna rápida
+        self._compact_rail = False
         self._busy_panel: ToolPanel | None = None
         self._center_widgets: list[QWidget] = []  # o que uma ferramenta põe no lugar do visualizador
+        self._last_mode: dict[str, int] = {}
+        self._entering_mode: tuple[str, int] | None = None  # open_mode já escolheu o modo
 
         self._build_ui()
         self.task_status = TaskStatus(self.tasks)  # vai para a barra de status da janela
@@ -135,15 +148,26 @@ class DocumentTab(QWidget):
         )
         self.viewer.setMinimumWidth(VIEWER_MIN_WIDTH)
         self.viewer.verify_signatures_requested.connect(self._verify_signatures)
+        self.viewer.remove_password_requested.connect(self._remove_password)
         self.viewer.thumbnails_button.hide()  # a coluna de ícones da esquerda faz o papel dele
-        # Salvar e Imprimir logo depois de "Abrir"; a janela liga os cliques.
-        self.save_button = self.viewer._tool_button(build_save_icon(), "Salvar (Ctrl+S)")
-        self.save_button.setEnabled(False)
+        # Na ponta da barra: Imprimir e o selo de estado ("✓ Salvo" ou "● Alterações não
+        # salvas" + Salvar). A janela liga os cliques.
         self.print_button = self.viewer._tool_button(build_print_icon(), "Imprimir... (Ctrl+P)")
         self.print_button.setEnabled(False)
+        self.state_badge = QLabel()
+        self.state_badge.setProperty("ofRole", "badge")
+        self.state_badge.setFixedHeight(22)
+        self.save_button = QPushButton()
+        self.save_button.setProperty("ofVariant", "primary")
+        self.save_button.setProperty("ofSize", "mini")
+        self.save_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.save_button.setEnabled(False)
         toolbar_layout = self.viewer.toolbar.layout()
-        toolbar_layout.insertWidget(1, self.save_button)
-        toolbar_layout.insertWidget(2, self.print_button)
+        toolbar_layout.addWidget(self.print_button)
+        toolbar_layout.addSpacing(4)
+        toolbar_layout.addWidget(self.state_badge)
+        toolbar_layout.addWidget(self.save_button)
+        self._narrow = False
 
         # Um painel por ferramenta, construído na primeira vez em que ela é aberta.
         self.stack = QStackedWidget()
@@ -202,6 +226,7 @@ class DocumentTab(QWidget):
         self.left_rail.setFixedWidth(LEFT_RAIL_WIDTH)
         left_layout = QVBoxLayout(self.left_rail)
         left_layout.setContentsMargins(6, 8, 6, 8)
+        left_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         left_layout.setSpacing(4)
         self._left_buttons = []
         for index, (icon, tooltip) in enumerate(_LEFT_RAIL):
@@ -215,21 +240,19 @@ class DocumentTab(QWidget):
         self.right_rail.setObjectName("RightRail")
         self.right_rail.setFixedWidth(RIGHT_RAIL_WIDTH)
         right_layout = QVBoxLayout(self.right_rail)
-        right_layout.setContentsMargins(8, 8, 8, 8)
+        right_layout.setContentsMargins(6, 8, 6, 8)
         right_layout.setSpacing(2)
-        self._quick_buttons: dict[int, QToolButton] = {}
-        for class_name in QUICK_TOOLS:
-            row = ROW_OF[class_name]
-            icon, title = SECTIONS[row][0], SECTIONS[row][1]
-            button = _rail_button(getattr(sidebar_icons, icon)(), title)
-            button.clicked.connect(lambda _checked=False, r=row: self._on_quick_tool(r))
-            right_layout.addWidget(button)
-            self._quick_buttons[row] = button
+        right_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._quick_layout = QVBoxLayout()
+        self._quick_layout.setSpacing(2)
+        right_layout.addLayout(self._quick_layout)
         right_layout.addStretch()
-        self.all_tools_button = _rail_button(sidebar_icons.build_all_tools_icon(), "Todas as ferramentas")
+        self._quick_buttons: dict[str, QToolButton] = {}
+        self.all_tools_button = self._quick_button(sidebar_icons.build_all_tools_icon(), "Todas")
         self.all_tools_button.setCheckable(False)
         self.all_tools_button.clicked.connect(self.all_tools_requested)
         right_layout.addWidget(self.all_tools_button)
+        self.set_quick_tools(preferences().quick_tools())
 
         # A barra do visualizador fica só sobre o documento, não sobre os painéis.
         self.center = QWidget()
@@ -279,13 +302,75 @@ class DocumentTab(QWidget):
             self.viewer.show_side_panel(True)
         self._update_left_rail()
 
-    def set_tool_shortcuts(self, keys: dict[int, str]) -> None:
-        """As dicas do trilho da direita: o nome da ferramenta e o atalho dela, se houver."""
+    # -- coluna rápida ---------------------------------------------------------------
+
+    def _quick_button(self, icon, label: str) -> QToolButton:
+        """Um item da coluna rápida: ícone de 20 e rótulo de 11 px embaixo (56 x 48); só o
+        ícone (36 x 36) na janela estreita."""
+        button = QToolButton()
+        button.setObjectName("QuickTool")
+        button.setIcon(icon)
+        button.setIconSize(QSize(20, 20))
+        button.setCheckable(True)
+        button.setAutoRaise(True)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setProperty("label", label)
+        self._style_quick_button(button)
+        return button
+
+    def _style_quick_button(self, button: QToolButton) -> None:
+        compact = self._compact_rail
+        button.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonIconOnly if compact else Qt.ToolButtonStyle.ToolButtonTextUnderIcon
+        )
+        button.setText("" if compact else tr(button.property("label")))
+        button.setFixedSize(*((36, 36) if compact else (60, 48)))  # 60: "Comprimir" inteiro a 11 px
+
+    def set_quick_tools(self, tools: list[str]) -> None:
+        """Monta a coluna rápida com as ferramentas fixadas (ver Preferences.quick_tools)."""
+        for button in self._quick_buttons.values():
+            self._quick_layout.removeWidget(button)
+            button.deleteLater()
+        self._quick_buttons = {}
+        for tool_id in tools:
+            tool = TOOLS[tool_id]
+            button = self._quick_button(getattr(sidebar_icons, tool.icon)(), tool.short or tool.title)
+            button.clicked.connect(lambda _checked=False, t=tool_id: self._on_quick_tool(t))
+            button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            button.customContextMenuRequested.connect(lambda _pos, t=tool_id: self._quick_menu(t))
+            self._quick_layout.addWidget(button, 0, Qt.AlignmentFlag.AlignHCenter)
+            self._quick_buttons[tool_id] = button
+        self.set_tool_shortcuts(self._tool_keys)
+        self._update_quick_buttons()
+        self._update_left_rail()
+
+    def _quick_menu(self, tool_id: str) -> None:
+        """Menu de contexto de um item da coluna rápida: "Remover da coluna"."""
+        menu = QMenu(self)
+        menu.addAction(tr("Remover da coluna")).triggered.connect(lambda: self.quick_tools_changed.emit(
+            [tool for tool in preferences().quick_tools() if tool != tool_id]
+        ))
+        menu.exec(self.cursor().pos())
+
+    def set_compact_rail(self, compact: bool) -> None:
+        if compact == self._compact_rail:
+            return
+        self._compact_rail = compact
+        self.right_rail.setFixedWidth(RIGHT_RAIL_COMPACT if compact else RIGHT_RAIL_WIDTH)
+        for button in [*self._quick_buttons.values(), self.all_tools_button]:
+            self._style_quick_button(button)
+
+    def set_tool_shortcuts(self, keys: dict[str, str]) -> None:
+        """As dicas da coluna rápida: o nome da ferramenta, o atalho dela (se houver) e a
+        descrição."""
         self._tool_keys = keys
-        for row, button in self._quick_buttons.items():
-            name = tr(SECTIONS[row][1])
-            button.setToolTip(f"{name} ({keys[row]})" if keys.get(row) else name)
+        for tool_id, button in self._quick_buttons.items():
+            tool = TOOLS[tool_id]
+            name = tr(tool.title)
+            set_rich_tip(button, name, tr(tool.description), keys.get(tool_id, ""), side="left")
             button.setAccessibleName(name)
+        set_rich_tip(self.all_tools_button, tr("Todas as ferramentas"), side="left")
+        self.all_tools_button.setAccessibleName(tr("Todas as ferramentas"))
 
     def _update_side_header(self, *_args):
         side_panel = self.viewer.side_panel
@@ -314,8 +399,15 @@ class DocumentTab(QWidget):
     # -- ferramentas ---------------------------------------------------------------
 
     def current_tool(self) -> int:
-        """A linha (em `ui.tools.SECTIONS`) da ferramenta aberta, ou -1."""
+        """A linha (em `ui.tools.SECTIONS`) da tela aberta, ou -1."""
         return self._tool
+
+    def current_tool_id(self) -> str:
+        """A ferramenta aberta (id em `ui.tools.TOOLS`), ou ""."""
+        return self._tool_id if self._tool >= 0 else ""
+
+    def current_mode(self) -> int:
+        return self._mode
 
     def _page_content(self, row: int) -> QWidget:
         _icon, _title, _subtitle, module_name, class_name = SECTIONS[row]
@@ -335,9 +427,17 @@ class DocumentTab(QWidget):
         page = self._pages.get(row)
         if page is None:
             page = self._page_content(row)
-            icon, title, subtitle, _module, _class = SECTIONS[row]
-            panel = ToolPanel(getattr(sidebar_icons, icon)(), tr(title), tr(subtitle), page, self.session, self.tasks)
+            class_name = SECTIONS[row][4]
+            tool = tool_of_page(class_name)
+            panel = ToolPanel(
+                getattr(sidebar_icons, tool.icon)(), tr(tool.title), tr(tool.description), page, self.session, self.tasks
+            )
+            panel.set_modes([tr(mode.label) for mode in tool.modes], 0, lambda i, t=tool.id: self.open_mode(t, i))
             panel.close_requested.connect(self.close_tool)
+            selector = self._selector(page, class_name)
+            if selector is not None and any(mode.items for mode in tool.modes if mode.page == class_name):
+                # A tela trocou a opção sozinha (o "Ver" do aviso de assinatura): o modo segue.
+                selector.currentIndexChanged.connect(lambda _index, r=row: self._follow_selector(r))
             old = self.stack.widget(row)
             self.stack.removeWidget(old)
             self.stack.insertWidget(row, panel)
@@ -365,9 +465,74 @@ class DocumentTab(QWidget):
     def pages(self) -> dict[int, QWidget]:
         return self._pages
 
-    def open_tool(self, row: int) -> QWidget:
-        """Abre a ferramenta no painel da direita, com a faixa do nome dela no topo."""
+    # -- modos ---------------------------------------------------------------------
+
+    @staticmethod
+    def _selector(page: QWidget, class_name: str) -> QComboBox | None:
+        selector = getattr(page, SELECTOR_OF.get(class_name, "mode_combo"), None)
+        return selector if isinstance(selector, QComboBox) else None
+
+    def _show_mode(self, page: QWidget, mode: Mode) -> None:
+        """Deixa no seletor da tela só as opções do modo; com uma só, o seletor (e o rótulo
+        dele) some, porque o modo no topo do painel já diz qual é."""
+        selector = self._selector(page, mode.page)
+        if selector is None:
+            return
+        items = mode.items or tuple(range(selector.count()))
+        view = cast(QListView, selector.view())
+        for index in range(selector.count()):
+            view.setRowHidden(index, index not in items)
+        if selector.currentIndex() not in items:
+            selector.setCurrentIndex(items[0])
+        visible = len(items) > 1
+        selector.setVisible(visible)
+        page_layout = page.layout()
+        layout = _containing_layout(page_layout, selector) if page_layout is not None else None
+        if layout is not None:
+            before = layout.itemAt(layout.indexOf(selector) - 1)
+            label = before.widget() if before is not None else None
+            if isinstance(label, QLabel) and not label.objectName():
+                label.setVisible(visible)
+
+    def open_mode(self, tool_id: str, index: int = 0, keep_selection: bool = False) -> QWidget:
+        """Abre a ferramenta `tool_id` (de ui.tools.TOOLS) no modo `index`. Vindo de outro modo,
+        o seletor da tela começa na primeira opção do modo ("Do PDF para…" começa no Word)."""
+        mode = TOOLS[tool_id].modes[index]
+        row = ROW_OF[mode.page]
         page = self.page(row)
+        self._entering_mode = (tool_id, index)
+        selector = self._selector(page, mode.page)
+        if selector is not None and mode.items and not keep_selection and (tool_id, index) != (self.current_tool_id(), self._mode):
+            selector.setCurrentIndex(mode.items[0])
+        self._show_mode(page, mode)
+        try:
+            return self.open_tool(row)
+        finally:
+            self._entering_mode = None
+
+    def _follow_selector(self, row: int) -> None:
+        if row != self._tool or self._entering_mode:
+            return
+        class_name = SECTIONS[row][4]
+        selector = self._selector(self._pages[row], class_name)
+        tool, index = mode_for(class_name, selector.currentIndex() if selector is not None else None)
+        if (tool.id, index) != (self._tool_id, self._mode):
+            self.open_mode(tool.id, index, keep_selection=True)
+
+    def open_tool(self, row: int) -> QWidget:
+        """Abre a tela no painel da direita, com o nome e os modos da ferramenta no topo."""
+        page = self.page(row)
+        class_name = SECTIONS[row][4]
+        entering = self._entering_mode
+        if entering is None:
+            selector = self._selector(page, class_name)
+            tool, mode = mode_for(class_name, selector.currentIndex() if selector is not None else None)
+            self._show_mode(page, tool.modes[mode])
+            entering = (tool.id, mode)
+        if entering[0] != self.current_tool_id():
+            preferences().note_tool_use(entering[0])
+        self._tool_id, self._mode = entering
+        self.panel(row).set_current_mode(self._mode)
         first_time = self._tool < 0
         appearing = not self.stack.isVisibleTo(self) or self._closing
         self._closing = False
@@ -380,8 +545,10 @@ class DocumentTab(QWidget):
             if appearing:
                 self._slide_drawer_in()
         else:
-            # Formulário mais largo que os 344 px (uma lista, uma tabela): o painel alarga até 480.
-            body = self.panel(row).body.minimumSizeHint().width()
+            # Formulário mais largo que os 344 px (uma lista, uma tabela): o painel alarga até 480,
+            # contando a barra de rolagem, que come a largura do formulário quando aparece.
+            panel = self.panel(row)
+            body = panel.body.minimumSizeHint().width() + panel.scroll_area.verticalScrollBar().sizeHint().width()
             wanted = max(PANEL_WIDTH, min(PANEL_MAX_WIDTH, body))
             sizes = self.splitter.sizes()
             if appearing:
@@ -441,7 +608,7 @@ class DocumentTab(QWidget):
 
     def _drawer_shadow(self) -> None:
         if self._drawer:
-            self.stack.setGraphicsEffect(theme.floating_shadow(self.stack))
+            self.stack.setGraphicsEffect(theme.floating_shadow(self.stack, leftward=True))
 
     # -- larguras ---------------------------------------------------------------------
 
@@ -455,11 +622,15 @@ class DocumentTab(QWidget):
         a barra do visualizador inteira), as miniaturas se recolhem e voltam quando houver
         espaço de novo."""
         width = self.width()
+        self.set_compact_rail(width < NARROW_WIDTH)
         self.viewer.set_compact(width < NARROW_WIDTH)
         self._set_drawer(width < NARROW_WIDTH)
+        if (width < NARROW_WIDTH) != self._narrow:
+            self._narrow = width < NARROW_WIDTH
+            self.update_state_badge()
         # Pelas larguras padrão dos painéis: o divisor já espreme os dois quando falta espaço.
         tool_open = self._tool >= 0
-        center = width - LEFT_RAIL_WIDTH - RIGHT_RAIL_WIDTH - SIDE_WIDTH - PANEL_WIDTH
+        center = width - LEFT_RAIL_WIDTH - self.right_rail.width() - SIDE_WIDTH - PANEL_WIDTH
         # O centro precisa caber a barra do visualizador inteira (uns 700 px), não só 640, e a
         # de marcação, com Anotações aberta.
         needed = max(CENTER_MIN_WIDTH, self.viewer.toolbar.minimumSizeHint().width())
@@ -492,7 +663,7 @@ class DocumentTab(QWidget):
         self.stack.setProperty("drawer", on)
         if on:
             self.stack.setParent(self)
-            self.stack.setGraphicsEffect(theme.floating_shadow(self.stack))
+            self.stack.setGraphicsEffect(theme.floating_shadow(self.stack, leftward=True))
             self._place_drawer()
         else:
             self.stack.setGraphicsEffect(None)  # type: ignore[arg-type]
@@ -505,7 +676,7 @@ class DocumentTab(QWidget):
 
     def _place_drawer(self) -> None:
         top = self.viewer.toolbar.height()
-        self.stack.setGeometry(self.width() - RIGHT_RAIL_WIDTH - DRAWER_WIDTH, top, DRAWER_WIDTH, self.height() - top)
+        self.stack.setGeometry(self.width() - self.right_rail.width() - DRAWER_WIDTH, top, DRAWER_WIDTH, self.height() - top)
 
     def is_drawer_open(self) -> bool:
         return self._drawer and self.stack.isVisibleTo(self)
@@ -534,17 +705,17 @@ class DocumentTab(QWidget):
             return
         super().keyPressEvent(event)
 
-    def _on_quick_tool(self, row: int):
-        if self._tool == row and self._drawer and self._drawer_hidden:
+    def _on_quick_tool(self, tool_id: str):
+        if self.current_tool_id() == tool_id and self._drawer and self._drawer_hidden:
             self._drawer_hidden = False  # a gaveta estava fechada: volta
             self.stack.show()
             self.stack.raise_()
             self._slide_drawer_in()
             self._update_markup_bar()
-        elif self._tool == row:
+        elif self.current_tool_id() == tool_id:
             self.close_tool()  # clicar na ferramenta aberta a fecha
         else:
-            self.open_tool(row)
+            self.open_mode(tool_id, self._last_mode.get(tool_id, 0))
 
     def _activate_marking(self, row: int):
         # Fora de Anotações, cliques no visualizador não são desenho de marcação (a ferramenta
@@ -565,13 +736,9 @@ class DocumentTab(QWidget):
         if show:
             inset = DRAWER_WIDTH if self.is_drawer_open() else 0
             available = self.viewer.scroll_area.viewport().width() - inset - 4
-            # Inteira se couber; senão apertada; e só ícones abaixo de 1180 px ou sem espaço nem
-            # para a apertada (a folga é pouca em 1440 px e a fonte muda um pouco de um sistema
-            # para outro).
-            full = bar.full_width()
-            compact = self.width() < NARROW_WIDTH or bar.tight_width() > available
-            bar.set_compact(compact)
-            bar.set_tight(not compact and full > available)
+            # Inteira se couber; senão compacta (o Estilo sem a espessura escrita e o contador
+            # só com o número).
+            bar.set_compact(bar.full_width() > available)
             bar.set_right_inset(inset)
             bar.appear()
         else:
@@ -597,14 +764,18 @@ class DocumentTab(QWidget):
             widget.show()
         self.viewer.toolbar.setVisible(widget is None)
         self.viewer.setVisible(widget is None)
+        # A grade já mostra todas as páginas: as miniaturas da lateral saem enquanto ela está aberta.
+        self.side_container.setVisible(widget is None and not self.viewer.side_panel.isHidden())
 
     def center_widget(self) -> QWidget | None:
         """O que está no lugar do visualizador agora, ou None."""
         return next((w for w in self._center_widgets if w.isVisibleTo(self)), None)
 
     def _update_quick_buttons(self):
-        for row, button in self._quick_buttons.items():
-            button.setChecked(row == self._tool)
+        if self._tool >= 0:
+            self._last_mode[self._tool_id] = self._mode  # a coluna rápida volta ao último modo usado
+        for tool_id, button in self._quick_buttons.items():
+            button.setChecked(tool_id == self.current_tool_id())
 
     def page_with_edits(self):
         """A ferramenta aberta, se ela tem mudanças próprias a desfazer antes das do documento
@@ -613,11 +784,14 @@ class DocumentTab(QWidget):
         return page if hasattr(page, "undo_edit") else None
 
     def _verify_signatures(self):
-        """O botão "Verificar" do aviso de documento assinado: abre a Assinatura no modo de
-        verificação e verifica o documento aberto."""
-        page = self.open_tool(ROW_OF["SignaturePage"])
-        page.mode_combo.setCurrentIndex(1)
+        """O "Ver" do aviso de documento assinado: abre Preencher e assinar › Verificar e
+        verifica o documento aberto."""
+        page = self.open_mode("FillSignPage", 3)
         page._apply_verify()
+
+    def _remove_password(self):
+        """"Remover senha" do aviso de documento protegido: abre a ferramenta nesse modo."""
+        self.open_mode("ProtectPage", 1)
 
     # -- operações em andamento --------------------------------------------------------
 
@@ -651,30 +825,47 @@ class DocumentTab(QWidget):
             self.page(row)
             restore_state(self.panel(row).body, state)
         self.area_pick_state.set_active_page(self._pages.get(self._tool))
+        if self._tool >= 0:  # as telas refeitas voltam ao modo em que estavam
+            self.open_mode(self._tool_id, self._mode)
         self._update_center()
         self.viewer.retranslate()
         self.markup_bar.retranslate()
         self.task_status.retranslate()
         for button, (_icon, tooltip) in zip(self._left_buttons, _LEFT_RAIL):
             button.setToolTip(tr(tooltip))
+        for button in [*self._quick_buttons.values(), self.all_tools_button]:
+            self._style_quick_button(button)
         self.set_tool_shortcuts(self._tool_keys)
-        self.all_tools_button.setToolTip(tr("Todas as ferramentas"))
         self._update_side_header()
-        self.save_button.setToolTip(tr("Salvar (Ctrl+S)"))
         self.print_button.setToolTip(tr("Imprimir... (Ctrl+P)"))
+        self.update_state_badge()
         self._update_quick_buttons()
+
+    def update_state_badge(self) -> None:
+        """O selo da barra do visualizador: "✓ Salvo" ou "● Alterações não salvas" com o botão
+        Salvar (só "Não salvo" na janela estreita). Sem documento, nada."""
+        has_document = self.session.path() is not None
+        modified = has_document and self.session.is_modified()
+        if modified:
+            text = tr("Não salvo") if self._narrow else tr("Alterações não salvas")
+            self.state_badge.setText(f"● {text}")
+        else:
+            self.state_badge.setText(f"✓ {tr('Salvo')}")
+        self.state_badge.setProperty("state", "unsaved" if modified else "saved")
+        self.state_badge.style().unpolish(self.state_badge)
+        self.state_badge.style().polish(self.state_badge)
+        self.state_badge.setVisible(has_document)
+        self.save_button.setText(tr("Salvar"))
+        self.save_button.setToolTip(tr("Salvar (Ctrl+S)"))
+        self.save_button.setVisible(modified)
 
     def is_empty(self) -> bool:
         return self.session.path() is None
 
-    def title(self, modified_mark: bool = True) -> str:
-        """O nome do arquivo, com "*" se houver alterações não salvas (a aba mostra um ponto
-        no lugar e pede `modified_mark=False`)."""
+    def title(self) -> str:
+        """O nome do arquivo. O estado (não salvo) fica no selo e no ponto da aba, não no nome."""
         source = self.session.source_path()
-        if not source:
-            return tr("Sem documento")
-        modified = modified_mark and self.session.is_modified()
-        return f"{Path(source).name}{' *' if modified else ''}"
+        return Path(source).name if source else tr("Sem documento")
 
     def shutdown(self) -> None:
         """Ao fechar a aba: solta o arquivo no pdfium e apaga as versões temporárias."""

@@ -52,7 +52,7 @@ def test_report_for_document_changed_after_signing():
 
     assert text.startswith('Assinatura 1 de 2 — campo "OpenFolioSignature"')
     assert "Resultado: INVÁLIDA" in text
-    assert "1 revisão(ões) gravada(s) depois desta assinatura" in text
+    assert "1 revisão gravada depois desta assinatura" in text
     assert "ALTERAÇÕES NO CONTEÚDO" in text
     # O trecho assinado em si está íntegro — e o relatório não esconde isso.
     assert "Conteúdo assinado: íntegro" in text

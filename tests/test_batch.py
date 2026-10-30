@@ -72,7 +72,7 @@ def test_batch_page_processes_the_folder_and_saves_a_report(folder, monkeypatch)
     page = BatchPage(DocumentSession())
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *args, **kwargs: str(folder))
     page.input_picker._browse()
-    assert page.found_label.text() == "3 PDF(s) na pasta."
+    assert page.found_label.text() == "3 PDFs na pasta."
 
     page.operation_combo.setCurrentIndex(3)  # Numerar páginas
     page.process_button.click()
