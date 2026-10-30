@@ -6,8 +6,8 @@ import time
 from pathlib import Path
 
 import pypdfium2 as pdfium
-from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QActionGroup, QColor, QIcon, QIntValidator, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
+from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QActionGroup, QColor, QDesktopServices, QIcon, QIntValidator, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QStackedWidget,
     QToolButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -30,6 +31,7 @@ from core.base import known_password, remember_password
 from core.document_info import document_notices
 from core.form_fields import FillFormFields, FormWidget, ListFormWidgets
 from core.geometry import PageGeometry
+from core.page_links import PageLink, page_links
 from core.progress import PDFIUM_LOCK
 from core.redaction import RedactionRect
 from ui import theme
@@ -81,6 +83,8 @@ _SHAPE_TOOLS = ("square", "circle", "arrow")
 # nos dois temas: é uma cor das marcações sobre a página, não da interface.
 PENDING_OUTLINE = "#b07800"
 _RESIZE_HANDLE = 10  # pixels em volta do canto inferior direito que redimensionam
+_LINK_CLICK_SLOP = 4  # pixels que o mouse pode andar entre apertar e soltar num link
+_LINK_TARGET_MARGIN = 12  # o destino de um link fica um pouco abaixo do alto da tela
 # Rolagem contínua: páginas a mais de N alturas de tela da área visível têm a imagem
 # descartada (voltam a ser renderizadas se o usuário rolar até elas). Antes nenhuma página
 # era liberada e a memória crescia sem limite ao rolar documentos longos.
@@ -164,6 +168,10 @@ class PdfViewer(QWidget):
         self._measure_preview_base: QPixmap | None = None
         self._form_widgets: list[FormWidget] = []
         self._field_editor: tuple[QLineEdit, FormWidget] | None = None
+        self._links: dict[int, list[PageLink]] = {}  # por página, lidos na primeira vez
+        self._hovered_link: PageLink | None = None
+        # O clique que pode seguir um link: página, o link sob o mouse e onde apertou.
+        self._link_press: tuple[int, PageLink, QPointF] | None = None
         self._translatable_tooltips: list[tuple[QWidget, str]] = []
         self._dismissed_notices: set[str] = set()  # avisos fechados com o "x" (até outro documento)
         # Rolagem contínua: (página, fração da altura dela) a mostrar no topo assim que o
@@ -546,6 +554,7 @@ class PdfViewer(QWidget):
         self._finish_field_edit(commit=False)
         self._form_widgets = []
         self._geometries = {}
+        self._links, self._hovered_link, self._link_press = {}, None, None
         self._stop_search()
         self._pending_scroll = None
         if self._document is not None:
@@ -748,6 +757,9 @@ class PdfViewer(QWidget):
             label.mouse_pressed.connect(self._on_canvas_pressed)
             label.mouse_moved.connect(self._on_canvas_moved)
             label.mouse_released.connect(self._on_canvas_released)
+            label.mouse_hovered.connect(
+                lambda x, y, canvas=label: self._on_page_hovered(canvas, self._current_page, x, y)
+            )
             self._page_labels = [label]
             self.scroll_area.setWidget(label)
             self._show_single_page(self._current_page)
@@ -790,9 +802,14 @@ class PdfViewer(QWidget):
     def _make_placeholder_label(self, index: int) -> QLabel:
         geometry = self._geometry(index)
         width_pt, height_pt = geometry.width, geometry.height
-        label = QLabel()
+        # Na rolagem a página não tem ferramentas (elas passam para a página única), mas os
+        # links funcionam.
+        label = PageCanvas()
         label.setFixedSize(max(1, int(width_pt * self._scale)), max(1, int(height_pt * self._scale)))
         label.setStyleSheet("background-color: white;")
+        label.mouse_hovered.connect(lambda x, y, canvas=label: self._on_page_hovered(canvas, index, x, y))
+        label.mouse_pressed.connect(lambda x, y, canvas=label: self._press_link(canvas, index, x, y))
+        label.mouse_released.connect(lambda x, y: self._release_link(index, x, y))
         return label
 
     def _render_with_overlays(self, index: int) -> QPixmap:
@@ -1561,6 +1578,8 @@ class PdfViewer(QWidget):
                 self._edit_form_widget(widget)
                 return
             self._clear_text_selection()
+            # Arrastar a partir de um link seleciona o texto; só o clique o segue.
+            self._press_link(self._page_labels[0], self._current_page, x, y)
             self._selection_start_pdf = self._widget_point_to_pdf(self._current_page, x, y)
             self._selection_base = QPixmap(self._page_labels[0].pixmap())
             return
@@ -1671,6 +1690,7 @@ class PdfViewer(QWidget):
             self._update_text_selection(self._widget_point_to_pdf(self._current_page, x, y))
             self._selection_start_pdf = None
             self._selection_base = None
+            self._release_link(self._current_page, x, y)
             return
         if self.measure_state.is_page_active():
             if self._measure_drag_start_pdf is not None:
@@ -1816,13 +1836,104 @@ class PdfViewer(QWidget):
 
     def _text_selection_enabled(self) -> bool:
         """Sem ferramenta de marcação ativa, arrastar na página seleciona texto."""
-        if self._document is None or self._continuous:
+        return not self._continuous and self._links_enabled()
+
+    # -- links -----------------------------------------------------------------
+
+    def _links_enabled(self) -> bool:
+        """Sem ferramenta ativa: com uma, o clique é dela (marcar, medir, redigir)."""
+        if self._document is None:
             return False
         if self.measure_state.is_page_active() or self.redaction_state.is_page_active():
             return False
         if self.area_pick_state.is_page_active():
             return False
         return not self.annotation_state.is_page_active() or self.annotation_state.active_tool() is None
+
+    def _page_links(self, page_index: int) -> list[PageLink]:
+        links = self._links.get(page_index)
+        if links is None:
+            try:
+                with PDFIUM_LOCK:
+                    assert self._document is not None
+                    page = self._document[page_index]
+                    try:
+                        links = page_links(self._document, page)
+                    finally:
+                        page.close()
+            except Exception:
+                links = []  # um link malformado não impede de ver a página
+            self._links[page_index] = links
+        return links
+
+    def _link_at(self, page_index: int, x: float, y: float) -> PageLink | None:
+        if not self._links_enabled() or not 0 <= page_index < self._page_count():
+            return None
+        point = self._widget_point_to_pdf(page_index, x, y)
+        return next((link for link in self._page_links(page_index) if link.contains(*point)), None)
+
+    def _on_page_hovered(self, canvas: PageCanvas, page_index: int, x: float, y: float):
+        """Mãozinha e o destino do link sob o mouse."""
+        link = self._link_at(page_index, x, y)
+        if link == self._hovered_link:
+            return
+        self._hovered_link = link
+        if link is None:
+            QToolTip.hideText()
+            if self._continuous:
+                canvas.unsetCursor()
+            else:
+                self._update_canvas_cursor()
+            return
+        canvas.setCursor(Qt.CursorShape.PointingHandCursor)
+        position = canvas.mapToGlobal((QPointF(x, y) + canvas.pixmap_offset()).toPoint())
+        QToolTip.showText(position, self._link_tip(link), canvas)
+
+    def _link_tip(self, link: PageLink) -> str:
+        if link.target_page is not None:
+            return tr("Ir para a página {page}").format(page=link.target_page + 1)
+        if link.url.lower().startswith("mailto:"):
+            return tr("Escrever para {address}").format(address=link.url[len("mailto:") :].split("?")[0])
+        return link.url
+
+    def _press_link(self, canvas: QLabel, page_index: int, x: float, y: float):
+        left = isinstance(canvas, PageCanvas) and canvas.pressed_button == Qt.MouseButton.LeftButton
+        link = self._link_at(page_index, x, y) if left else None
+        self._link_press = (page_index, link, QPointF(x, y)) if link is not None else None
+
+    def _release_link(self, page_index: int, x: float, y: float):
+        """Segue o link se o botão soltou nele, sem ter arrastado (arrasto seleciona texto)."""
+        press, self._link_press = self._link_press, None
+        if press is None or press[0] != page_index:
+            return
+        _page, link, start = press
+        if (QPointF(x, y) - start).manhattanLength() > _LINK_CLICK_SLOP:
+            return
+        if not link.contains(*self._widget_point_to_pdf(page_index, x, y)):
+            return
+        self._clear_text_selection()
+        self._follow_link(link)
+
+    def _follow_link(self, link: PageLink):
+        if link.url:
+            QDesktopServices.openUrl(QUrl(link.url))  # no navegador ou no programa de e-mail
+            return
+        target = link.target_page
+        if target is None or not 0 <= target < self._page_count():
+            return
+        top = 0.0
+        if link.target_top is not None:
+            geometry = self._geometry(target)
+            _x, top = geometry.user_to_screen(geometry.width / 2, link.target_top, self._scale)
+            top = max(0.0, top - _LINK_TARGET_MARGIN)
+        if self._continuous:
+            height = max(1, self._page_labels[target].height())
+            self._scroll_to_page(target, min(1.0, top / height))
+            return
+        self._show_single_page(target)
+        canvas = self._page_labels[0]
+        offset = canvas.pixmap_offset().y() if isinstance(canvas, PageCanvas) else 0.0
+        self.scroll_area.verticalScrollBar().setValue(int(offset + top))
 
     def _update_text_selection(self, end_pdf):
         page_index = self._current_page
