@@ -2,18 +2,21 @@
 
 Avança com →, ↓, PgDn, espaço, Enter ou clique; volta com ←, ↑, PgUp, Backspace ou clique
 com o botão direito; Home e End vão à primeira e à última; Esc sai. A roda do mouse também
-passa as páginas. O PDF é lido para a memória, como na comparação: a janela não prende o
+passa as páginas. Um clique num link o segue, e o cursor, escondido, só aparece sobre um
+link. O PDF é lido para a memória, como na comparação: a janela não prende o
 arquivo da versão de trabalho.
 """
 
 from pathlib import Path
 
 import pypdfium2 as pdfium
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeyEvent, QPalette
+from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QKeyEvent, QPalette
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from core.base import known_password
+from core.geometry import PageGeometry
+from core.page_links import PageLink, page_links
 from core.progress import PDFIUM_LOCK
 from ui.i18n import tr
 from ui.viewer.render import render_page
@@ -37,10 +40,16 @@ class PresentationWindow(QWidget):
         self.setStyleSheet("background-color: black;")
 
         self._document = pdfium.PdfDocument(Path(path).read_bytes(), password=known_password(path))
+        self._path = path
         self._page = max(0, min(len(self._document) - 1, page))
+        self._scale = 1.0
+        self._links: dict[int, list[PageLink]] = {}
+        self._geometries: dict[int, PageGeometry] = {}
 
         self.label = QLabel()
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setMouseTracking(True)
+        self.setMouseTracking(True)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.label)
@@ -66,7 +75,53 @@ class PresentationWindow(QWidget):
             scale = min(self.width() / width, self.height() / height) if width and height else 1.0
             pixmap = render_page(pdf_page, scale, self.devicePixelRatioF())
             pdf_page.close()
+        self._scale = scale
         self.label.setPixmap(pixmap)
+
+    # -- links ------------------------------------------------------------------
+
+    def _page_links(self) -> list[PageLink]:
+        links = self._links.get(self._page)
+        if links is None:
+            try:
+                with PDFIUM_LOCK:
+                    pdf_page = self._document[self._page]
+                    try:
+                        links = page_links(self._document, pdf_page, self._path, self._page)
+                        self._geometries[self._page] = PageGeometry.from_pdfium_page(pdf_page)
+                    finally:
+                        pdf_page.close()
+            except Exception:
+                links = []  # um link malformado não atrapalha a apresentação
+            self._links[self._page] = links
+        return links
+
+    def link_at(self, position) -> PageLink | None:
+        """O link sob um ponto da janela. Um link para outro PDF fica de fora: abrir outro
+        documento não cabe no meio de uma apresentação."""
+        pixmap = self.label.pixmap()
+        links = self._page_links()
+        if pixmap.isNull() or not links:
+            return None
+        size = pixmap.deviceIndependentSize()
+        x = position.x() - (self.width() - size.width()) / 2
+        y = position.y() - (self.height() - size.height()) / 2
+        point = self._geometries[self._page].screen_to_user(x, y, self._scale)
+        return next((link for link in links if not link.file and link.contains(*point)), None)
+
+    def _follow_link(self, link: PageLink) -> None:
+        if link.url:
+            QDesktopServices.openUrl(QUrl(link.url))
+        elif link.target_page is not None:
+            self.go_to(link.target_page)
+        elif link.named == "NextPage":
+            self.go_to(self._page + 1)
+        elif link.named == "PrevPage":
+            self.go_to(self._page - 1)
+        elif link.named == "FirstPage":
+            self.go_to(0)
+        elif link.named == "LastPage":
+            self.go_to(self.page_count() - 1)
 
     # -- eventos ----------------------------------------------------------------
 
@@ -89,9 +144,17 @@ class PresentationWindow(QWidget):
         else:
             super().keyPressEvent(event)
 
+    def mouseMoveEvent(self, event):
+        over_link = self.link_at(event.position()) is not None
+        self.setCursor(Qt.CursorShape.PointingHandCursor if over_link else Qt.CursorShape.BlankCursor)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.go_to(self._page + 1)
+            link = self.link_at(event.position())
+            if link is not None:
+                self._follow_link(link)
+            else:
+                self.go_to(self._page + 1)
         elif event.button() == Qt.MouseButton.RightButton:
             self.go_to(self._page - 1)
 

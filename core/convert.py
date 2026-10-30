@@ -8,7 +8,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 
 from .messages import DOC_PAGES, plural_message
-from .base import READ, atomic_output, open_pdfium, open_reader, render_scale
+from .base import EXTRACT, atomic_output, open_pdfium, open_reader, render_scale
 from .progress import PDFIUM_LOCK, Progress, ensure_progress
 
 
@@ -37,7 +37,8 @@ class ConvertToImages:
         progress = ensure_progress(progress)
         if image_format not in IMAGE_FORMATS:
             raise ValueError(f"Formato de imagem inválido: {image_format}")
-        open_reader(input_path, purpose=READ)  # recusa PDF que não abre, com mensagem clara
+        # Recusa, com mensagem clara, PDF que não abre ou cujo autor não permite copiar o conteúdo.
+        open_reader(input_path, purpose=EXTRACT)
         stem = Path(input_path).stem
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(parents=True, exist_ok=True)

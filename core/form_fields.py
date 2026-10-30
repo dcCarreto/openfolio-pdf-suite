@@ -328,6 +328,7 @@ _FLAG_RADIO = 1 << 15
 _FLAG_PUSHBUTTON = 1 << 16
 _FLAG_COMBO = 1 << 17
 _FLAG_REQUIRED = 1 << 1
+_FLAG_MULTILINE = 1 << 12
 
 
 def _describe_field_type(field_type, flags) -> str:
@@ -539,6 +540,7 @@ class FormWidget:
     on_state: str = ""  # caixa de seleção/opção: o estado "ligado" deste widget ("/Yes", "/M")
     options: list[tuple[str, str]] = field(default_factory=list)  # lista: (valor, texto)
     read_only: bool = False
+    multiline: bool = False  # texto de várias linhas
 
 
 def _inherited(node, key: str):
@@ -610,6 +612,7 @@ class ListFormWidgets:
                         on_state=states[0] if states else "",
                         options=_choice_options(widget),
                         read_only=bool(flags & _FLAG_READ_ONLY),
+                        multiline=field_type == "text" and bool(flags & _FLAG_MULTILINE),
                     )
                 )
         return widgets

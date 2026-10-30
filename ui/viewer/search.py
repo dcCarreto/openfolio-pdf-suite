@@ -29,28 +29,28 @@ class DocumentSearch:
         with PDFIUM_LOCK:
             return len(self._document)
 
-    def find_all(self, query: str) -> list[SearchMatch]:
+    def find_all(self, query: str, match_case: bool = False, whole_word: bool = False) -> list[SearchMatch]:
         matches: list[SearchMatch] = []
-        for page_matches in self.iter_pages(query):
+        for page_matches in self.iter_pages(query, match_case, whole_word):
             matches.extend(page_matches)
         return matches
 
-    def iter_pages(self, query: str) -> Iterator[list[SearchMatch]]:
+    def iter_pages(self, query: str, match_case: bool = False, whole_word: bool = False) -> Iterator[list[SearchMatch]]:
         """As ocorrências de cada página, em ordem (uma lista, possivelmente vazia, por página)."""
         query = query.strip()
         if not query:
             return
         for page_index in range(self.page_count()):
             with PDFIUM_LOCK:
-                page_matches = self._find_on_page(page_index, query)
+                page_matches = self._find_on_page(page_index, query, match_case, whole_word)
             yield page_matches  # fora do `with`: a trava não fica presa entre uma página e outra
 
-    def _find_on_page(self, page_index: int, query: str) -> list[SearchMatch]:
+    def _find_on_page(self, page_index: int, query: str, match_case: bool, whole_word: bool) -> list[SearchMatch]:
         matches: list[SearchMatch] = []
         page = self._document[page_index]
         textpage = page.get_textpage()
         try:
-            searcher = textpage.search(query, match_case=False)
+            searcher = textpage.search(query, match_case=match_case, match_whole_word=whole_word)
             try:
                 while True:
                     match = searcher.get_next()

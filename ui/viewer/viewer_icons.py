@@ -172,6 +172,23 @@ def build_search_icon() -> QIcon:
     return _build(draw)
 
 
+def build_hand_icon() -> QIcon:
+    """hand: a palma e os quatro dedos."""
+
+    def draw(p):
+        _poly(
+            p,
+            (8.5, 20.5), (4.5, 15), (5, 13), (7, 13), (8.5, 15),
+            (8.5, 6), (9.5, 5), (10.5, 6), (10.5, 12),
+            (10.5, 4.5), (11.5, 3.5), (12.5, 4.5), (12.5, 12),
+            (12.5, 5.5), (13.5, 4.5), (14.5, 5.5), (14.5, 12.5),
+            (14.5, 8), (15.5, 7), (16.5, 8), (16.5, 15), (15, 20.5),
+            closed=True,
+        )
+
+    return _build(draw)
+
+
 def build_rotate_icon() -> QIcon:
     """arrow-clockwise."""
 

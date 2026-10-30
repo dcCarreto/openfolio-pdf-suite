@@ -3,11 +3,13 @@
 import math
 import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pypdf import PdfWriter
+from pypdf.generic import DictionaryObject, NullObject
 
 from .base import READ, open_reader, require_valid_page_index, write_pdf
+from .page_links import safe_url
 from .progress import Progress, ensure_progress
 
 
@@ -30,6 +32,24 @@ class OutlineItem:
     level: int  # 0 = nível superior
     title: str
     page_index: int | None  # None se o destino não aponta para uma página deste documento
+    # Só para quem lê (um clique no painel): ficam de fora da comparação e não são regravados.
+    top: float | None = field(default=None, compare=False)  # a altura do destino na página
+    url: str = field(default="", compare=False)  # o item abre um site em vez de ir a uma página
+
+
+def _destination_top(entry) -> float | None:
+    top = entry.top
+    return None if top is None or isinstance(top, NullObject) else float(top)
+
+
+def _entry_url(entry) -> str:
+    """O site de um item com ação /URI (só http, https e mailto: ver core/page_links.py)."""
+    node = getattr(entry, "node", None)
+    action = node.get("/A") if node is not None else None
+    action = action.get_object() if action is not None else None
+    if isinstance(action, DictionaryObject) and action.get("/S") == "/URI":
+        return safe_url(str(action.get("/URI", "")))
+    return ""
 
 
 class ListOutline:
@@ -51,7 +71,15 @@ class ListOutline:
                     page = reader.get_destination_page_number(entry)
                 except Exception:
                     page = None
-                items.append(OutlineItem(level=level, title=str(entry.title or ""), page_index=page))
+                items.append(
+                    OutlineItem(
+                        level=level,
+                        title=str(entry.title or ""),
+                        page_index=page,
+                        top=_destination_top(entry) if page is not None else None,
+                        url=_entry_url(entry),
+                    )
+                )
 
         try:
             walk(reader.outline, 0)
