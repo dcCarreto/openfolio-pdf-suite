@@ -1,12 +1,16 @@
 """O que vale avisar sobre um PDF ao abri-lo (M14): proteção, assinaturas, formulário e
 camadas. Leitura rápida, só da estrutura (sem validar assinaturas)."""
 
+import logging
 from dataclasses import dataclass, field
 
 from pypdf.constants import UserAccessPermissions
+from pypdf.generic import ArrayObject, Destination, DictionaryObject, Fit, NullObject
 
 from .base import READ, EncryptedPDFError, open_reader
 from .messages import Message
+
+logger = logging.getLogger(__name__)
 
 
 # O tipo de cada aviso, que define a cor da faixa e o botão dela.
@@ -22,6 +26,59 @@ class DocumentNotices:
     def add(self, kind: str, message) -> None:
         self.kinds.append(kind)
         self.messages.append(message)
+
+
+@dataclass
+class InitialView:
+    """Como o próprio PDF pede para ser aberto (/OpenAction, /PageLayout e /PageMode)."""
+
+    page: int = 0
+    top: float | None = None
+    layout: str = ""  # "single", "continuous", "double", "book" ou "": o PDF não diz
+    panel: str = ""  # "pages", "outline", "attachments" ou "": o PDF não diz
+
+
+_LAYOUTS = {
+    "/SinglePage": "single",
+    "/OneColumn": "continuous",
+    "/TwoColumnLeft": "double",
+    "/TwoPageLeft": "double",
+    "/TwoColumnRight": "book",
+    "/TwoPageRight": "book",
+}
+_PANELS = {"/UseThumbs": "pages", "/UseOutlines": "outline", "/UseAttachments": "attachments"}
+
+
+def initial_view(path: str) -> InitialView:
+    """Só leitura da estrutura; um PDF malformado abre como qualquer outro. /PageMode /FullScreen
+    fica de fora: um arquivo não toma a tela sem o usuário pedir."""
+    view = InitialView()
+    try:
+        reader = open_reader(path, purpose=READ)
+        view.layout = _LAYOUTS.get(str(reader.page_layout), "")
+        view.panel = _PANELS.get(str(reader.page_mode), "")
+        destination = reader.open_destination
+        if destination is None:  # a outra forma de /OpenAction: uma ação /GoTo
+            action = reader.root_object.get("/OpenAction")
+            action = action.get_object() if action is not None else None
+            if isinstance(action, DictionaryObject) and action.get("/S") == "/GoTo":
+                target = action.get("/D")
+                if isinstance(target, ArrayObject):
+                    page, kind, *values = target
+                    destination = Destination("OpenAction", page, Fit(kind, tuple(values)))
+                else:
+                    destination = target
+        if isinstance(destination, str):  # um destino com nome
+            destination = reader.named_destinations.get(str(destination))
+        if isinstance(destination, Destination):
+            page = reader.get_destination_page_number(destination)
+            if page is not None and page >= 0:
+                view.page = page
+                top = destination.top
+                view.top = None if top is None or isinstance(top, NullObject) else float(top)
+    except Exception:
+        logger.debug("Visão inicial ilegível em %s", path, exc_info=True)
+    return view
 
 
 def document_notices(path: str) -> DocumentNotices:

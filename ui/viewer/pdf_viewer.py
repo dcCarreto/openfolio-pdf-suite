@@ -1,13 +1,15 @@
 """Widget central: visualizador de PDF com miniaturas, zoom, página única/rolagem
 contínua, busca de texto e preenchimento de formulários."""
 
+import bisect
 import dataclasses
+import html
 import time
 from pathlib import Path
 
 import pypdfium2 as pdfium
-from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QActionGroup, QColor, QDesktopServices, QIcon, QIntValidator, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QActionGroup, QColor, QCursor, QDesktopServices, QIcon, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -17,6 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
+    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QStackedWidget,
@@ -28,10 +31,11 @@ from PySide6.QtWidgets import (
 
 from core.annotations import STAMP_FONT_SIZE, AnnotationSpec, arrow_head, spec_rect, stamp_box
 from core.base import known_password, remember_password
-from core.document_info import document_notices
+from core.document_info import document_notices, initial_view
 from core.form_fields import FillFormFields, FormWidget, ListFormWidgets
 from core.geometry import PageGeometry
-from core.page_links import PageLink, page_links
+from core.page_links import PageLink, PageNote, file_destination, linked_pdf_path, page_links, page_notes
+from core.page_text import can_copy_text, char_at, line_range, word_range
 from core.progress import PDFIUM_LOCK
 from core.redaction import RedactionRect
 from ui import theme
@@ -59,6 +63,7 @@ from ui.viewer.viewer_icons import (
     build_double_page_icon,
     build_file_icon,
     build_fit_width_icon,
+    build_hand_icon,
     build_more_icon,
     build_next_page_icon,
     build_prev_page_icon,
@@ -70,7 +75,7 @@ from ui.viewer.viewer_icons import (
 )
 
 _MIN_SCALE = 0.3
-_MAX_SCALE = 4.0
+_MAX_SCALE = 8.0  # páginas grandes demais perdem nitidez, não memória (`render_scale`)
 _ZOOM_STEP = 0.15
 _DEFAULT_SCALE = 1.2
 _HIGHLIGHT_COLOR = QColor(255, 235, 59, 110)  # outras ocorrências da busca
@@ -85,6 +90,10 @@ PENDING_OUTLINE = "#b07800"
 _RESIZE_HANDLE = 10  # pixels em volta do canto inferior direito que redimensionam
 _LINK_CLICK_SLOP = 4  # pixels que o mouse pode andar entre apertar e soltar num link
 _LINK_TARGET_MARGIN = 12  # o destino de um link fica um pouco abaixo do alto da tela
+_HISTORY_LIMIT = 100  # posições guardadas para Voltar
+_LINE_STEP = 40  # pixels de uma seta para cima ou para baixo
+_SCREEN_OVERLAP = 40  # o que fica à vista de uma tela para a outra (barra de espaço)
+_WHEEL_NOTCH = 120  # um dente da roda do mouse
 # Rolagem contínua: páginas a mais de N alturas de tela da área visível têm a imagem
 # descartada (voltam a ser renderizadas se o usuário rolar até elas). Antes nenhuma página
 # era liberada e a memória crescia sem limite ao rolar documentos longos.
@@ -98,6 +107,14 @@ DOUBLE = "double"
 BOOK = "book"
 LAYOUTS = (SINGLE, CONTINUOUS, DOUBLE, BOOK)
 _PAGE_GAP = 12
+_NAMED_LINK_TIPS = {
+    "NextPage": "Próxima página",
+    "PrevPage": "Página anterior",
+    "FirstPage": "Primeira página",
+    "LastPage": "Última página",
+    "GoBack": "Voltar",
+    "GoForward": "Avançar",
+}
 # Busca incremental: tempo máximo por fatia antes de devolver o controle à janela.
 _SEARCH_SLICE_SECONDS = 0.03
 
@@ -161,17 +178,44 @@ class PdfViewer(QWidget):
         # Seleção de texto (sem ferramenta ativa): início do arrasto, página e trecho
         # selecionado (índices de caractere do pdfium) com os retângulos dele.
         self._selection_start_pdf: tuple[float, float] | None = None
-        self._selection_base: QPixmap | None = None
-        self._text_selection: tuple[int, int, int] | None = None
-        self._selection_rects: list = []
+        self._selection_start_page = 0
+        self._selection_press: QPointF | None = None  # onde apertou: um clique não seleciona
+        self._selection_anchor: int | None = None  # o caractere em que o arrasto começou
+        # (primeira página, caractere nela, última página, caractere nela); -1: até o fim dela.
+        self._text_selection: tuple[int, int, int, int] | None = None
+        self._selection_rects: dict[int, list] = {}  # por página, lidos ao desenhar
         self._measure_drag_start_pdf: tuple[float, float] | None = None
         self._measure_preview_base: QPixmap | None = None
         self._form_widgets: list[FormWidget] = []
-        self._field_editor: tuple[QLineEdit, FormWidget] | None = None
+        self._field_editor: tuple[QLineEdit | QPlainTextEdit, FormWidget] | None = None
         self._links: dict[int, list[PageLink]] = {}  # por página, lidos na primeira vez
-        self._hovered_link: PageLink | None = None
+        self._notes: dict[int, list[PageNote]] = {}  # idem: os comentários com texto
+        self._hover_target: PageLink | PageNote | FormWidget | None = None
         # O clique que pode seguir um link: página, o link sob o mouse e onde apertou.
         self._link_press: tuple[int, PageLink, QPointF] | None = None
+        self._next_field: str | None = None  # o campo a abrir depois de gravar o atual (Tab)
+        # Voltar e Avançar (Alt+setas): (página, fração da altura dela) antes de cada salto.
+        self._back: list[tuple[int, float]] = []
+        self._forward: list[tuple[int, float]] = []
+        self._position_path: str | None = None  # o arquivo cuja página de leitura é lembrada
+        self._page_names: dict[int, str] = {}  # rótulos do PDF ("iv"), lidos na primeira vez
+        self._fit: str | None = None  # "width" ou "page": o zoom acompanha o tamanho da área
+        self._fit_timer = QTimer(self)
+        self._fit_timer.setSingleShot(True)
+        self._fit_timer.setInterval(60)
+        self._fit_timer.timeout.connect(self._refit)
+        self._wheel_rest = 0  # o que a roda já andou na borda da página, para virá-la
+        self._pan_from: QPointF | None = None  # arrastando a página com o botão do meio
+        self._hand_mode = False  # ferramenta de mão: o botão esquerdo arrasta em vez de selecionar
+        self._pan_travel = 0.0  # o quanto o mouse andou no arrasto atual
+        self._single_scroll: int | None = None  # rolagem a aplicar quando o layout assentar
+        self._zoom_anchor: tuple[float, float, QPointF] | None = None
+        # O que precisa do layout assentado. Um timer filho, nunca QTimer.singleShot: fechada a
+        # aba, um disparo pendente cairia num visualizador já destruído e derrubaria o app.
+        self._layout_timer = QTimer(self)
+        self._layout_timer.setSingleShot(True)
+        self._layout_timer.setInterval(0)
+        self._layout_timer.timeout.connect(self._after_layout)
         self._translatable_tooltips: list[tuple[QWidget, str]] = []
         self._dismissed_notices: set[str] = set()  # avisos fechados com o "x" (até outro documento)
         # Rolagem contínua: (página, fração da altura dela) a mostrar no topo assim que o
@@ -195,13 +239,32 @@ class PdfViewer(QWidget):
             (("Ctrl+=", "Ctrl++"), self._zoom_in),
             (("Ctrl+-",), self._zoom_out),
             (("Ctrl+0",), self._fit_page),
+            (("Ctrl+1",), lambda: self._set_zoom(100)),
+            (("Ctrl+2",), self._fit_width),
             (("Ctrl+C",), self.copy_selected_text),
+            (("F3",), lambda: self._step_search(1)),
+            (("Shift+F3",), lambda: self._step_search(-1)),
+            (("Alt+Left",), self.go_back),
+            (("Alt+Right",), self.go_forward),
+            (("Ctrl+Shift+H",), lambda: self.set_hand_mode(not self._hand_mode)),
         ):
             for key in keys:
                 shortcut = QShortcut(QKeySequence(key), self)
                 shortcut.activated.connect(handler)
                 shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        # Só com o foco na página: as miniaturas e o sumário usam estas teclas para si.
+        for key, handler in (
+            ("Space", lambda: self._scroll_view(1, self._screen_step())),
+            ("Shift+Space", lambda: self._scroll_view(-1, self._screen_step())),
+            ("Down", lambda: self._scroll_view(1, _LINE_STEP)),
+            ("Up", lambda: self._scroll_view(-1, _LINE_STEP)),
+            ("Ctrl+A", self.select_all_text),
+        ):
+            shortcut = QShortcut(QKeySequence(key), self.scroll_area)
+            shortcut.activated.connect(handler)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.scroll_area.viewport().installEventFilter(self)
+        self.scroll_area.installEventFilter(self)
 
         session.path_changed.connect(self._reload)
         annotation_state.tool_changed.connect(self._on_markup_state_changed)
@@ -258,7 +321,9 @@ class PdfViewer(QWidget):
         self.thumbnail_list.page_selected.connect(self._on_thumbnail_selected)
         self.thumbnail_list.pages_selected.connect(self.session.set_selected_pages)
         self.side_panel = DocumentSidePanel(self.thumbnail_list)
-        self.side_panel.page_requested.connect(self._go_to_page)
+        self.side_panel.destination_requested.connect(self._jump_to_destination)
+        self.side_panel.url_requested.connect(self._open_url)
+        self.side_panel.file_requested.connect(lambda path: self.open_path(path))
         self.side_panel.hide()
         body_layout.addWidget(self.side_panel)
 
@@ -359,7 +424,7 @@ class PdfViewer(QWidget):
         self.page_field.setObjectName("PageField")
         self.page_field.setFixedWidth(34)
         self.page_field.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.page_field.setValidator(QIntValidator(1, 99999, self.page_field))
+        self.page_field.setMaxLength(12)  # o número ou o rótulo do PDF ("iv")
         self.page_field.returnPressed.connect(self._go_to_typed_page)
         self.page_total = QLabel()
         self.page_total.setProperty("ofRole", "help")
@@ -379,7 +444,7 @@ class PdfViewer(QWidget):
         self.zoom_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.zoom_button.setText(f"{int(self._scale * 100)}%")
         zoom_menu = QMenu(self.zoom_button)
-        for percent in (50, 75, 100, 125, 150, 200):
+        for percent in (50, 75, 100, 125, 150, 200, 400, 800):
             zoom_menu.addAction(f"{percent}%").triggered.connect(lambda _checked=False, p=percent: self._set_zoom(p))
         zoom_menu.addSeparator()
         self._zoom_fit_width_action = zoom_menu.addAction("")
@@ -450,6 +515,10 @@ class PdfViewer(QWidget):
         search_button = self._tool_button(build_search_icon(), "Buscar (Ctrl+F)")
         search_button.clicked.connect(self._toggle_search)
         layout.addWidget(search_button)
+        self.hand_button = self._tool_button(build_hand_icon(), "Ferramenta de mão: arrastar a página (Ctrl+Shift+H)")
+        self.hand_button.setCheckable(True)
+        self.hand_button.clicked.connect(self.set_hand_mode)
+        layout.addWidget(self.hand_button)
         layout.addStretch()
 
         # Escondido: a coluna da esquerda da aba de documento faz o papel dele.
@@ -471,6 +540,7 @@ class PdfViewer(QWidget):
             self.more_button,
             self.thumbnails_button,
             search_button,
+            self.hand_button,
         ]
         self._retranslate_toolbar_menus()
         return toolbar
@@ -541,20 +611,30 @@ class PdfViewer(QWidget):
         """Fecha o documento no pdfium (ao fechar a janela): no Windows, um arquivo aberto
         não pode ser apagado, e as versões temporárias do documento precisam sair."""
         if self._document is not None:
+            self._save_reading_position()
             self.thumbnail_list.clear_document()
             with PDFIUM_LOCK:
                 self._document.close()
             self._document = None
 
+    def _save_reading_position(self):
+        if self._position_path:
+            preferences().set_reading_position(self._position_path, *self._view_position())
+
     def _reload(self):
         path = self.session.path()
-        # Uma versão nova do mesmo documento (operação, desfazer, refazer) mantém a página
-        # em que o usuário estava; outro documento começa na primeira.
-        keep_page = self._current_page if self.session.last_change() == "version" else 0
+        # Uma versão nova do mesmo documento (operação, desfazer, refazer) mantém a página e a
+        # posição em que o usuário estava; outro documento abre onde a leitura parou ou onde o
+        # próprio PDF pede.
+        same_document = self.session.last_change() == "version"
+        keep_view = self._view_position() if same_document and self._document is not None else None
+        if not same_document and self._document is not None:
+            self._save_reading_position()
         self._finish_field_edit(commit=False)
         self._form_widgets = []
         self._geometries = {}
-        self._links, self._hovered_link, self._link_press = {}, None, None
+        self._links, self._notes, self._hover_target, self._link_press = {}, {}, None, None
+        self._page_names = {}
         self._stop_search()
         self._pending_scroll = None
         if self._document is not None:
@@ -572,16 +652,28 @@ class PdfViewer(QWidget):
             self._show_empty_state()
             return
 
+        view = initial_view(path) if not same_document else None
+        # O modo de exibição do PDF vale até o usuário escolher um (a escolha dele fica guardada).
+        if view is not None and view.layout and preferences().page_layout() is None:
+            self.set_layout(view.layout)
+
         self._document = document
-        self._text_selection, self._selection_rects = None, []
-        if self.session.last_change() != "version":
+        self._text_selection, self._selection_rects = None, {}
+        # Um PDF anexado abre de um arquivo temporário, de outro nome a cada vez: nada a lembrar.
+        self._position_path = None if self.session.needs_save_as() else self.session.source_path()
+        if not same_document:
             self._view_rotation = 0  # outro documento começa sem rotação da tela
+            self._back, self._forward = [], []
+            self._next_field = None
         self._search = DocumentSearch(self._document)
         self._matches = []
         self._current_match = -1
-        self._current_page = min(keep_page, max(self._page_count() - 1, 0))
-        if self._continuous and self._current_page:
-            self._pending_scroll = (self._current_page, 0.0)
+        saved = preferences().reading_position(self._position_path) if view is not None and self._position_path else None
+        position = keep_view or saved
+        first_page = position[0] if position else (view.page if view is not None else 0)
+        self._current_page = min(first_page, max(self._page_count() - 1, 0))
+        if self._continuous and (self._current_page or position):
+            self._pending_scroll = (self._current_page, position[1] if position else 0.0)
         self.search_bar.hide()
         self.annotation_state.clear_pending()
         self.redaction_state.clear_pending()
@@ -591,10 +683,27 @@ class PdfViewer(QWidget):
         self.thumbnail_list.load_document(self._document)
         self.side_panel.load(path)
         self.side_panel.setVisible(self._show_thumbnails)
+        if view is not None and view.panel:
+            self.side_panel.show_panel(view.panel)
+            self.show_side_panel(True)
         self._update_notices(path)
         self._form_widgets = self._load_form_widgets(path)
         self.content_stack.setCurrentIndex(1)
         self._rebuild_canvas()
+        self._on_markup_state_changed()  # o modo do PDF não vale com uma ferramenta de desenho
+        if keep_view is not None:
+            if not self._continuous:
+                self._show_view(self._current_page, keep_view[1])
+            if self._next_field:
+                self._layout_timer.start()
+            return
+        self._refit()
+        if saved is not None:
+            if not self._continuous:
+                self._show_view(self._current_page, saved[1])
+        elif view is not None and view.top is not None:
+            self._show_destination(self._current_page, view.top)
+        self.scroll_area.setFocus()  # as teclas de leitura valem logo ao abrir
 
     def _update_notices(self, path: str):
         if self.session.last_change() != "version":
@@ -757,6 +866,8 @@ class PdfViewer(QWidget):
             label.mouse_pressed.connect(self._on_canvas_pressed)
             label.mouse_moved.connect(self._on_canvas_moved)
             label.mouse_released.connect(self._on_canvas_released)
+            label.mouse_double_clicked.connect(self._on_canvas_double_clicked)
+            label.mouse_triple_clicked.connect(self._on_canvas_triple_clicked)
             label.mouse_hovered.connect(
                 lambda x, y, canvas=label: self._on_page_hovered(canvas, self._current_page, x, y)
             )
@@ -802,14 +913,18 @@ class PdfViewer(QWidget):
     def _make_placeholder_label(self, index: int) -> QLabel:
         geometry = self._geometry(index)
         width_pt, height_pt = geometry.width, geometry.height
-        # Na rolagem a página não tem ferramentas (elas passam para a página única), mas os
-        # links funcionam.
+        # Na rolagem a página não tem ferramentas de desenho (elas passam para a página única),
+        # mas tudo o que é de leitura funciona: links, seleção de texto, notas e formulários.
         label = PageCanvas()
         label.setFixedSize(max(1, int(width_pt * self._scale)), max(1, int(height_pt * self._scale)))
         label.setStyleSheet("background-color: white;")
+        label.setCursor(self._canvas_cursor())
         label.mouse_hovered.connect(lambda x, y, canvas=label: self._on_page_hovered(canvas, index, x, y))
-        label.mouse_pressed.connect(lambda x, y, canvas=label: self._press_link(canvas, index, x, y))
-        label.mouse_released.connect(lambda x, y: self._release_link(index, x, y))
+        label.mouse_pressed.connect(lambda x, y, canvas=label: self._on_scroll_page_pressed(canvas, index, x, y))
+        label.mouse_moved.connect(lambda x, y, canvas=label: self._extend_selection(canvas, x, y))
+        label.mouse_released.connect(lambda x, y, canvas=label: self._finish_selection(canvas, index, x, y))
+        label.mouse_double_clicked.connect(lambda x, y: self._on_scroll_page_clicked_again(index, x, y, word_range))
+        label.mouse_triple_clicked.connect(lambda x, y: self._on_scroll_page_clicked_again(index, x, y, line_range))
         return label
 
     def _render_with_overlays(self, index: int) -> QPixmap:
@@ -823,37 +938,24 @@ class PdfViewer(QWidget):
         pixmap = self._with_pending_annotations(pixmap, index)
         pixmap = self._with_pending_redactions(pixmap, index)
         pixmap = self._with_picked_areas(pixmap, index)
-        pixmap = self._with_text_selection(pixmap, index)
         return self._with_measure_overlay(pixmap, index)
-
-    def _with_text_selection(self, pixmap: QPixmap, page_index: int) -> QPixmap:
-        if self._text_selection is None or self._text_selection[0] != page_index or not self._selection_rects:
-            return pixmap
-        result = QPixmap(pixmap)
-        painter = QPainter(result)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(_TEXT_SELECTION_COLOR)
-        for rect in self._selection_rects:
-            painter.drawRect(self._user_rect_to_screen(page_index, rect))
-        painter.end()
-        return result
 
     def _show_single_page(self, index: int):
         if self._document is None or not (0 <= index < self._page_count()):
             return
-        if self._text_selection is not None and self._text_selection[0] != index:
-            self._text_selection, self._selection_rects = None, []
         self._finish_field_edit()  # o editor fica sobre a página: grava antes de trocá-la
         self._current_page = index
         pixmap = self._render_with_overlays(index)
         self._page_labels[0].setPixmap(pixmap)
         self._page_labels[0].resize(logical_size(pixmap))
+        self._apply_selection(index, self._page_labels[0])
         self.thumbnail_list.select_page(index)
         self._update_page_indicator()
 
     def _render_page_into_label(self, index: int, label: QLabel):
         label.setPixmap(self._render_with_overlays(index))
         self._rendered_pages.add(index)
+        self._apply_selection(index, label)
 
     def _release_page(self, index: int):
         self._page_labels[index].clear()
@@ -1184,7 +1286,9 @@ class PdfViewer(QWidget):
             self.page_total.setText("")
             return
         self.page_field.setText(str(self._current_page + 1))
-        self.page_total.setText(tr("de {total}").format(total=self._page_count()))
+        total = tr("de {total}").format(total=self._page_count())
+        name = self._page_name(self._current_page)  # "iv": o número impresso, se o PDF tiver
+        self.page_total.setText(f"{total} ({name})" if name and name != str(self._current_page + 1) else total)
         tip = (
             tr("Página {current} de {total}").format(current=self._current_page + 1, total=self._page_count())
             + " — " + tr("Ir para a página... (Ctrl+G)")
@@ -1192,11 +1296,27 @@ class PdfViewer(QWidget):
         self.page_field.setToolTip(tip)
         self.page_field.setAccessibleName(tip)
 
+    def _page_name(self, index: int) -> str:
+        name = self._page_names.get(index)
+        if name is None:
+            try:
+                with PDFIUM_LOCK:
+                    assert self._document is not None
+                    name = self._document.get_page_label(index)
+            except Exception:
+                name = ""  # um rótulo malformado não impede de ver a página
+            self._page_names[index] = name
+        return name
+
     def _go_to_typed_page(self):
         text = self.page_field.text().strip()
         if text.isdigit():
-            self._go_to_page(int(text) - 1)
-        self._update_page_indicator()  # campo vazio: volta ao número da página atual
+            self._jump_to_page(int(text) - 1)
+        elif text:  # o rótulo do PDF, como "iv"
+            page = next((i for i in range(self._page_count()) if self._page_name(i).lower() == text.lower()), None)
+            if page is not None:
+                self._jump_to_page(page)
+        self._update_page_indicator()  # sem página que sirva: volta ao número da página atual
 
     # -- navegação e zoom -----------------------------------------------------
 
@@ -1207,6 +1327,7 @@ class PdfViewer(QWidget):
             self._scroll_to_page(max(0, self._current_page - 1))
         else:
             self._show_single_page(max(0, self._current_page - 1))
+            self._scroll_single_to(0)
 
     def _go_next(self):
         if self._document is None:
@@ -1218,6 +1339,7 @@ class PdfViewer(QWidget):
             self._scroll_to_page(min(last, self._current_page + 1))
         else:
             self._show_single_page(min(last, self._current_page + 1))
+            self._scroll_single_to(0)
 
     def _step_row(self, direction: int):
         """Na página dupla, avança ou volta uma linha (duas páginas)."""
@@ -1226,11 +1348,126 @@ class PdfViewer(QWidget):
         self._scroll_to_page(rows[max(0, min(len(rows) - 1, current + direction))][0])
 
     def _go_first(self):
-        self._go_to_page(0)
+        self._jump_to_page(0)
 
     def _go_last(self):
         if self._document is not None:
-            self._go_to_page(self._page_count() - 1)
+            self._jump_to_page(self._page_count() - 1)
+
+    def _screen_step(self) -> int:
+        return max(_LINE_STEP, self.scroll_area.viewport().height() - _SCREEN_OVERLAP)
+
+    def _scroll_view(self, direction: int, step: int):
+        """Desce ou sobe `step` pixels; na página única, passada a borda, vira a página."""
+        if self._document is None:
+            return
+        bar = self.scroll_area.verticalScrollBar()
+        at_edge = bar.value() >= bar.maximum() if direction > 0 else bar.value() <= bar.minimum()
+        if at_edge and not self._continuous:
+            self._flip_page(direction)
+        else:
+            bar.setValue(bar.value() + direction * step)
+
+    def _flip_page(self, direction: int) -> bool:
+        """Vira a página única continuando a leitura: descendo, do alto da seguinte; subindo,
+        do fim da anterior. False se não há página para aquele lado."""
+        page = self._current_page + direction
+        if not 0 <= page < self._page_count():
+            return False
+        self._show_single_page(page)
+        self._scroll_single_to(0 if direction > 0 else -1)
+        return True
+
+    def _scroll_single_to(self, value: int):
+        """Rola a página única até `value` (-1: o fim). A faixa da barra só acompanha uma página
+        de outro tamanho depois do layout, então a rolagem é repetida logo em seguida."""
+        self._single_scroll = value
+        self._apply_single_scroll()
+        self._layout_timer.start()
+
+    def _after_layout(self):
+        self._apply_single_scroll()
+        self._single_scroll = None
+        self._apply_zoom_anchor()
+        if self._next_field:
+            self._open_next_field()
+
+    def _apply_single_scroll(self):
+        if self._single_scroll is None or self._continuous:
+            return
+        bar = self.scroll_area.verticalScrollBar()
+        bar.setValue(bar.maximum() if self._single_scroll < 0 else self._single_scroll)
+
+    # -- histórico de navegação ---------------------------------------------------
+
+    def _view_position(self) -> tuple[int, float]:
+        """A página em que se está e quanto dela já passou no alto da tela (0 a 1)."""
+        if self._continuous:
+            return self._scroll_anchor()
+        canvas = self._page_labels[0] if self._page_labels else None
+        height = max(1, canvas.height()) if canvas is not None else 1
+        return self._current_page, self.scroll_area.verticalScrollBar().value() / height
+
+    def _show_view(self, page: int, fraction: float):
+        page = max(0, min(self._page_count() - 1, page))
+        if self._continuous:
+            self._scroll_to_page(page, fraction)
+        else:
+            self._show_single_page(page)
+            self._scroll_single_to(int(fraction * max(1, self._page_labels[0].height())))
+
+    def _remember_view(self):
+        """Antes de um salto (link, marcador, miniatura, ir para a página, busca): é para cá que
+        Voltar traz. Virar a página e rolar não entram, como nos leitores de PDF."""
+        if self._document is None or not self._page_labels:
+            return
+        position = self._view_position()
+        if not self._back or self._back[-1] != position:
+            self._back.append(position)
+            del self._back[:-_HISTORY_LIMIT]
+        self._forward.clear()
+
+    def go_back(self):
+        self._step_history(self._back, self._forward)
+
+    def go_forward(self):
+        self._step_history(self._forward, self._back)
+
+    def _step_history(self, source: list[tuple[int, float]], target: list[tuple[int, float]]):
+        if self._document is None or not source:
+            return
+        target.append(self._view_position())
+        self._show_view(*source.pop())
+
+    def _jump_to_page(self, index: int):
+        if self._document is None:
+            return
+        self._remember_view()
+        self._go_to_page(index)
+        if not self._continuous:
+            self._scroll_single_to(0)
+
+    def _jump_to_destination(self, page: int, top: float | None):
+        """Um link ou marcador: a página e, se o destino disser, a altura certa nela."""
+        if self._document is None or not 0 <= page < self._page_count():
+            return
+        self._remember_view()
+        self._show_destination(page, top)
+
+    def _show_destination(self, page: int, top: float | None):
+        y = 0.0
+        if top is not None:
+            geometry = self._geometry(page)
+            _x, y = geometry.user_to_screen(geometry.width / 2, top, self._scale)
+            y = max(0.0, y - _LINK_TARGET_MARGIN)
+        if self._continuous:
+            height = max(1, self._page_labels[page].height())
+            self._scroll_to_page(page, min(1.0, y / height))
+            return
+        self._show_single_page(page)
+        canvas = self._page_labels[0]
+        offset = canvas.pixmap_offset().y() if isinstance(canvas, PageCanvas) else 0.0
+        self._scroll_single_to(int(offset + y))
 
     def set_top_inset(self, inset: int) -> None:
         """Margem extra acima da página, para a barra de marcação não cobri-la."""
@@ -1266,19 +1503,31 @@ class PdfViewer(QWidget):
             self._page_count(),
         )
         if ok:
-            self._go_to_page(number - 1)
+            self._jump_to_page(number - 1)
 
     def _fit_page(self):
-        """Zoom para a página inteira caber na área visível."""
+        """Zoom para a página inteira caber na área visível (e continuar cabendo se a janela
+        mudar de tamanho, até o usuário escolher outro zoom)."""
         if self._document is None:
             return
         width, height = self._row_size(self._current_page)
         if width <= 0 or height <= 0:
             return
+        self._fit = "page"
         viewport = self.scroll_area.viewport()
-        scale = min((viewport.width() - 24) / width, (viewport.height() - 24) / height)
-        self._scale = max(_MIN_SCALE, min(_MAX_SCALE, scale))
-        self._apply_zoom()
+        self._set_fit_scale(min((viewport.width() - 24) / width, (viewport.height() - 24) / height))
+
+    def _set_fit_scale(self, scale: float):
+        scale = max(_MIN_SCALE, min(_MAX_SCALE, scale))
+        if abs(scale - self._scale) >= 0.005:  # refazer a tela à toa perderia a posição
+            self._scale = scale
+            self._apply_zoom()
+
+    def _refit(self):
+        if self._fit == "width":
+            self._fit_width()
+        elif self._fit == "page":
+            self._fit_page()
 
     def _rotate_view(self):
         """Gira a página na tela em 90° (para ler um escaneado de lado); o arquivo não muda
@@ -1289,22 +1538,173 @@ class PdfViewer(QWidget):
         page = self._current_page
         self._rebuild_canvas()
         self._go_to_page(page)
+        self._refit()
 
     def eventFilter(self, watched, event):
-        # Ctrl + roda do mouse: zoom (como nos leitores de PDF), em vez de rolar.
-        if (
-            event.type() == QEvent.Type.Wheel
-            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
-            and self._document is not None
-        ):
-            if event.angleDelta().y() > 0:
-                self._zoom_in()
-            elif event.angleDelta().y() < 0:
-                self._zoom_out()
+        kind = event.type()
+        if self._field_editor is not None and watched is self._field_editor[0]:
+            # A caixa de várias linhas não tem "editingFinished": grava ao perder o foco, com as
+            # mesmas exceções do campo de uma linha.
+            if kind == QEvent.Type.FocusOut and event.reason() not in (
+                Qt.FocusReason.PopupFocusReason,
+                Qt.FocusReason.ActiveWindowFocusReason,
+            ):
+                self._finish_field_edit()
+            return False
+        if watched is self.scroll_area:
+            if kind == QEvent.Type.Resize and self._fit:
+                self._fit_timer.start()
+            return False
+        if self._document is None:
+            return super().eventFilter(watched, event)
+        if kind == QEvent.Type.Wheel:
+            # Ctrl + roda do mouse: zoom (como nos leitores de PDF), em vez de rolar.
+            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                if event.angleDelta().y() > 0:
+                    self._zoom_around(event.position(), self._zoom_in)
+                elif event.angleDelta().y() < 0:
+                    self._zoom_around(event.position(), self._zoom_out)
+                return True
+            return self._wheel_turns_page(event.angleDelta().y())
+        if kind == QEvent.Type.ContextMenu:
+            menu = self._context_menu(event.globalPos())
+            menu.exec(event.globalPos())
+            menu.deleteLater()
             return True
+        if kind == QEvent.Type.MouseButtonPress:
+            if event.button() == Qt.MouseButton.BackButton:
+                self.go_back()
+                return True
+            if event.button() == Qt.MouseButton.ForwardButton:
+                self.go_forward()
+                return True
+            if event.button() == Qt.MouseButton.MiddleButton:
+                self._pan_from = event.globalPosition()
+                QApplication.setOverrideCursor(Qt.CursorShape.ClosedHandCursor)
+                return True
+        if self._pan_from is not None and event.type() in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonRelease):
+            if kind == QEvent.Type.MouseMove and event.buttons() & Qt.MouseButton.MiddleButton:
+                self._pan_to(event.globalPosition())
+                return True
+            if kind == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.MiddleButton:
+                self._pan_from = None
+                QApplication.restoreOverrideCursor()
+                return True
         return super().eventFilter(watched, event)
 
+    def _pan_to(self, global_point: QPointF):
+        if self._pan_from is None:
+            return
+        moved = global_point - self._pan_from
+        self._pan_from = global_point
+        self._pan_travel += moved.manhattanLength()
+        horizontal = self.scroll_area.horizontalScrollBar()
+        vertical = self.scroll_area.verticalScrollBar()
+        horizontal.setValue(horizontal.value() - int(moved.x()))
+        vertical.setValue(vertical.value() - int(moved.y()))
+
+    def set_hand_mode(self, enabled: bool):
+        """A ferramenta de mão: arrastar move a página. Links e campos continuam com o clique."""
+        self._hand_mode = enabled
+        self.hand_button.setChecked(enabled)
+        self._update_canvas_cursor()
+
+    def _wheel_turns_page(self, delta: int) -> bool:
+        """Na página única, a roda passada a borda da página vira a página, como a rolagem
+        contínua faria. Trackpads mandam passos pequenos: vira a cada dente acumulado."""
+        if self._continuous or not delta or QApplication.mouseButtons() != Qt.MouseButton.NoButton:
+            return False
+        direction = -1 if delta > 0 else 1
+        bar = self.scroll_area.verticalScrollBar()
+        if not (bar.value() >= bar.maximum() if direction > 0 else bar.value() <= bar.minimum()):
+            self._wheel_rest = 0
+            return False
+        self._wheel_rest += delta
+        if abs(self._wheel_rest) < _WHEEL_NOTCH:
+            return True
+        self._wheel_rest = 0
+        return self._flip_page(direction)
+
+    def _zoom_around(self, point: QPointF, zoom):
+        """Muda o zoom mantendo sob o mouse o ponto da página que estava sob ele."""
+        content = self.scroll_area.widget()
+        x = (self.scroll_area.horizontalScrollBar().value() + point.x()) / max(1, content.width())
+        y = (self.scroll_area.verticalScrollBar().value() + point.y()) / max(1, content.height())
+        zoom()
+        self._zoom_anchor = (x, y, point)
+        self._layout_timer.start()
+
+    def _apply_zoom_anchor(self):
+        anchor, self._zoom_anchor = self._zoom_anchor, None
+        content = self.scroll_area.widget()
+        if anchor is None or content is None:
+            return
+        x, y, point = anchor
+        self._pending_scroll = None
+        self.scroll_area.horizontalScrollBar().setValue(int(x * content.width() - point.x()))
+        self.scroll_area.verticalScrollBar().setValue(int(y * content.height() - point.y()))
+
+    def _context_menu(self, global_point) -> QMenu:
+        """O botão direito na página. Quem chama abre o menu."""
+        menu = QMenu(self)
+        page, x, y = self._page_at(global_point)
+        link = self._link_at(page, x, y)
+        if link is not None:
+            menu.addAction(tr("Abrir link") if link.url else self._link_tip(link)).triggered.connect(
+                lambda _checked=False: self._follow_link(link)
+            )
+            if link.url:
+                address = link.url[len("mailto:") :] if link.url.lower().startswith("mailto:") else link.url
+                menu.addAction(tr("Copiar endereço do link")).triggered.connect(
+                    lambda _checked=False: QApplication.clipboard().setText(address)
+                )
+            menu.addSeparator()
+        allowed = self._copy_allowed()
+        copy = menu.addAction(tr("Copiar") if allowed else tr("Copiar (bloqueado pelo autor)"))
+        copy.setEnabled(allowed and self._text_selection is not None)
+        copy.triggered.connect(self.copy_selected_text)
+        menu.addAction(tr("Selecionar tudo")).triggered.connect(self.select_all_text)
+        menu.addSeparator()
+        back = menu.addAction(tr("Voltar"))
+        back.setEnabled(bool(self._back))
+        back.triggered.connect(self.go_back)
+        forward = menu.addAction(tr("Avançar"))
+        forward.setEnabled(bool(self._forward))
+        forward.triggered.connect(self.go_forward)
+        menu.addSeparator()
+        hand = menu.addAction(tr("Ferramenta de mão"))
+        hand.setCheckable(True)
+        hand.setChecked(self._hand_mode)
+        hand.triggered.connect(self.set_hand_mode)
+        for text, handler in (
+            ("Aumentar zoom", self._zoom_in),
+            ("Diminuir zoom", self._zoom_out),
+            ("Ajustar à largura", self._fit_width),
+            ("Ajustar à página", self._fit_page),
+            ("Girar a visualização (o arquivo não muda)", self._rotate_view),
+        ):
+            menu.addAction(tr(text)).triggered.connect(lambda _checked=False, h=handler: h())
+        return menu
+
+    def _page_at(self, global_point) -> tuple[int, float, float]:
+        """A página sob um ponto da tela e a posição nela. Na rolagem, um ponto no vão ou além
+        das páginas conta para a mais próxima (é o que um arrasto de seleção precisa)."""
+        if not self._continuous or not self._page_tops:
+            canvas = self._page_labels[0]
+            point = canvas.mapFromGlobal(QPointF(global_point))
+            offset = canvas.pixmap_offset() if isinstance(canvas, PageCanvas) else QPointF(0, 0)
+            return self._current_page, point.x() - offset.x(), point.y() - offset.y()
+        content = self.scroll_area.widget()
+        inside = content.mapFromGlobal(QPointF(global_point))
+        page = max(0, bisect.bisect_right(self._page_tops, inside.y()) - 1)  # a última da linha
+        label_x = self._page_labels[page].mapTo(content, QPoint(0, 0)).x()
+        if page > 0 and self._page_tops[page - 1] == self._page_tops[page] and inside.x() < label_x:
+            page -= 1
+        corner = self._page_labels[page].mapTo(content, QPoint(0, 0))
+        return page, inside.x() - corner.x(), inside.y() - corner.y()
+
     def _set_zoom(self, percent: int):
+        self._fit = None
         self._scale = max(_MIN_SCALE, min(_MAX_SCALE, percent / 100))
         self._apply_zoom()
 
@@ -1321,10 +1721,12 @@ class PdfViewer(QWidget):
             self._show_single_page(self._current_page)
 
     def _zoom_in(self):
+        self._fit = None
         self._scale = min(_MAX_SCALE, self._scale + _ZOOM_STEP)
         self._apply_zoom()
 
     def _zoom_out(self):
+        self._fit = None
         self._scale = max(_MIN_SCALE, self._scale - _ZOOM_STEP)
         self._apply_zoom()
 
@@ -1334,9 +1736,8 @@ class PdfViewer(QWidget):
         width_pt = self._row_size(self._current_page)[0]
         if width_pt <= 0:
             return
-        viewport_width = self.scroll_area.viewport().width() - 24
-        self._scale = max(_MIN_SCALE, min(_MAX_SCALE, viewport_width / width_pt))
-        self._apply_zoom()
+        self._fit = "width"
+        self._set_fit_scale((self.scroll_area.viewport().width() - 24) / width_pt)
 
     def _row_size(self, page: int) -> tuple[float, float]:
         """Largura e altura, em pontos, do que o zoom precisa caber: a página, ou a linha na
@@ -1384,6 +1785,7 @@ class PdfViewer(QWidget):
             self._rebuild_canvas()
             if continuous:
                 self._scroll_to_page(page)  # continua na página em que o usuário estava
+            self._refit()
         self.layout_changed.emit(layout)
 
     def _toggle_thumbnails(self, checked: bool):
@@ -1396,10 +1798,8 @@ class PdfViewer(QWidget):
         self._toggle_thumbnails(visible)
 
     def _on_thumbnail_selected(self, index: int):
-        if self._continuous:
-            self._scroll_to_page(index)
-        else:
-            self._show_single_page(index)
+        if index != self._current_page:  # a lista também avisa ao ganhar o foco ou se esvaziar
+            self._jump_to_page(index)
 
     # -- busca de texto ---------------------------------------------------
 
@@ -1409,6 +1809,20 @@ class PdfViewer(QWidget):
         if self.search_bar.isVisible():
             self._close_search()
         else:
+            # Com um trecho curto selecionado, é ele que se quer procurar.
+            selection = self._text_selection
+            if selection is not None and selection[0] == selection[2]:
+                text = self.selected_text().strip()
+                if text and "\n" not in text and "\r" not in text:
+                    self.search_bar.set_query(text)
+            self.search_bar.show()
+            self.search_bar.focus_query()
+
+    def _step_search(self, direction: int):
+        """F3 e Shift+F3: a próxima e a anterior; sem busca feita, abre a barra para digitar."""
+        if self._matches:
+            self._step_match(direction)
+        elif self._document is not None:
             self.search_bar.show()
             self.search_bar.focus_query()
 
@@ -1432,7 +1846,8 @@ class PdfViewer(QWidget):
             self.search_bar.clear_count()
             self._refresh_current_render()
             return
-        self._search_pages = self._search.iter_pages(query)
+        self._remember_view()  # Voltar traz de volta da ocorrência para onde se estava
+        self._search_pages = self._search.iter_pages(query, self.search_bar.match_case(), self.search_bar.whole_word())
         self.search_bar.set_count(0, 0, searching=True)
         self._search_timer.start()
 
@@ -1513,27 +1928,25 @@ class PdfViewer(QWidget):
         self._update_canvas_cursor()
 
     def _update_canvas_cursor(self):
-        if self._continuous or not self._page_labels:
-            return
-        canvas = self._page_labels[0]
-        if not isinstance(canvas, PageCanvas):
-            return
+        cursor = self._canvas_cursor()
+        for canvas in self._page_labels:
+            if isinstance(canvas, PageCanvas):
+                canvas.setCursor(cursor)
+
+    def _canvas_cursor(self) -> Qt.CursorShape:
         if self.measure_state.is_page_active():
-            canvas.setCursor(Qt.CursorShape.CrossCursor)
-            return
+            return Qt.CursorShape.CrossCursor
         if self.redaction_state.is_page_active() or self.area_pick_state.is_page_active():
-            canvas.setCursor(Qt.CursorShape.CrossCursor)
-            return
+            return Qt.CursorShape.CrossCursor
         if not self.annotation_state.is_page_active() or self.annotation_state.active_tool() is None:
-            canvas.setCursor(Qt.CursorShape.IBeamCursor)  # arrastar seleciona texto
-            return
+            # Arrastar move a página ou seleciona texto.
+            return Qt.CursorShape.OpenHandCursor if self._hand_mode else Qt.CursorShape.IBeamCursor
         tool = self.annotation_state.active_tool()
         if tool in _DRAWING_TOOLS:
-            canvas.setCursor(Qt.CursorShape.CrossCursor)
-        elif tool == "select":
-            canvas.setCursor(Qt.CursorShape.PointingHandCursor)
-        else:
-            canvas.setCursor(Qt.CursorShape.ArrowCursor)
+            return Qt.CursorShape.CrossCursor
+        if tool == "select":
+            return Qt.CursorShape.PointingHandCursor
+        return Qt.CursorShape.ArrowCursor
 
     def _widget_point_to_pdf(self, page_index: int, x: float, y: float) -> tuple[float, float]:
         return self._geometry(page_index).screen_to_user(x, y, self._scale)
@@ -1573,15 +1986,7 @@ class PdfViewer(QWidget):
             self._area_preview_base = QPixmap(self._page_labels[0].pixmap())
             return
         if self._text_selection_enabled():
-            widget = self._form_widget_at(self._current_page, self._widget_point_to_pdf(self._current_page, x, y))
-            if widget is not None:
-                self._edit_form_widget(widget)
-                return
-            self._clear_text_selection()
-            # Arrastar a partir de um link seleciona o texto; só o clique o segue.
-            self._press_link(self._page_labels[0], self._current_page, x, y)
-            self._selection_start_pdf = self._widget_point_to_pdf(self._current_page, x, y)
-            self._selection_base = QPixmap(self._page_labels[0].pixmap())
+            self._start_reading_press(self._page_labels[0], self._current_page, x, y)
             return
         tool = self.annotation_state.active_tool()
         if self._document is None or tool is None:
@@ -1625,7 +2030,7 @@ class PdfViewer(QWidget):
             self._page_labels[0].setPixmap(preview)
             return
         if self._selection_start_pdf is not None:
-            self._update_text_selection(self._widget_point_to_pdf(self._current_page, x, y))
+            self._extend_selection(self._page_labels[0], x, y)
             return
         if self.measure_state.is_page_active() and self._measure_drag_start_pdf is not None:
             if self._measure_preview_base is None:
@@ -1687,10 +2092,7 @@ class PdfViewer(QWidget):
 
     def _on_canvas_released(self, x: float, y: float):
         if self._selection_start_pdf is not None:
-            self._update_text_selection(self._widget_point_to_pdf(self._current_page, x, y))
-            self._selection_start_pdf = None
-            self._selection_base = None
-            self._release_link(self._current_page, x, y)
+            self._finish_selection(self._page_labels[0], self._current_page, x, y)
             return
         if self.measure_state.is_page_active():
             if self._measure_drag_start_pdf is not None:
@@ -1836,7 +2238,51 @@ class PdfViewer(QWidget):
 
     def _text_selection_enabled(self) -> bool:
         """Sem ferramenta de marcação ativa, arrastar na página seleciona texto."""
-        return not self._continuous and self._links_enabled()
+        return self._links_enabled()
+
+    def _on_canvas_double_clicked(self, x: float, y: float):
+        self._on_canvas_clicked_again(x, y, word_range)
+
+    def _on_canvas_triple_clicked(self, x: float, y: float):
+        self._on_canvas_clicked_again(x, y, line_range)
+
+    def _on_canvas_clicked_again(self, x: float, y: float, text_range):
+        if self._text_selection_enabled():
+            self._select_around(self._current_page, x, y, text_range)
+        else:
+            self._on_canvas_pressed(x, y)  # para uma ferramenta, é só mais um clique
+
+    def _on_scroll_page_pressed(self, canvas: PageCanvas, page_index: int, x: float, y: float):
+        if self._text_selection_enabled():
+            self._start_reading_press(canvas, page_index, x, y)
+
+    def _on_scroll_page_clicked_again(self, page_index: int, x: float, y: float, text_range):
+        if self._text_selection_enabled():
+            self._select_around(page_index, x, y, text_range)
+
+    def _start_reading_press(self, canvas: QLabel, page_index: int, x: float, y: float):
+        point = self._widget_point_to_pdf(page_index, x, y)
+        widget = self._form_widget_at(page_index, point)
+        if widget is not None:
+            self._edit_form_widget(widget)
+            return
+        shift = isinstance(canvas, PageCanvas) and canvas.pressed_modifiers & Qt.KeyboardModifier.ShiftModifier
+        if shift and not self._hand_mode and self._text_selection is not None and self._selection_anchor is not None:
+            # Shift + clique: a seleção vai do começo dela até aqui, mesmo em outra página.
+            self._selection_start_pdf = point
+            self._selection_press = QPointF(x, y)
+            self._update_text_selection(page_index, point)
+            return
+        self._clear_text_selection()
+        # Arrastar a partir de um link seleciona o texto; só o clique o segue.
+        self._press_link(canvas, page_index, x, y)
+        self._selection_start_pdf = point
+        self._selection_start_page = page_index
+        self._selection_press = QPointF(x, y)
+        self._selection_anchor = None
+        if self._hand_mode:
+            self._pan_from = canvas.mapToGlobal(QPointF(x, y) + self._canvas_offset(canvas))
+            self._pan_travel = 0.0
 
     # -- links -----------------------------------------------------------------
 
@@ -1858,7 +2304,7 @@ class PdfViewer(QWidget):
                     assert self._document is not None
                     page = self._document[page_index]
                     try:
-                        links = page_links(self._document, page)
+                        links = page_links(self._document, page, self.session.path(), page_index)
                     finally:
                         page.close()
             except Exception:
@@ -1872,24 +2318,62 @@ class PdfViewer(QWidget):
         point = self._widget_point_to_pdf(page_index, x, y)
         return next((link for link in self._page_links(page_index) if link.contains(*point)), None)
 
-    def _on_page_hovered(self, canvas: PageCanvas, page_index: int, x: float, y: float):
-        """Mãozinha e o destino do link sob o mouse."""
+    def _page_notes(self, page_index: int) -> list[PageNote]:
+        notes = self._notes.get(page_index)
+        if notes is None:
+            try:
+                with PDFIUM_LOCK:
+                    assert self._document is not None
+                    page = self._document[page_index]
+                    try:
+                        notes = page_notes(page)
+                    finally:
+                        page.close()
+            except Exception:
+                notes = []  # um comentário malformado não impede de ver a página
+            self._notes[page_index] = notes
+        return notes
+
+    def _hover_at(self, page_index: int, x: float, y: float) -> PageLink | PageNote | FormWidget | None:
         link = self._link_at(page_index, x, y)
-        if link == self._hovered_link:
+        if link is not None or not self._links_enabled() or not 0 <= page_index < self._page_count():
+            return link
+        point = self._widget_point_to_pdf(page_index, x, y)
+        widget = self._form_widget_at(page_index, point)
+        if widget is not None:
+            return widget
+        return next((note for note in self._page_notes(page_index) if note.contains(*point)), None)
+
+    def _on_page_hovered(self, canvas: PageCanvas, page_index: int, x: float, y: float):
+        """Com o mouse em cima: a mãozinha e o destino do link, a mãozinha num campo para clicar
+        e o texto de um comentário."""
+        target = self._hover_at(page_index, x, y)
+        if target == self._hover_target:
             return
-        self._hovered_link = link
-        if link is None:
+        self._hover_target = target
+        clickable = isinstance(target, PageLink) or (isinstance(target, FormWidget) and target.field_type != "text")
+        canvas.setCursor(Qt.CursorShape.PointingHandCursor if clickable else self._canvas_cursor())
+        tip = ""
+        if isinstance(target, PageLink):
+            tip = html.escape(self._link_tip(target))
+        elif isinstance(target, PageNote):
+            tip = self._note_tip(target)
+        if not tip:
             QToolTip.hideText()
-            if self._continuous:
-                canvas.unsetCursor()
-            else:
-                self._update_canvas_cursor()
             return
-        canvas.setCursor(Qt.CursorShape.PointingHandCursor)
         position = canvas.mapToGlobal((QPointF(x, y) + canvas.pixmap_offset()).toPoint())
-        QToolTip.showText(position, self._link_tip(link), canvas)
+        # Sempre como HTML e com o texto escapado: o que vem do PDF não vira marcação.
+        QToolTip.showText(position, f"<span>{tip}</span>", canvas)
+
+    def _note_tip(self, note: PageNote) -> str:
+        content = html.escape(note.content.strip()).replace("\r\n", "<br>").replace("\n", "<br>").replace("\r", "<br>")
+        return f"<b>{html.escape(note.author)}</b><br>{content}" if note.author else content
 
     def _link_tip(self, link: PageLink) -> str:
+        if link.named:
+            return tr(_NAMED_LINK_TIPS[link.named])
+        if link.file:
+            return tr("Abrir {file}").format(file=link.file)
         if link.target_page is not None:
             return tr("Ir para a página {page}").format(page=link.target_page + 1)
         if link.url.lower().startswith("mailto:"):
@@ -1916,75 +2400,199 @@ class PdfViewer(QWidget):
 
     def _follow_link(self, link: PageLink):
         if link.url:
-            QDesktopServices.openUrl(QUrl(link.url))  # no navegador ou no programa de e-mail
-            return
-        target = link.target_page
-        if target is None or not 0 <= target < self._page_count():
-            return
-        top = 0.0
-        if link.target_top is not None:
-            geometry = self._geometry(target)
-            _x, top = geometry.user_to_screen(geometry.width / 2, link.target_top, self._scale)
-            top = max(0.0, top - _LINK_TARGET_MARGIN)
-        if self._continuous:
-            height = max(1, self._page_labels[target].height())
-            self._scroll_to_page(target, min(1.0, top / height))
-            return
-        self._show_single_page(target)
-        canvas = self._page_labels[0]
-        offset = canvas.pixmap_offset().y() if isinstance(canvas, PageCanvas) else 0.0
-        self.scroll_area.verticalScrollBar().setValue(int(offset + top))
+            self._open_url(link.url)
+        elif link.named:
+            {
+                "NextPage": self._go_next,
+                "PrevPage": self._go_prev,
+                "FirstPage": self._go_first,
+                "LastPage": self._go_last,
+                "GoBack": self.go_back,
+                "GoForward": self.go_forward,
+            }[link.named]()
+        elif link.file:
+            self._open_linked_file(link)
+        elif link.target_page is not None:
+            self._jump_to_destination(link.target_page, link.target_top)
 
-    def _update_text_selection(self, end_pdf):
-        page_index = self._current_page
+    def _open_linked_file(self, link: PageLink):
+        """Outro PDF abre no próprio app, a partir da pasta do arquivo do usuário (o documento
+        de trabalho pode estar numa pasta temporária), já no destino que o link pede."""
+        source = self.session.source_path()
+        path = linked_pdf_path(link.file, str(Path(source).parent)) if source else ""
+        if not path:
+            message = html.escape(tr("Arquivo não encontrado: {file}").format(file=link.file))
+            QToolTip.showText(QCursor.pos(), message, self)
+            return
+        opened = self.open_path(path)  # a janela devolve a aba; sem ela, é este visualizador
+        viewer = getattr(opened, "viewer", self if opened is True else None)
+        target = file_destination(path, link)
+        if viewer is not None and target is not None:
+            viewer._jump_to_destination(*target)
+
+    def _open_url(self, url: str):
+        QDesktopServices.openUrl(QUrl(url))  # no navegador ou no programa de e-mail
+
+    # -- seleção de texto ---------------------------------------------------------
+
+    def _extend_selection(self, canvas: QLabel, x: float, y: float):
+        """O arrasto em andamento: a seleção vai até o caractere sob o mouse, que na rolagem pode
+        estar em outra página, e a tela acompanha quando o mouse chega à borda."""
+        if self._selection_start_pdf is None or self._selection_press is None:
+            return
+        point = QPointF(x, y) + self._canvas_offset(canvas)
+        if self._hand_mode:
+            # A página anda junto com o mouse: a distância que conta é a da tela. Arrastada, um
+            # link sob o mouse não é mais um clique.
+            self._pan_to(canvas.mapToGlobal(point))
+            if self._pan_travel > _LINK_CLICK_SLOP:
+                self._link_press = None
+            return
+        if self._text_selection is None and (QPointF(x, y) - self._selection_press).manhattanLength() <= _LINK_CLICK_SLOP:
+            return
+        page, page_x, page_y = self._page_at(canvas.mapToGlobal(point))
+        self._update_text_selection(page, self._widget_point_to_pdf(page, page_x, page_y))
+        inside = canvas.mapTo(self.scroll_area.widget(), point.toPoint())
+        self.scroll_area.ensureVisible(inside.x(), inside.y(), 0, 24)
+
+    def _canvas_offset(self, canvas: QLabel) -> QPointF:
+        return canvas.pixmap_offset() if isinstance(canvas, PageCanvas) else QPointF(0, 0)
+
+    def _finish_selection(self, canvas: QLabel, page_index: int, x: float, y: float):
+        if self._selection_start_pdf is None:
+            return
+        if self._hand_mode:
+            self._pan_from = None  # o último movimento já levou a página até aqui
+        else:
+            self._extend_selection(canvas, x, y)
+        self._selection_start_pdf = None
+        self._selection_press = None
+        self._release_link(page_index, x, y)
+
+    def _char_on_page(self, page_index: int, point, exact: bool = False) -> int | None:
+        x, y = point
         with PDFIUM_LOCK:
+            assert self._document is not None
             page = self._document[page_index]
             textpage = page.get_textpage()
             try:
-                start_index = textpage.get_index(*self._selection_start_pdf, 6, 6)
-                end_index = textpage.get_index(end_pdf[0], end_pdf[1], 6, 6)
-                if start_index is None or end_index is None or start_index < 0 or end_index < 0:
-                    self._text_selection, self._selection_rects = None, []
-                else:
-                    lo, hi = sorted((start_index, end_index))
-                    count = hi - lo + 1
-                    self._text_selection = (page_index, lo, count)
-                    self._selection_rects = [textpage.get_rect(i) for i in range(textpage.count_rects(lo, count))]
+                return char_at(textpage, x, y, exact=exact)
             finally:
                 textpage.close()
                 page.close()
-        base = self._selection_base or self._page_labels[0].pixmap()
-        if base is None:
+
+    def _update_text_selection(self, end_page: int, end_pdf):
+        if self._selection_anchor is None:
+            self._selection_anchor = self._char_on_page(self._selection_start_page, self._selection_start_pdf)
+        end_char = self._char_on_page(end_page, end_pdf)
+        if self._selection_anchor is None or end_char is None:
+            return  # numa página sem texto (escaneada) a seleção fica como estava
+        first, last = sorted(((self._selection_start_page, self._selection_anchor), (end_page, end_char)))
+        self._set_text_selection((*first, *last))
+
+    def _select_around(self, page_index: int, x: float, y: float, text_range):
+        """Duplo clique, a palavra; triplo clique, a linha."""
+        point = self._widget_point_to_pdf(page_index, x, y)
+        widget = self._form_widget_at(page_index, point)
+        if widget is not None:
+            self._edit_form_widget(widget)
             return
-        preview = QPixmap(base)
-        painter = QPainter(preview)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(_TEXT_SELECTION_COLOR)
-        for rect in self._selection_rects:
-            painter.drawRect(self._user_rect_to_screen(page_index, rect))
-        painter.end()
-        self._page_labels[0].setPixmap(preview)
+        if self._hand_mode:
+            return
+        index = self._char_on_page(page_index, point, exact=True)
+        if index is None:
+            return
+        with PDFIUM_LOCK:
+            assert self._document is not None
+            page = self._document[page_index]
+            textpage = page.get_textpage()
+            try:
+                start, count = text_range(textpage, index)
+            finally:
+                textpage.close()
+                page.close()
+        self._selection_start_page, self._selection_anchor = page_index, start
+        self._set_text_selection((page_index, start, page_index, start + count - 1))
+
+    def select_all_text(self):
+        """Ctrl+A: o documento inteiro, como nos leitores de PDF."""
+        if self._document is not None and self._page_count():
+            self._selection_start_page, self._selection_anchor = 0, 0
+            self._set_text_selection((0, 0, self._page_count() - 1, -1))
+
+    def _set_text_selection(self, selection: tuple[int, int, int, int] | None):
+        self._text_selection, self._selection_rects = selection, {}
+        if self._continuous:
+            for index in self._rendered_pages:
+                self._apply_selection(index, self._page_labels[index])
+        elif self._page_labels:
+            self._apply_selection(self._current_page, self._page_labels[0])
 
     def _clear_text_selection(self):
-        had_selection = self._text_selection is not None
-        self._text_selection, self._selection_rects = None, []
-        if had_selection and not self._continuous and self._page_labels:
-            self._show_single_page(self._current_page)
+        if self._text_selection is not None:
+            self._set_text_selection(None)
+
+    def _selection_span(self, page_index: int, textpage) -> tuple[int, int] | None:
+        """(início, quantidade) da seleção em uma página aberta, ou None se não passa por ela."""
+        if self._text_selection is None:
+            return None
+        first_page, first_char, last_page, last_char = self._text_selection
+        total = textpage.count_chars()
+        if not first_page <= page_index <= last_page or not total:
+            return None
+        start = first_char if page_index == first_page else 0
+        end = last_char if page_index == last_page and last_char >= 0 else total - 1
+        return (start, end - start + 1) if end >= start else None
+
+    def _apply_selection(self, page_index: int, label: QLabel):
+        if not isinstance(label, PageCanvas):
+            return
+        rects = self._selection_rects.get(page_index)
+        if rects is None:
+            rects = []
+            if self._text_selection is not None and self._document is not None:
+                with PDFIUM_LOCK:
+                    page = self._document[page_index]
+                    textpage = page.get_textpage()
+                    try:
+                        span = self._selection_span(page_index, textpage)
+                        if span is not None:
+                            rects = [textpage.get_rect(i) for i in range(textpage.count_rects(*span))]
+                    finally:
+                        textpage.close()
+                        page.close()
+            self._selection_rects[page_index] = rects
+        screen = [self._user_rect_to_screen(page_index, rect).normalized() for rect in rects]
+        label.set_selection(screen, _TEXT_SELECTION_COLOR)
 
     def selected_text(self) -> str:
         if self._text_selection is None or self._document is None:
             return ""
-        page_index, start, count = self._text_selection
+        parts = []
+        for page_index in range(self._text_selection[0], self._text_selection[2] + 1):
+            with PDFIUM_LOCK:
+                page = self._document[page_index]
+                textpage = page.get_textpage()
+                try:
+                    span = self._selection_span(page_index, textpage)
+                    if span is not None:
+                        parts.append(textpage.get_text_range(*span))
+                finally:
+                    textpage.close()
+                    page.close()
+        return "\n".join(parts)
+
+    def _copy_allowed(self) -> bool:
+        if self._document is None:
+            return True
         with PDFIUM_LOCK:
-            page = self._document[page_index]
-            textpage = page.get_textpage()
-            try:
-                return textpage.get_text_range(start, count)
-            finally:
-                textpage.close()
-                page.close()
+            return can_copy_text(self._document)
 
     def copy_selected_text(self):
+        if not self._copy_allowed():
+            if self._text_selection is not None:
+                QToolTip.showText(QCursor.pos(), tr("O autor deste PDF bloqueou a cópia de texto."), self)
+            return
         text = self.selected_text()
         if text:
             QApplication.clipboard().setText(text)
@@ -2064,7 +2672,7 @@ class PdfViewer(QWidget):
 
     def _with_form_fields(self, pixmap: QPixmap, page_index: int) -> QPixmap:
         widgets = [w for w in self._form_widgets if w.page_index == page_index and not w.read_only]
-        if self._continuous or not widgets:
+        if not widgets:
             return pixmap
         result = QPixmap(pixmap)
         painter = QPainter(result)
@@ -2097,9 +2705,13 @@ class PdfViewer(QWidget):
         else:
             self._open_field_editor(widget)
 
+    def _field_canvas(self, widget: FormWidget) -> PageCanvas:
+        canvas = self._page_labels[widget.page_index if self._continuous else 0]
+        assert isinstance(canvas, PageCanvas)
+        return canvas
+
     def _field_screen_rect(self, widget: FormWidget) -> QRectF:
-        canvas = self._page_labels[0]
-        assert isinstance(canvas, PageCanvas)  # campos só no modo página única
+        canvas = self._field_canvas(widget)
         rect = self._user_rect_to_screen(widget.page_index, widget.rect).normalized()
         return rect.translated(canvas.pixmap_offset())
 
@@ -2110,38 +2722,71 @@ class PdfViewer(QWidget):
             action.setCheckable(True)
             action.setChecked(value == widget.value)
             action.setData(value)
-        canvas = self._page_labels[0]
+        canvas = self._field_canvas(widget)
         chosen = menu.exec(canvas.mapToGlobal(self._field_screen_rect(widget).bottomLeft().toPoint()))
         return None if chosen is None else chosen.data()
 
     def _open_field_editor(self, widget: FormWidget):
-        # shortcut: campo de várias linhas é editado numa linha só; usar um QPlainTextEdit
-        # se aparecerem formulários que dependam de quebras de linha.
-        canvas = self._page_labels[0]
+        canvas = self._field_canvas(widget)
         rect = self._field_screen_rect(widget)
-        editor = QLineEdit(widget.value, canvas)
+        editor: QLineEdit | QPlainTextEdit
+        if widget.multiline:
+            editor = QPlainTextEdit(widget.value, canvas)
+            editor.installEventFilter(self)  # grava ao perder o foco (`eventFilter`)
+        else:
+            editor = QLineEdit(widget.value, canvas)
+            editor.editingFinished.connect(self._finish_field_edit)
         font = editor.font()
         font.setPixelSize(max(8, int(min(rect.height() * 0.7, 12 * self._scale))))
         editor.setFont(font)
         editor.setGeometry(rect.toAlignedRect())
         self._field_editor = (editor, widget)
-        editor.editingFinished.connect(self._finish_field_edit)
-        escape = QShortcut(QKeySequence(Qt.Key.Key_Escape), editor)
-        escape.setContext(Qt.ShortcutContext.WidgetShortcut)
-        escape.activated.connect(lambda: self._finish_field_edit(commit=False))
+        for key, handler in (
+            (Qt.Key.Key_Escape, lambda: self._finish_field_edit(commit=False)),
+            (Qt.Key.Key_Tab, lambda: self._tab_to_field(1)),
+            ("Shift+Tab", lambda: self._tab_to_field(-1)),
+        ):
+            shortcut = QShortcut(QKeySequence(key), editor)
+            shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
+            shortcut.activated.connect(handler)
         editor.show()
         editor.setFocus()
         editor.selectAll()
+        self.scroll_area.ensureWidgetVisible(editor)
 
-    def _finish_field_edit(self, commit: bool = True):
+    def _finish_field_edit(self, commit: bool = True) -> bool:
+        """Fecha o editor; True se o texto mudou e o documento vai ganhar uma versão nova."""
         if self._field_editor is None:
-            return
+            return False
         (editor, widget), self._field_editor = self._field_editor, None
-        text = editor.text()
+        text = editor.toPlainText() if isinstance(editor, QPlainTextEdit) else editor.text()
         editor.hide()  # dispara editingFinished de novo, que já não acha editor aberto
         editor.deleteLater()
         if commit and text != widget.value:
             self._fill_form_fields({widget.name: text})
+            return True
+        return False
+
+    def _tab_to_field(self, direction: int):
+        """Tab e Shift+Tab: grava o campo e abre o próximo de texto (ou o anterior), como nos
+        leitores de PDF. Se gravou, o próximo abre quando a versão nova carregar (`_reload`)."""
+        if self._field_editor is None:
+            return
+        current = self._field_editor[1]
+        fields = [w for w in self._form_widgets if w.field_type == "text" and not w.read_only]
+        if current not in fields:
+            return
+        self._next_field = fields[(fields.index(current) + direction) % len(fields)].name
+        if not self._finish_field_edit():
+            self._layout_timer.start()
+
+    def _open_next_field(self):
+        name, self._next_field = self._next_field, None
+        widget = next((w for w in self._form_widgets if w.name == name), None)
+        if widget is not None and self._document is not None:
+            if widget.page_index != self._current_page:
+                self._go_to_page(widget.page_index)
+            self._open_field_editor(widget)
 
     def _fill_form_fields(self, values: dict[str, str]):
         input_path = self.session.path()

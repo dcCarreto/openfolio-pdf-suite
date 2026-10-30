@@ -35,6 +35,10 @@ from PySide6.QtCore import QObject, Signal
 from core.base import atomic_output, forget_password, known_password, remember_password
 
 
+# A pasta temporária de onde um PDF anexado abre (ui/viewer/side_panel.py).
+ATTACHMENT_FOLDER_PREFIX = "openfolio-anexo-"
+
+
 @dataclass
 class _Version:
     path: str
@@ -79,6 +83,14 @@ class DocumentSession(QObject):
     def source_path(self) -> str | None:
         """O arquivo do usuário, onde "Salvar" grava."""
         return self._source
+
+    def needs_save_as(self) -> bool:
+        """O arquivo do documento é a cópia temporária de um anexo, que some ao fechar o app:
+        "Salvar" pede um lugar em vez de gravar nela."""
+        if not self._source:
+            return False
+        folder = Path(self._source).parent
+        return folder.name.startswith(ATTACHMENT_FOLDER_PREFIX) and folder.parent == Path(tempfile.gettempdir())
 
     def last_change(self) -> str:
         """"version" se a última troca foi uma versão do mesmo documento (operação,

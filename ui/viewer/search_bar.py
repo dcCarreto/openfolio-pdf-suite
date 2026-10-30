@@ -1,14 +1,16 @@
 """Barra de busca de texto do visualizador."""
 
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtWidgets import QApplication, QCheckBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 
 from ui.i18n import tr
 from ui.viewer.viewer_icons import build_next_page_icon, build_prev_page_icon
 
 
 class SearchBar(QWidget):
-    """Campo de busca com navegação entre ocorrências e contador."""
+    """Campo de busca com navegação entre ocorrências e contador. Enter busca; de novo, com o
+    mesmo termo, vai à próxima ocorrência (Shift+Enter, à anterior) e Esc fecha a barra."""
 
     search_requested = Signal(str)
     next_requested = Signal()
@@ -19,7 +21,13 @@ class SearchBar(QWidget):
         super().__init__(parent)
 
         self.query_edit = QLineEdit()
-        self.query_edit.returnPressed.connect(lambda: self.search_requested.emit(self.query_edit.text()))
+        self.query_edit.returnPressed.connect(self._on_return)
+        self.query_edit.textChanged.connect(self._forget_search)
+
+        self.case_check = QCheckBox()
+        self.word_check = QCheckBox()
+        self.case_check.toggled.connect(self._search_again)
+        self.word_check.toggled.connect(self._search_again)
 
         self.prev_button = QPushButton()
         self.prev_button.setIcon(build_prev_page_icon())
@@ -35,10 +43,17 @@ class SearchBar(QWidget):
         self.count_label = QLabel()
         self._count: tuple[int, int] | None = None
         self._searching = False
+        self._searched = False  # o texto do campo é o da busca mostrada
+
+        escape = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+        escape.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        escape.activated.connect(self.closed)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 4, 8, 4)
         layout.addWidget(self.query_edit, 1)
+        layout.addWidget(self.case_check)
+        layout.addWidget(self.word_check)
         layout.addWidget(self.count_label)
         layout.addWidget(self.prev_button)
         layout.addWidget(self.next_button)
@@ -47,10 +62,34 @@ class SearchBar(QWidget):
 
     def retranslate(self) -> None:
         self.query_edit.setPlaceholderText(tr("Buscar no documento..."))
+        self.case_check.setText(tr("Maiúsculas/minúsculas"))
+        self.word_check.setText(tr("Palavra inteira"))
         self.prev_button.setToolTip(tr("Ocorrência anterior"))
         self.next_button.setToolTip(tr("Próxima ocorrência"))
         self.close_button.setText(tr("Fechar"))
         self._update_count_label()
+
+    def _on_return(self) -> None:
+        if not self._searched:
+            self._search_again()
+        elif QApplication.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.prev_requested.emit()
+        else:
+            self.next_requested.emit()
+
+    def _search_again(self) -> None:
+        self._searched = bool(self.query_edit.text().strip())
+        if self._searched or self._count is not None:
+            self.search_requested.emit(self.query_edit.text())
+
+    def _forget_search(self) -> None:
+        self._searched = False
+
+    def match_case(self) -> bool:
+        return self.case_check.isChecked()
+
+    def whole_word(self) -> bool:
+        return self.word_check.isChecked()
 
     def set_count(self, current: int, total: int, searching: bool = False) -> None:
         """`searching`: a busca ainda está percorrendo o documento (o total pode crescer)."""
@@ -61,6 +100,7 @@ class SearchBar(QWidget):
     def clear_count(self) -> None:
         self._count = None
         self._searching = False
+        self._searched = False
         self.count_label.setText("")
 
     def _update_count_label(self) -> None:
@@ -77,6 +117,9 @@ class SearchBar(QWidget):
 
     def query(self) -> str:
         return self.query_edit.text()
+
+    def set_query(self, text: str) -> None:
+        self.query_edit.setText(text)
 
     def focus_query(self) -> None:
         self.query_edit.setFocus()
