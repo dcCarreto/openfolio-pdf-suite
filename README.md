@@ -76,7 +76,13 @@ recolhem enquanto uma ferramenta está aberta, o painel abre por cima do documen
 recolhe) e parte da barra vai para o menu **...**. No
 centro fica o visualizador — sempre visível, com zoom (também com Ctrl + roda do mouse), ajuste à largura ou à página, rotação da visualização,
 rolagem contínua, página única, página dupla ou livro (capa sozinha), busca que destaca todas
-as ocorrências e seleção de texto com Ctrl+C; **Exibir > Apresentação** (F5) mostra o
+as ocorrências (com F3, maiúsculas/minúsculas e palavra inteira) e seleção de texto em todos os
+modos (duplo clique na palavra, triplo na linha, Shift + clique, Ctrl+A e Ctrl+C, que respeita o
+bloqueio de cópia do autor). Como em um leitor de PDF, os links e marcadores funcionam com um
+clique (também os links para outro PDF e os botões de navegação), Alt+← e Alt+→ voltam e avançam
+depois de um salto, o botão direito abre um menu, a ferramenta de mão (Ctrl+Shift+H) arrasta a
+página e o documento reabre no ponto em que você parou. Um PDF anexado abre com um duplo clique;
+os outros anexos são apenas salvos, para um PDF nunca rodar um programa. **Exibir > Apresentação** (F5) mostra o
 documento em tela cheia, uma página por vez (setas, espaço ou clique passam; Esc sai). É nele que você desenha as anotações, marca as áreas de redação e posiciona o que
 as ferramentas pedem (a área de um texto novo, de um link, de um campo de formulário, do corte
 ou do selo da assinatura), arrastando sobre a página. Formulários são preenchidos ali mesmo, no

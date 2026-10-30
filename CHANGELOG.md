@@ -12,8 +12,40 @@ depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no avi
   e-mail) e um link para outra parte do documento leva até ela, na página única e na
   rolagem. Endereços escritos no texto sem link, como "www.exemplo.com", também abrem.
 - Com o mouse em cima, o link mostra a mãozinha e para onde leva. Arrastar a partir dele
-  continua selecionando o texto, e links que abririam programas ou arquivos do computador
+  continua selecionando o texto, e links que abririam programas ou arquivos que não sejam PDF
   não fazem nada.
+- Links para outro PDF abrem no próprio app, já na página que o link pede, e os botões de navegação de um PDF (próxima
+  página, voltar...) funcionam. Os links também respondem no modo Apresentação.
+- Voltar e Avançar (Alt+← e Alt+→, os botões laterais do mouse ou o botão direito): depois de
+  um link, marcador, miniatura, busca ou "ir para a página", você volta para onde estava.
+- Selecionar texto e preencher formulários agora funcionam em todos os modos de exibição, não
+  só na página única. Na rolagem, a seleção atravessa as páginas.
+- Duplo clique seleciona a palavra, triplo clique a linha e Ctrl+A o documento inteiro. Shift +
+  clique estende a seleção, também para outra página.
+- PDFs em que o autor bloqueou a cópia não deixam copiar o texto pelo visualizador nem exportar
+  as páginas como imagens, como já acontecia ao extrair texto e imagens. Com a senha de
+  proprietário, tudo continua liberado.
+- Ferramenta de mão (Ctrl+Shift+H): arrastar com o botão esquerdo move a página.
+- Um PDF anexado abre em outra aba com um duplo clique, e "Salvar" pergunta onde gravar; outros
+  anexos continuam só sendo salvos.
+- O botão direito na página abre um menu: copiar, selecionar tudo, voltar, zoom e, sobre um
+  link, abrir ou copiar o endereço.
+- Parar o mouse sobre um comentário mostra o texto e o autor dele.
+- Barra de espaço e setas rolam a página. Na página única, a roda do mouse e as teclas viram a
+  página ao passar da borda, e o botão do meio arrasta a página.
+- "Ajustar à largura" e "Ajustar à página" acompanham o tamanho da janela, e Ctrl+roda mantém
+  o ponto sob o mouse. Novos atalhos: Ctrl+1 para 100% e Ctrl+2 para ajustar à largura.
+- O documento reabre no ponto em que você parou. Na primeira vez, abre onde o próprio PDF
+  pede, com o painel e o modo de exibição indicados nele (o modo que você escolheu tem
+  prioridade).
+- Marcadores levam à altura certa da página e também podem abrir sites. Páginas com numeração
+  própria mostram o rótulo do PDF ao lado do total, como "de 300 (iv)", e o campo da página
+  aceita esse rótulo. O zoom vai até 800%.
+- Busca: Enter vai à próxima ocorrência, Shift+Enter à anterior, F3 e Shift+F3 também, e Esc
+  fecha a barra. Há opções de maiúsculas/minúsculas e de palavra inteira, e Ctrl+F já começa
+  com o trecho selecionado.
+- Formulários: Tab e Shift+Tab passam de um campo de texto a outro, e campos de várias linhas
+  aceitam quebras de linha.
 
 ## 2026-10-29
 

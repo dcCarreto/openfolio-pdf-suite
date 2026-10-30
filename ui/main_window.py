@@ -877,7 +877,7 @@ class MainWindow(QMainWindow):
             self._open_pdf()
 
     def _remember_opened_document(self, doc: DocumentTab):
-        if doc.session.last_change() == "document" and doc.session.source_path():
+        if doc.session.last_change() == "document" and doc.session.source_path() and not doc.session.needs_save_as():
             self._preferences.add_recent_file(doc.session.source_path())
             self._recent_menu.setEnabled(True)
 
@@ -993,6 +993,8 @@ class MainWindow(QMainWindow):
         doc = self.document
         if doc is None or doc.session.path() is None:
             return True
+        if doc.session.needs_save_as():
+            return self.save_document_as()
         try:
             doc.session.save()
         except OSError as exc:
@@ -1005,9 +1007,10 @@ class MainWindow(QMainWindow):
         doc = self.document
         if doc is None or doc.session.path() is None:
             return True
-        path, _ = QFileDialog.getSaveFileName(
-            self, tr("Salvar como"), start_folder(doc.session.source_path()), "PDF (*.pdf)"
-        )
+        source = doc.session.source_path() or ""
+        # A cópia temporária de um anexo sugere o nome dele, na última pasta usada.
+        suggestion = str(Path(start_folder()) / Path(source).name) if doc.session.needs_save_as() else start_folder(source)
+        path, _ = QFileDialog.getSaveFileName(self, tr("Salvar como"), suggestion, "PDF (*.pdf)")
         if not path:
             return False
         try:

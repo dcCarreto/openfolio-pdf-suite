@@ -5,11 +5,13 @@ Ficam no mesmo QSettings da geometria da janela. Sem QSettings (testes), as pref
 vivem só na memória do processo.
 """
 
+import json
 import os
 import time
 from pathlib import Path
 
 _MAX_RECENT = 10
+_MAX_POSITIONS = 200
 
 
 class Preferences:
@@ -132,6 +134,34 @@ class Preferences:
 
     def set_page_layout(self, layout: str) -> None:
         self._set("viewer/layout", layout)
+
+    def reading_position(self, path: str) -> tuple[int, float] | None:
+        """Onde o documento estava da última vez: a página (a partir de 0) e quanto dela já
+        tinha passado no alto da tela (0 a 1); None se ele estava no começo ou é novo."""
+        position = self._reading_positions().get(os.path.normcase(os.path.abspath(path)))
+        if position is None:
+            return None
+        try:
+            return int(position[0]), float(position[1])
+        except (TypeError, ValueError, IndexError):
+            return None
+
+    def set_reading_position(self, path: str, page: int, fraction: float = 0.0) -> None:
+        """O começo do documento não é guardado: é onde ele abre de qualquer jeito. Os documentos
+        lidos há mais tempo saem da lista, que não cresce sem limite."""
+        key = os.path.normcase(os.path.abspath(path))
+        positions = self._reading_positions()
+        positions.pop(key, None)
+        if page > 0 or fraction > 0:
+            positions[key] = [page, round(fraction, 4)]
+        self._set("viewer/positions", json.dumps(dict(list(positions.items())[-_MAX_POSITIONS:])))
+
+    def _reading_positions(self) -> dict[str, list]:
+        try:
+            positions = json.loads(str(self._get("viewer/positions", "{}")))
+        except ValueError:
+            return {}
+        return positions if isinstance(positions, dict) else {}
 
     # -- verificação de atualização (A17) -----------------------------------------
 

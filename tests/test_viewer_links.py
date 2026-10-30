@@ -193,6 +193,6 @@ def test_hovering_a_link_shows_the_hand(viewer):
                 Qt.MouseButton.NoButton, Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
             ),
         )
-        expected = Qt.CursorShape.PointingHandCursor if where == point else Qt.CursorShape.ArrowCursor
+        expected = Qt.CursorShape.PointingHandCursor if where == point else Qt.CursorShape.IBeamCursor
         assert label.cursor().shape() == expected
     assert viewer._link_tip(viewer._page_links(0)[2]) == "Escrever para contato@exemplo.com"

@@ -37,10 +37,13 @@ from ui.tools import TOOLS, mode_key
 from ui.viewer.viewer_icons import build_search_icon
 
 # Teclas que o visualizador e as abas já usam (ui/viewer/pdf_viewer.py, compare_view.py,
-# organize_page.py): um comando nelas tiraria a tecla de lá.
+# organize_page.py): um comando nelas tiraria a tecla de lá. Alt+Esquerda e Alt+Direita ficam de
+# fora: são de fábrica de Organizar páginas, com o foco na grade, e do histórico no visualizador.
 _RESERVED = (
-    "Ctrl+F", "Ctrl+G", "Ctrl+C", "Ctrl+=", "Ctrl++", "Ctrl+-", "Ctrl+0",
-    "PgDown", "PgUp", "Right", "Left", "Home", "End", "F3", "Shift+F3", "Del",
+    "Ctrl+F", "Ctrl+G", "Ctrl+C", "Ctrl+A", "Ctrl+=", "Ctrl++", "Ctrl+-", "Ctrl+0", "Ctrl+1", "Ctrl+2",
+    "Ctrl+Shift+H",
+    "PgDown", "PgUp", "Right", "Left", "Up", "Down", "Home", "End", "Space", "Shift+Space",
+    "F3", "Shift+F3", "Del",
 )
 
 _NAVIGATION_KEYS = (Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_PageUp, Qt.Key.Key_PageDown)
