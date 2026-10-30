@@ -89,7 +89,7 @@ class UpdateDialog(QDialog):
         top.addWidget(tile, 0, Qt.AlignmentFlag.AlignTop)
         top.addLayout(heading, 1)
 
-        news_title = QLabel(tr("Novidades").upper())
+        news_title = QLabel(tr("Novidades"))
         news_title.setProperty("ofRole", "section")
         self.notes = QTextBrowser()
         self.notes.setObjectName("UpdateNotes")

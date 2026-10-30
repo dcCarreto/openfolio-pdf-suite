@@ -42,11 +42,11 @@ def _visible(palette):
 def test_palette_finds_tools_by_name_or_description_without_accents(make_window):
     window = make_window()
     palette = CommandPalette(window.commands(), window)
-    palette.search.setText("comprim")  # também na descrição de Processar em lote
-    assert _visible(palette) == ["Ferramentas › Comprimir", "Ferramentas › Processar em lote"]
-    assert palette.list.currentItem().text() == "Ferramentas › Comprimir"
-    palette.search.setText("CRIPTOGRAFICA")  # só na descrição da Assinatura digital
-    assert _visible(palette) == ["Ferramentas › Assinatura digital"]
+    palette.search.setText("comprim")  # também nos níveis do Lote e no sinônimo de Comprimir
+    assert _visible(palette)[0] == "Comprimir"
+    assert palette.list.currentItem().text() == "Comprimir"
+    palette.search.setText("CERTIFICADO")  # a ferramenta e o modo de Preencher e assinar
+    assert _visible(palette)[:2] == ["Preencher e assinar", "Preencher e assinar › Certificado digital"]
     palette.search.setText("pagina dupla")
     assert _visible(palette) == ["Páginas › Página dupla"]
     palette.search.setText("nada disso existe")

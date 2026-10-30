@@ -147,7 +147,7 @@ def test_pptx_long_text_continues_on_the_next_page(tmp_path):
     text = _all_text(output_path)
     assert all(f"Item {number}" in text for number in range(1, 41))  # antes, 14 de 40 sumiam
     assert len(PdfReader(str(output_path)).pages) > 1
-    assert any("continuaram" in warning for warning in result.warnings)
+    assert any("continuou" in warning or "continuaram" in warning for warning in result.warnings)
 
 
 def test_pptx_tables_are_included(tmp_path):

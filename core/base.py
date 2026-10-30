@@ -11,7 +11,7 @@ import pypdfium2 as pdfium
 from pypdf import PasswordType, PdfReader, PdfWriter
 from pypdf.constants import UserAccessPermissions
 
-from .messages import Message
+from .messages import Message, plural_message
 
 
 class EncryptedPDFError(ValueError):
@@ -187,10 +187,11 @@ def require_valid_page_index(total_pages: int, index: int, *, label: str = "Pág
     documento. A mensagem fala em páginas contadas a partir de 1, como o usuário as vê."""
     if not 0 <= index < total_pages:
         raise ValueError(
-            Message(
-                "{label} {page} não existe: o documento tem {total} página(s).",
+            plural_message(
+                total_pages,
+                "{label} {page} não existe: o documento tem 1 página.",
+                "{label} {page} não existe: o documento tem {count} páginas.",
                 label=Message(label),
                 page=index + 1,
-                total=total_pages,
             )
         )

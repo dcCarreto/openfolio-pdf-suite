@@ -22,7 +22,7 @@ from core.base import known_password
 from core.compare import Box, DocumentDiff, TextChange
 from core.geometry import PageGeometry
 from core.progress import PDFIUM_LOCK
-from ui.i18n import tr
+from ui.i18n import plural, tr
 from ui.page_ranges import format_page_ranges
 from ui.theme import apply_titlebar
 from ui.viewer.render import render_page
@@ -296,7 +296,7 @@ class CompareWindow(QWidget):
 
     def _summary(self) -> str:
         count = len(self.diff.changes)
-        lines = [tr("{count} diferença(s) no texto.").format(count=count) if count else tr("Nenhuma diferença no texto.")]
+        lines = [plural(count, "1 diferença no texto.", "{count} diferenças no texto.") if count else tr("Nenhuma diferença no texto.")]
         for side, pages in (("A", self.diff.pages_without_text_a), ("B", self.diff.pages_without_text_b)):
             if pages:
                 lines.append(

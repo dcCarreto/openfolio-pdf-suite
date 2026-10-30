@@ -30,7 +30,7 @@ from core.protect import ProtectPDF
 from core.tabular import write_table
 from core.watermark import AddWatermark
 from ui.errors import describe_error
-from ui.i18n import error_text, tr
+from ui.i18n import error_text, plural, tr
 from ui.pages.compress_page import _LEVELS
 from ui.pages.ocr_page import _LANGUAGE_NAMES
 from ui.tasks import run_task
@@ -73,8 +73,8 @@ class BatchPage(QWidget):
         self.operation_combo.addItems([tr(label) for label, _suffix in _OPERATIONS])
 
         self.level_combo = QComboBox()
-        for level, label in _LEVELS:
-            self.level_combo.addItem(tr(label), level)
+        for level, _name, _badge, _effect, short in _LEVELS:
+            self.level_combo.addItem(tr(short), level)
         self.level_combo.setCurrentIndex(1)
         self.language_combo = QComboBox()
         languages = get_available_languages()
@@ -96,7 +96,7 @@ class BatchPage(QWidget):
         ocr_label = (
             tr("Idioma do texto:")
             if self._ocr_available
-            else tr("Tesseract não encontrado: instale-o para usar o OCR (veja a aba OCR).")
+            else tr("O reconhecimento de texto não está instalado: veja a ferramenta Escaneados e OCR.")
         )
         for label, widget in (
             (tr("Nível de compressão:"), self.level_combo),
@@ -152,7 +152,7 @@ class BatchPage(QWidget):
     def _update_found(self) -> None:
         folder = self.input_picker.path()
         count = len(pdfs_in_folder(folder)) if folder and os.path.isdir(folder) else 0
-        self.found_label.setText(tr("{count} PDF(s) na pasta.").format(count=count))
+        self.found_label.setText(plural(count, "1 PDF na pasta.", "{count} PDFs na pasta."))
 
     def _operation(self):
         """A operação escolhida, com as opções lidas agora (na thread da interface)."""
@@ -218,8 +218,12 @@ class BatchPage(QWidget):
         self.results_table.resizeColumnToContents(0)
 
         failed = sum(result.error is not None for result in results)
-        message = tr("{done} de {total} arquivo(s) processado(s) em {folder}.").format(
-            done=len(results) - failed, total=len(results), folder=_breakable(output_dir)
+        message = plural(
+            len(results),
+            "{done} de 1 arquivo processado em {folder}.",
+            "{done} de {count} arquivos processados em {folder}.",
+            done=len(results) - failed,
+            folder=_breakable(output_dir),
         )
         if failed:
             message += " " + tr("Falharam: {count}.").format(count=failed)

@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 
 from core.base import READ, open_reader
 from core.bookmarks import DetectHeadings, ListOutline, OutlineItem, SetOutline
-from ui.i18n import tr
+from ui.i18n import plural, tr
 from ui.tasks import call_with_progress, run_task
 from ui.widgets.current_page import with_current_page_button
 from ui.widgets.document_source_bar import DocumentSourceBar
@@ -269,8 +269,12 @@ class BookmarksPage(QWidget):
                 page = page_text.strip()
                 if page and not (page.isdigit() and 1 <= int(page) <= total):
                     raise ValueError(
-                        tr('A página "{page}" do marcador "{title}" não existe: o documento tem {total} página(s).').format(
-                            page=page, title=title, total=total
+                        plural(
+                            total,
+                            'A página "{page}" do marcador "{title}" não existe: o documento tem 1 página.',
+                            'A página "{page}" do marcador "{title}" não existe: o documento tem {count} páginas.',
+                            page=page,
+                            title=title,
                         )
                     )
                 items.append(OutlineItem(level, title.strip(), int(page) - 1 if page else None))

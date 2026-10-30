@@ -242,6 +242,24 @@ def build_minus_icon() -> QIcon:
     return _build(draw)
 
 
+def build_caret_down_icon() -> QIcon:
+    """caret-down: o "▾" dos botões com mais opções (Realce, Formas, Estilo)."""
+
+    def draw(p):
+        _poly(p, (7.5, 10), (12, 14.5), (16.5, 10))
+
+    return _build(draw)
+
+
+def build_caret_right_icon() -> QIcon:
+    """caret-right: uma seção recolhida (Opções avançadas)."""
+
+    def draw(p):
+        _poly(p, (10, 7.5), (14.5, 12), (10, 16.5))
+
+    return _build(draw)
+
+
 def build_check_icon() -> QIcon:
     def draw(p):
         _poly(p, (5, 12.5), (10, 17.5), (19, 7.5))
@@ -330,7 +348,9 @@ def build_duplicate_icon() -> QIcon:
     return _build(draw)
 
 
-def build_trash_icon() -> QIcon:
+def build_trash_icon(color=None) -> QIcon:
+    """trash; `color` ("danger") para excluir."""
+
     def draw(p):
         p.drawLine(QPointF(4, 6), QPointF(20, 6))
         _poly(p, (9, 6), (9, 3.5), (15, 3.5), (15, 6))
@@ -338,7 +358,7 @@ def build_trash_icon() -> QIcon:
         p.drawLine(QPointF(10, 10), QPointF(10, 16.5))
         p.drawLine(QPointF(14, 10), QPointF(14, 16.5))
 
-    return _build(draw)
+    return _build(draw, color=color)
 
 
 # -- estados e tarefas ----------------------------------------------------------------------
@@ -378,8 +398,8 @@ def build_clock_icon() -> QIcon:
     return _build(draw)
 
 
-def build_list_checks_icon() -> QIcon:
-    """list-checks: as tarefas."""
+def build_list_checks_icon(color=None) -> QIcon:
+    """list-checks: as tarefas (no acento, `color="accent"`, na barra de status)."""
 
     def draw(p):
         _poly(p, (3.5, 6.5), (5, 8), (8, 5))
@@ -388,7 +408,7 @@ def build_list_checks_icon() -> QIcon:
         p.drawLine(QPointF(11, 13.5), QPointF(20, 13.5))
         p.drawLine(QPointF(11, 19), QPointF(20, 19))
 
-    return _build(draw)
+    return _build(draw, color=color)
 
 
 def build_update_icon() -> QIcon:

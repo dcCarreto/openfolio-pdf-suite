@@ -27,7 +27,7 @@ from PySide6.QtWidgets import QWidget
 from core.base import EncryptedPDFError
 from core.progress import OperationCancelled, Progress
 from ui.errors import show_error
-from ui.i18n import tr
+from ui.i18n import error_text, tr
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,7 @@ class TaskManager(QObject):
     started = Signal(str)  # título da operação
     progress_changed = Signal(int, int, str)  # feito, total (0 = sem medida), mensagem
     finished = Signal(str)  # "ok", "error" ou "cancelled"
+    failed_with = Signal(str)  # o motivo de uma falha (antes do `finished`), para o popover de tarefas
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -148,6 +149,7 @@ class TaskManager(QObject):
             logger.info("Falhou: %s: %s", self._title, exc)
         else:
             logger.error("Falhou: %s", self._title, exc_info=(type(exc), exc, exc.__traceback__))
+        self.failed_with.emit(error_text(exc))
         self._finish("error")
         if callback is not None:
             callback(exc)

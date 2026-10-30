@@ -69,7 +69,7 @@ def test_main_window_is_translated_without_losing_the_open_tool():
     window = MainWindow()
     original_session = window.session
     compress = ROW_OF["CompressPage"]
-    assert window.tools_center.cards[ROW_OF["MergePage"]].text() == "Mesclar"
+    assert window.tools_center.cards["MergePage"].text() == "Mesclar"
 
     window.open_tool(compress)
     i18n.set_language(i18n.EN_US)
@@ -77,12 +77,12 @@ def test_main_window_is_translated_without_losing_the_open_tool():
     # A sessão do documento aberto precisa sobreviver à tradução da UI.
     assert window.session is original_session
     assert [window.tabs.tabText(i) for i in range(2)] == ["Home", "Tools"]
-    assert window.tools_center.cards[ROW_OF["MergePage"]].text() == "Merge"
+    assert window.tools_center.cards["MergePage"].text() == "Merge"
     assert window.document.current_tool() == compress  # a ferramenta aberta continua aberta
     assert window.document.current_panel().title_label.text() == "Compress"
 
     i18n.set_language(i18n.PT_BR)
-    assert window.tools_center.cards[ROW_OF["MergePage"]].text() == "Mesclar"
+    assert window.tools_center.cards["MergePage"].text() == "Mesclar"
 
     window.close()
 
@@ -94,8 +94,8 @@ def test_core_messages_are_translated_with_their_values():
     with pytest.raises(ValueError) as error:
         require_valid_page_index(3, 7, label="Página de destino")
 
-    assert str(error.value) == "Página de destino 8 não existe: o documento tem 3 página(s)."
-    assert i18n.error_text(error.value) == "Target page 8 does not exist: the document has 3 page(s)."
+    assert str(error.value) == "Página de destino 8 não existe: o documento tem 3 páginas."
+    assert i18n.error_text(error.value) == "Target page 8 does not exist: the document has 3 pages."
 
 
 def test_fixed_core_errors_are_translated_too():

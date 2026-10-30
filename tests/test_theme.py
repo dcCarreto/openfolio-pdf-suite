@@ -47,9 +47,9 @@ def test_light_and_dark_change_palette_stylesheet_and_icons_already_built(app):
     light = (_window_color(app), _icon_color(icon))
 
     # Os ícones ficam no texto secundário; o texto principal fica para o que está sob o mouse.
-    assert dark == ("#161826", "#a9adbf")
-    assert light == ("#eceef4", "#4f5368")
-    assert "#eceef4" in app.styleSheet() and "#161826" not in app.styleSheet()
+    assert dark == ("#111821", "#aab6c6")
+    assert light == ("#eaeff5", "#445163")
+    assert "#eaeff5" in app.styleSheet() and "#111821" not in app.styleSheet()
     assert theme.current_theme() == theme.LIGHT
 
 
@@ -106,14 +106,14 @@ def test_view_menu_switches_and_saves_the_theme(app, tmp_path, monkeypatch):
     window._theme_actions[theme.LIGHT].trigger()
 
     assert window._theme_actions[theme.LIGHT].isChecked()
-    assert _window_color(app) == "#eceef4"
+    assert _window_color(app) == "#eaeff5"
     assert Preferences(settings).theme() == theme.LIGHT
 
     # "Seguir o sistema" acompanha a troca feita no sistema com o app aberto.
     window.set_theme(theme.SYSTEM)
     monkeypatch.setattr(theme, "resolved_theme", lambda _theme: theme.DARK)
     window._on_system_color_scheme_changed(Qt.ColorScheme.Dark)
-    assert _window_color(app) == "#161826"
+    assert _window_color(app) == "#111821"
 
 
 def _luminance(color: str) -> float:
@@ -134,12 +134,15 @@ def contrast(a: str, b: str) -> float:
     [
         ("text", "panel", 12),
         ("text2", "panel", 7),
-        ("text3", "panel", 4.8),
+        ("text3", "panel", 4.5),
         ("text3", "field", 4.5),  # placeholder
         ("text2", "bg", 4.5),  # ícones e rótulos das barras
         ("accent_strong", "accent_fill", 4.5),  # o que está marcado, o botão principal
-        ("on_accent", "accent", 4.5),
-        ("accent", "field", 3),  # a borda de foco (componente de interface: 3:1)
+        ("on_primary", "primary", 4.5),
+        ("on_primary", "primary_hover", 4.5),
+        ("text3", "bg", 4.5),
+        ("warning", "warning_fill", 4.5),
+        ("focus", "field", 3),  # a borda de foco (componente de interface: 3:1)
         ("success", "success_fill", 4.5),
         ("danger", "danger_fill", 4.5),
         ("text", "success_fill", 4.5),
@@ -154,7 +157,7 @@ def test_text_and_states_pass_wcag_aa(key, fore, back, minimum):
 def test_no_color_of_the_old_theme_is_left(app, tmp_path):
     from ui.main_window import MainWindow
 
-    old = ["#1e1e1e", "#2c2c2e", "#3a3a3c", "#48484a", "#0a84ff", "#e8e8ed", "#dcdce1", "#007aff", "#0064d6"]
+    old = ["#161826", "#9184d9", "#b5abfc", "#2b2741", "#1e1e1e", "#2c2c2e", "#3a3a3c", "#48484a", "#0a84ff", "#e8e8ed", "#dcdce1", "#007aff", "#0064d6"]
     MainWindow(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
     for key in (theme.DARK, theme.LIGHT):
         theme.apply_theme(app, key)
@@ -197,5 +200,5 @@ def test_icons_follow_the_state(app):
 
     assert color(QIcon.Mode.Normal) == t["text2"]
     assert color(QIcon.Mode.Active) == t["text"]
-    assert color(QIcon.Mode.Normal, QIcon.State.On) == t["accent_strong"]
-    assert color(QIcon.Mode.Selected) == t["accent_strong"]
+    assert color(QIcon.Mode.Normal, QIcon.State.On) == t["accent"]
+    assert color(QIcon.Mode.Selected) == t["accent"]

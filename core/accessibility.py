@@ -23,7 +23,7 @@ from pypdf import PdfWriter
 from pypdf.generic import BooleanObject, DictionaryObject, NameObject, TextStringObject
 
 from .base import READ, open_reader, write_pdf
-from .messages import Message
+from .messages import plural_message
 
 
 @dataclass
@@ -123,9 +123,10 @@ class CheckAccessibility:
                     figures_without_alt += 1
             if figures_without_alt:
                 issues.append(
-                    Message(
-                        "{count} figura(s) tagueada(s) sem texto alternativo (/Alt).",
-                        count=figures_without_alt,
+                    plural_message(
+                        figures_without_alt,
+                        "1 figura tagueada sem texto alternativo (/Alt).",
+                        "{count} figuras tagueadas sem texto alternativo (/Alt).",
                     )
                 )
 
@@ -136,9 +137,10 @@ class CheckAccessibility:
         ]
         if pages_without_tab_order:
             issues.append(
-                Message(
-                    "{count} página(s) com links ou campos sem ordem de tabulação pela estrutura (/Tabs /S).",
-                    count=len(pages_without_tab_order),
+                plural_message(
+                    len(pages_without_tab_order),
+                    "1 página com links ou campos sem ordem de tabulação pela estrutura (/Tabs /S).",
+                    "{count} páginas com links ou campos sem ordem de tabulação pela estrutura (/Tabs /S).",
                 )
             )
 
@@ -149,9 +151,10 @@ class CheckAccessibility:
             )
             if unlabeled:
                 issues.append(
-                    Message(
-                        "{count} campo(s) de formulário sem descrição para leitores de tela (/TU): {names}.",
-                        count=len(unlabeled),
+                    plural_message(
+                        len(unlabeled),
+                        "1 campo de formulário sem descrição para leitores de tela (/TU): {names}.",
+                        "{count} campos de formulário sem descrição para leitores de tela (/TU): {names}.",
                         names=", ".join(unlabeled[:8]),
                     )
                 )

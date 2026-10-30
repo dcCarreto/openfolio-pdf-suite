@@ -177,4 +177,4 @@ def test_convert_page_makes_jpegs_of_the_selected_thumbnails(make_pdf, tmp_path,
     assert wait_for_tasks()
 
     assert sorted(p.name for p in (tmp_path / "out").iterdir()) == ["doc_page1.jpg", "doc_page3.jpg"]
-    assert shown == ["2 imagem(ns) gerada(s) com sucesso."]
+    assert shown == ["2 imagens geradas."]

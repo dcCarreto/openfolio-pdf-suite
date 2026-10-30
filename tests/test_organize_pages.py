@@ -181,19 +181,21 @@ def test_each_pending_change_is_listed_and_can_be_undone_alone(organizer):
     _select(page, 1)
     page.delete_selected()
     page.insert_blank()  # sem seleção: no fim
-    assert page.changes() == ["Girou a página 1 à direita", "Apagou a página 2", "Inseriu uma página em branco"]
-    assert page.changes_title.text() == "ALTERAÇÕES PENDENTES · 3"
+    assert page.changes() == ["Girar a página 1 em 90°", "Excluir a página 2", "Inserir página em branco no fim"]
+    # A excluída fica na grade, marcada, até Aplicar; e não entra no que vai ser gravado.
+    assert page.grid.count() == 4 and page.grid.item(1).data(0x0100 + 2)
+    assert page.changes_title.text() == "Alterações pendentes · 3"
     assert page.apply_button.text() == "Aplicar 3 alterações"
 
     page.remove_change(1)  # o "×" do meio: a página 2 volta, o resto fica
     assert page.layout_items() == [(0, 90), (1, 0), (2, 0), (None, 0)]
-    assert page.changes() == ["Girou a página 1 à direita", "Inseriu uma página em branco"]
+    assert page.changes() == ["Girar a página 1 em 90°", "Inserir página em branco no fim"]
 
 
 def test_dragging_records_a_move_that_undo_and_redo_follow(organizer):
     page = organizer
     page.grid.model().moveRow(QModelIndex(), 2, QModelIndex(), 0)
-    assert page.changes() == ["Moveu a página 3"]
+    assert page.changes() == ["Mover a página 3 para antes da 1"]
     page.undo_edit()
     assert page.layout_items() == [(0, 0), (1, 0), (2, 0)]
     page.redo_edit()
@@ -211,7 +213,7 @@ def test_the_drop_bar_and_the_drag_image(organizer):
     assert not image.isNull() and image.width() > page.grid.tile_width // 2
 
     page.size_slider.setValue(180)
-    assert page.grid.gridSize().width() == 180 + 34
+    assert page.grid.gridSize().width() == 180 + 20  # 20 px entre as miniaturas
 
 
 def test_the_grid_takes_the_place_of_the_viewer_and_applies_one_version(make_pdf, tmp_path, monkeypatch):
@@ -257,4 +259,58 @@ def test_the_grid_takes_the_place_of_the_viewer_and_applies_one_version(make_pdf
         from PySide6.QtWidgets import QMessageBox
 
         monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Discard)
+        window.close()
+
+
+def test_the_bar_shows_actions_only_with_a_selection(organizer):
+    page = organizer
+    page.grid.clearSelection()
+    assert page.selection_hint.isVisibleTo(page.center_widget)
+    assert not page.delete_button.isVisibleTo(page.center_widget)
+    _select(page, 0, 1)
+    assert page.selection_badge.text() == "2 selecionadas" and page.delete_button.isVisibleTo(page.center_widget)
+    assert not page.selection_hint.isVisibleTo(page.center_widget)
+
+
+def test_a_deleted_page_stays_marked_until_applied(organizer):
+    page = organizer
+    _select(page, 1)
+    page.delete_selected()
+    assert page.grid.count() == 3 and page.grid.item(1).text() == "Página 2, a excluir"
+    assert page.layout_items() == [(0, 0), (2, 0)]
+    _select(page, 1)
+    page.delete_selected()  # já marcada: nada muda
+    assert page.changes() == ["Excluir a página 2"]
+
+
+def test_the_changes_say_what_will_happen(organizer):
+    page = organizer
+    _select(page, 0, 1)
+    page.rotate_selected(270)
+    _select(page, 0)
+    page.insert_blank()
+    page.move_selected(1)  # a página em branco (selecionada) passa para depois da 2
+    assert page.changes() == [
+        "Girar as páginas 1 e 2 em 90° à esquerda",
+        "Inserir página em branco após a 1",
+        "Mover a página 2 para antes da 4",
+    ]
+
+
+def test_moving_pages_works_from_the_keyboard(make_pdf, tmp_path):
+    from PySide6.QtCore import QSettings
+
+    from ui.main_window import MainWindow
+
+    _app()
+    window = MainWindow(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    try:
+        window.open_document(str(make_pdf("doc.pdf", [(100, 300), (200, 300), (300, 300)])))
+        page = window.open_tool(window._row_of["OrganizePage"])
+        commands = {action.objectName(): action for _label, action in window.commands()}
+        assert commands["organize.move_forward"].shortcut().toString() == "Alt+Right"
+        _select(page, 0)
+        commands["organize.move_forward"].trigger()
+        assert page.layout_items() == [(1, 0), (0, 0), (2, 0)]
+    finally:
         window.close()

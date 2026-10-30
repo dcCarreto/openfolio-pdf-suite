@@ -77,7 +77,7 @@ def test_apply_redaction_also_sanitizes_by_default(monkeypatch, tmp_path):
     wait_for_tasks()
 
     assert find_residual_risks(str(tmp_path / "out.pdf")) == []
-    assert "1 página(s) redigida(s)" in messages[0]
+    assert "1 página redigida" in messages[0]
     assert "Nada perigoso" in messages[0] or "Removido:" in messages[0]
 
 
@@ -107,8 +107,8 @@ def test_format_sanitize_report_lists_only_what_was_removed():
     _app()
     text = format_sanitize_report(SanitizeReport(javascript=2, embedded_files=1, metadata_removed=True))
 
-    assert "2 script(s) ou ação(ões) de JavaScript" in text
-    assert "1 arquivo(s) embutido(s)" in text
+    assert "2 scripts ou ações de JavaScript" in text
+    assert "1 arquivo embutido" in text
     assert "metadados do documento" in text
     assert "anotação" not in text
     assert format_sanitize_report(SanitizeReport()) == "Nada perigoso foi encontrado no documento."
@@ -131,4 +131,4 @@ def test_searching_a_text_marks_every_occurrence_for_review(monkeypatch, tmp_pat
     assert [page.pending_list.item(i).text() for i in range(page.pending_list.count())] == [
         "Página 1 — Texto buscado: conteudo"
     ]
-    assert shown and "1 ocorrência(s)" in shown[0]
+    assert shown and "1 ocorrência encontrada" in shown[0]

@@ -8,7 +8,7 @@ from pypdf.annotations import Link
 from pypdf.generic import ArrayObject, NameObject
 
 from .base import READ, open_reader, require_valid_page_index, write_pdf
-from .messages import Message
+from .messages import Message, plural_message
 
 _SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 _EMAIL_RE = re.compile(r"^[^@\s/]+@[^@\s/]+\.[^@\s/]+$")
@@ -156,10 +156,11 @@ class RemoveLink:
         link_refs = [a for a in annots if a.get_object().get("/Subtype") == "/Link"]
         if not 0 <= link_index < len(link_refs):
             raise ValueError(
-                Message(
-                    "O link {number} não existe: a página tem {count} link(s).",
+                plural_message(
+                    len(link_refs),
+                    "O link {number} não existe: a página tem 1 link.",
+                    "O link {number} não existe: a página tem {count} links.",
                     number=link_index + 1,
-                    count=len(link_refs),
                 )
             )
         target_ref = link_refs[link_index]

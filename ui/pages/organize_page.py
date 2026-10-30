@@ -7,11 +7,15 @@ uma barra de botões em cima; o painel lista as alterações pendentes. Elas fic
 desfazer. Arrastar uma miniatura a muda de lugar; os botões agem sobre as selecionadas
 (Ctrl/Shift+clique seleciona várias).
 
-Cada alteração é uma operação sobre as páginas da grade (girar, apagar, duplicar, inserir em
+Cada alteração é uma operação sobre as páginas da grade (girar, excluir, duplicar, inserir em
 branco, mover), e a grade é sempre o documento com as operações reaplicadas em ordem. Por isso
-dá para desfazer qualquer uma delas sozinha (o "×" na lista) e não só a última. Com a aba
+dá para desfazer qualquer uma delas sozinha (o "↶" na lista) e não só a última. Com a aba
 aberta, o Ctrl+Z da janela desfaz primeiro a última alteração da grade (`undo_edit`) e só
 depois as versões do documento.
+
+O que está pendente aparece na grade: a página girada ganha contorno tracejado e o selo
+"↻ 90°" no pé; a excluída continua no lugar, esmaecida, com a lixeira e "10 · excluir", até
+Aplicar.
 """
 
 from bisect import bisect_left
@@ -22,11 +26,13 @@ from PySide6.QtGui import QColor, QDrag, QFont, QIcon, QKeySequence, QPainter, Q
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListView,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QPushButton,
     QSlider,
     QStyle,
@@ -40,23 +46,26 @@ from core.base import open_pdfium
 from core.pages import ArrangePages
 from core.progress import PDFIUM_LOCK
 from ui import sidebar_icons, theme
-from ui.i18n import error_text, tr
+from ui.i18n import error_text, plural, tr
 from ui.preferences import remember_folder_of, start_folder
 from ui.tasks import run_task
 from ui.top_bar import bar_separator
 from ui.viewer.render import render_page
 from ui.viewer.viewer_icons import (
-    build_close_icon,
     build_duplicate_icon,
     build_rotate_icon,
     build_rotate_left_icon,
     build_trash_icon,
 )
+from ui.widgets.file_picker import FilePicker
 
 _ROLE = Qt.ItemDataRole.UserRole  # (página de origem a partir de 0, ou None se em branco; giro)
 _UID = Qt.ItemDataRole.UserRole + 1  # a identidade da miniatura na grade (sobrevive às operações)
-TILE_WIDTH = 128  # a página na grade; a altura é 1,3 vez a largura
-TILE_RANGE = (80, 200)  # o controle de tamanho das miniaturas
+_DELETED = Qt.ItemDataRole.UserRole + 2  # a excluir: fica na grade, esmaecida, até Aplicar
+TILE_WIDTH = 96  # a página na grade; a altura do quadro é 1,3 vez a largura
+TILE_RANGE = (64, 200)  # o zoom da grade
+GAP = (20, 16)  # entre as miniaturas, na horizontal e na vertical
+NUMBER_HEIGHT = 22  # o número embaixo da miniatura
 _RENDER_HEIGHT = 260  # renderiza grande o bastante para o maior tamanho sem borrar
 
 
@@ -97,8 +106,11 @@ def _moves(before: list[int], after: list[int]) -> list[tuple[int, int | None]]:
 
 
 class _PageTileDelegate(QStyledItemDelegate):
-    """A miniatura com sombra, o número embaixo e, selecionada, o contorno no acento e um ✓ no
-    canto (para não depender só da cor). Selos no canto: o giro e "Em branco"."""
+    """A miniatura com sombra e o número embaixo, e as marcas do que está pendente:
+    - escolhida: contorno de 2 px no acento e o ✓ redondo no canto superior direito;
+    - girada: contorno tracejado em warning e o selo "↻ 90°" no pé;
+    - a excluir: esmaecida, com contorno tracejado em danger, a lixeira e "10 · excluir";
+    - em branco: o selo "Em branco" no pé."""
 
     def __init__(self, view):
         super().__init__(view)
@@ -112,8 +124,9 @@ class _PageTileDelegate(QStyledItemDelegate):
         width = self._view.tile_width
         height = _tile_height(width)
         cell = option.rect
-        page = QRect(cell.center().x() - width // 2, cell.top() + 10, width, height)
+        page = QRect(cell.center().x() - width // 2, cell.top() + 8, width, height)
         source, angle = index.data(_ROLE)
+        deleted = bool(index.data(_DELETED))
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -126,6 +139,7 @@ class _PageTileDelegate(QStyledItemDelegate):
             target.moveCenter(QPointF(page.center()))
         else:
             target = QRectF(page)
+        painter.setOpacity(0.55 if deleted else 1.0)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(0, 0, 0, 60))
         painter.drawRoundedRect(target.translated(0, 2).adjusted(-1, 0, 1, 2), 3, 3)  # sombra
@@ -133,47 +147,62 @@ class _PageTileDelegate(QStyledItemDelegate):
         painter.drawRect(target)
         if isinstance(pixmap, QPixmap) and not pixmap.isNull():
             painter.drawPixmap(target, pixmap, QRectF(pixmap.rect()))
+        painter.setOpacity(1.0)
 
+        outline = target.adjusted(-4, -4, 4, 4)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         if selected:
-            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor(t["accent"]), 2))
-            painter.drawRoundedRect(target.adjusted(-4, -4, 4, 4), 5, 5)
-            check = QRectF(target.left() - 8, target.top() - 8, 20, 20)
+            painter.drawRoundedRect(outline, 5, 5)
+        elif deleted or angle:
+            painter.setPen(QPen(QColor(t["danger" if deleted else "warning"]), 1.5, Qt.PenStyle.DashLine))
+            painter.drawRoundedRect(outline, 5, 5)
+        if deleted:
+            trash = QRect(0, 0, 24, 24)
+            trash.moveCenter(target.center().toPoint())
+            build_trash_icon("danger").paint(painter, trash)
+
+        small = QFont(option.font)
+        small.setPixelSize(11)
+        small.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(small)
+        bottom = target.bottom() - 6
+        for text, fill, ink in (
+            (f"↻ {angle}°", "warning_fill", "warning") if angle and not deleted else (None, "", ""),
+            (tr("Em branco"), "raised", "text2") if source is None else (None, "", ""),
+        ):
+            if text is None:
+                continue
+            badge_width = painter.fontMetrics().horizontalAdvance(text) + 12
+            badge = QRectF(target.center().x() - badge_width / 2, bottom - 18, badge_width, 18)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(t["accent"]))
-            painter.drawRoundedRect(check, 5, 5)
-            pen = QPen(QColor(t["on_accent"]), 2)
+            painter.setBrush(QColor(t[fill]))
+            painter.drawRoundedRect(badge, 9, 9)
+            painter.setPen(QColor(t[ink]))
+            painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, text)
+            bottom -= 22
+
+        if selected:  # o ✓ no canto: a seleção não depende só da cor
+            check = QRectF(outline.right() - 14, outline.top() - 6, 20, 20)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(t["primary"]))
+            painter.drawEllipse(check)
+            pen = QPen(QColor(t["on_primary"]), 2)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(pen)
             center = check.center()
             painter.drawPolyline([center + QPointF(-4, 0), center + QPointF(-1, 3), center + QPointF(4, -3)])
 
-        badges = []
-        if angle:
-            badges.append(f"↻ {angle}°")
-        if source is None:
-            badges.append(tr("Em branco"))
-        small = QFont(option.font)
-        small.setPixelSize(10)
-        painter.setFont(small)
-        top = target.top() + 6
-        for text in badges:
-            badge_width = painter.fontMetrics().horizontalAdvance(text) + 10
-            badge = QRectF(target.right() - 6 - badge_width, top, badge_width, 16)
-            painter.setPen(QPen(QColor(t["border_strong"]), 1))
-            painter.setBrush(QColor(t["panel"]))
-            painter.drawRoundedRect(badge, 5, 5)
-            painter.setPen(QColor(t["text"]))
-            painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, text)
-            top += 20
-
         number = QFont(option.font)
         number.setPixelSize(12)
-        number.setWeight(QFont.Weight.DemiBold if selected else QFont.Weight.Normal)
+        number.setWeight(QFont.Weight.DemiBold if selected or deleted else QFont.Weight.Normal)
         painter.setFont(number)
-        painter.setPen(QColor(t["accent_strong" if selected else "text2"]))
+        painter.setPen(QColor(t["danger" if deleted else "accent_strong" if selected else "text2"]))
         label = QRect(cell.left(), page.bottom() + 6, cell.width(), 18)
-        painter.drawText(label, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, str(index.row() + 1))
+        text = str(index.row() + 1)
+        if deleted:
+            text = tr("{number} · excluir").format(number=text)
+        painter.drawText(label, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, text)
         painter.restore()
 
 
@@ -203,7 +232,7 @@ class OrganizerView(QListWidget):
 
     def set_tile_width(self, width: int) -> None:
         self.tile_width = width
-        self.setGridSize(QSize(width + 34, _tile_height(width) + 40))
+        self.setGridSize(QSize(width + GAP[0], _tile_height(width) + 8 + NUMBER_HEIGHT + GAP[1]))
         self.doItemsLayout()
 
     def drop_bar(self) -> QRect | None:
@@ -273,9 +302,9 @@ class OrganizerView(QListWidget):
             t = theme.tokens()
             badge = QRectF(image.width() - 26, 4, 22, 22)
             painter.setOpacity(1)
-            painter.setBrush(QColor(t["accent"]))
+            painter.setBrush(QColor(t["primary"]))
             painter.drawEllipse(badge)
-            painter.setPen(QColor(t["on_accent"]))
+            painter.setPen(QColor(t["on_primary"]))
             font = QFont(self.font())
             font.setPixelSize(11)
             font.setWeight(QFont.Weight.Bold)
@@ -307,7 +336,29 @@ def _tool_button(icon: QIcon, text: str) -> QToolButton:
     button.setText(text)
     button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     button.setProperty("ofRole", "toolbar")
+    button.setCursor(Qt.CursorShape.PointingHandCursor)
     return button
+
+
+def page_list(numbers: list[int]) -> str:
+    """"a página 3", "as páginas 10 e 11", "as páginas 2, 5 e 9" ou "6 páginas"."""
+    if len(numbers) == 1:
+        return tr("a página {number}").format(number=numbers[0])
+    if len(numbers) > 4:
+        return plural(len(numbers), "1 página", "{count} páginas")
+    head = ", ".join(str(n) for n in numbers[:-1])
+    return tr("as páginas {pages} e {last}").format(pages=head, last=numbers[-1])
+
+
+def _warning_pixmap(build) -> QPixmap:
+    """O ícone de uma alteração pendente (16 px, nítido em tela 2x), pintado em warning."""
+    pixmap = build().pixmap(QSize(32, 32))
+    pixmap.setDevicePixelRatio(2)
+    painter = QPainter(pixmap)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(pixmap.rect(), theme.color("warning"))
+    painter.end()
+    return pixmap
 
 
 class OrganizePage(QWidget):
@@ -321,7 +372,7 @@ class OrganizePage(QWidget):
         self._document = None
         self._pixmaps: dict[int, QPixmap] = {}
         self._pending: set[int] = set()
-        self._base: list[tuple[int, int | None, int]] = []  # (identidade, página, giro) do documento
+        self._base: list[tuple[int, int | None, int, bool]] = []  # (identidade, página, giro, a excluir)
         self._ops: list[tuple[str, object, str]] = []  # (tipo, dados, descrição), em ordem
         self._redo: list[tuple[str, object, str]] = []
         self._next_uid = 0
@@ -339,18 +390,32 @@ class OrganizePage(QWidget):
 
         self.selection_badge = QLabel()
         self.selection_badge.setObjectName("SelectionBadge")
-        self.rotate_left_button = _tool_button(build_rotate_left_icon(), tr("Girar à esquerda"))
-        self.rotate_left_button.clicked.connect(lambda: self.rotate_selected(270))
-        self.rotate_right_button = _tool_button(build_rotate_icon(), tr("Girar à direita"))
-        self.rotate_right_button.clicked.connect(lambda: self.rotate_selected(90))
+        self.selection_badge.setFixedHeight(24)  # o raio de 12 do QSS só vale com a metade da altura
+        self.selection_hint = QLabel(tr("Selecione páginas para girar, duplicar, extrair ou excluir."))
+        self.selection_hint.setProperty("ofRole", "help")
+        # Girar: à direita no clique; à esquerda no ▾ (e Ctrl+[ / Ctrl+] na grade).
+        self.rotate_button = _tool_button(build_rotate_icon(), tr("Girar"))
+        self.rotate_button.setToolTip(tr("Gira as selecionadas 90° à direita. À esquerda fica no ▾."))
+        self.rotate_button.clicked.connect(lambda: self.rotate_selected(90))
+        rotate_menu = QMenu(self)
+        self.rotate_right_action = rotate_menu.addAction(build_rotate_icon(), tr("Girar à direita"))
+        self.rotate_right_action.triggered.connect(lambda: self.rotate_selected(90))
+        self.rotate_left_action = rotate_menu.addAction(build_rotate_left_icon(), tr("Girar à esquerda"))
+        self.rotate_left_action.triggered.connect(lambda: self.rotate_selected(270))
+        self.rotate_button.setMenu(rotate_menu)
+        self.rotate_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         self.duplicate_button = _tool_button(build_duplicate_icon(), tr("Duplicar"))
         self.duplicate_button.clicked.connect(self.duplicate_selected)
-        self.blank_button = _tool_button(sidebar_icons.build_create_icon(), tr("Em branco"))
+        self.extract_button = _tool_button(sidebar_icons.build_split_icon(), tr("Extrair..."))
+        self.extract_button.setToolTip(tr("Salva as páginas selecionadas em outro arquivo."))
+        self.extract_button.clicked.connect(self._extract)
+        self.delete_button = _tool_button(build_trash_icon("danger"), tr("Excluir"))
+        self.delete_button.setProperty("ofTone", "danger")
+        self.delete_button.setToolTip(tr("Marca as selecionadas para excluir ao aplicar (Delete)"))
+        self.delete_button.clicked.connect(self.delete_selected)
+        self.blank_button = _tool_button(sidebar_icons.build_create_icon(), tr("Inserir em branco"))
         self.blank_button.setToolTip(tr("Insere uma página em branco depois da última selecionada, ou no fim."))
         self.blank_button.clicked.connect(self.insert_blank)
-        self.delete_button = _tool_button(build_trash_icon(), tr("Apagar"))
-        self.delete_button.setToolTip(tr("Apaga as páginas selecionadas (Delete)"))
-        self.delete_button.clicked.connect(self.delete_selected)
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
         self.size_slider.setFixedWidth(96)
         self.size_slider.setRange(*TILE_RANGE)
@@ -360,22 +425,21 @@ class OrganizePage(QWidget):
         self.size_slider.valueChanged.connect(self.grid.set_tile_width)
         toolbar = QWidget()
         toolbar.setObjectName("OrganizerToolbar")
-        toolbar.setFixedHeight(48)
+        toolbar.setFixedHeight(44)
         bar = QHBoxLayout(toolbar)
         bar.setContentsMargins(12, 0, 12, 0)
         bar.setSpacing(4)
         bar.addWidget(self.selection_badge, 0, Qt.AlignmentFlag.AlignVCenter)
+        bar.addWidget(self.selection_hint, 0, Qt.AlignmentFlag.AlignVCenter)
+        bar.addSpacing(4)
+        self._selection_tools = [self.selection_badge, self.rotate_button, self.duplicate_button, self.extract_button]
+        for button in (self.rotate_button, self.duplicate_button, self.extract_button, self.delete_button):
+            bar.addWidget(button)
+        self._selection_tools.append(self.delete_button)
         bar.addSpacing(4)
         bar.addWidget(bar_separator())
         bar.addSpacing(4)
-        for button in (
-            self.rotate_left_button,
-            self.rotate_right_button,
-            self.duplicate_button,
-            self.blank_button,
-            self.delete_button,
-        ):
-            bar.addWidget(button)
+        bar.addWidget(self.blank_button)
         bar.addStretch()
         bar.addWidget(self.size_slider)
         self.center_widget = QWidget()
@@ -386,67 +450,69 @@ class OrganizePage(QWidget):
         center.addWidget(toolbar)
         center.addWidget(self.grid, 1)
 
-        # Painel: as alterações pendentes (uma seção própria), as opções e o rodapé.
+        # Painel: "Alterações pendentes · 4" com "Desfazer tudo", a ajuda, as opções e o rodapé.
         self.changes_title = QLabel()
         self.changes_title.setObjectName("ChangesTitle")
         self.changes_title.setProperty("ofRole", "section")
-        self.changes_list = QListWidget()
-        self.changes_list.setObjectName("ChangesList")
-        self.changes_list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        self.changes_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.changes_empty = QLabel(tr("Nenhuma alteração ainda."))
-        self.changes_empty.setProperty("ofRole", "secondary")
+        self.undo_all_button = QPushButton(tr("Desfazer tudo"))
+        self.undo_all_button.setProperty("ofVariant", "ghost")
+        self.undo_all_button.setProperty("ofSize", "compact")
+        self.undo_all_button.clicked.connect(self._load)
+        self.changes_header = QWidget()
+        header = QHBoxLayout(self.changes_header)
+        header.setContentsMargins(0, 0, 0, 0)
+        header.addWidget(self.changes_title, 1)
+        header.addWidget(self.undo_all_button)
+        self.changes_box = QWidget()
+        self.changes_rows = QVBoxLayout(self.changes_box)
+        self.changes_rows.setContentsMargins(0, 0, 0, 0)
+        self.changes_rows.setSpacing(4)
+        self.changes_empty = QLabel(tr("Nenhuma alteração ainda. Gire, duplique, exclua ou arraste as páginas na grade."))
+        self.changes_empty.setProperty("ofRole", "help")
+        self.changes_empty.setWordWrap(True)
+        hint = QLabel(
+            tr(
+                "Nada muda no documento até você aplicar. Para mover, arraste a miniatura; a linha azul "
+                "mostra onde ela vai entrar."
+            )
+        )
+        hint.setWordWrap(True)
+        hint.setProperty("ofRole", "help")
         changes = QWidget()
         changes_layout = QVBoxLayout(changes)
         changes_layout.setContentsMargins(0, 0, 0, 0)
-        changes_layout.addWidget(self.changes_list)
+        changes_layout.setSpacing(8)
+        changes_layout.addWidget(self.changes_box)
         changes_layout.addWidget(self.changes_empty)
-        self.extra_section = (self.changes_title, changes)
+        changes_layout.addWidget(hint)
+        # O resultado de Extrair e os erros ao abrir: na mesma seção, só quando há o que dizer.
+        self.status_label = QLabel()
+        self.status_label.setWordWrap(True)
+        self.status_label.setProperty("ofRole", "help")
+        self.status_label.hide()
+        changes_layout.addWidget(self.status_label)
+        self.extra_section = (self.changes_header, changes)
 
-        self.move_back_button = QPushButton(tr("Mover para trás"))
-        self.move_back_button.clicked.connect(lambda: self.move_selected(-1))
-        self.move_forward_button = QPushButton(tr("Mover para a frente"))
-        self.move_forward_button.clicked.connect(lambda: self.move_selected(1))
-        self.extract_button = QPushButton(tr("Extrair..."))
-        self.extract_button.setToolTip(tr("Salva as páginas selecionadas em outro arquivo."))
-        self.extract_button.clicked.connect(self._extract)
         self._selection_buttons = [
-            self.rotate_left_button,
-            self.rotate_right_button,
-            self.move_back_button,
-            self.move_forward_button,
+            self.rotate_button,
             self.duplicate_button,
             self.delete_button,
             self.extract_button,
         ]
 
+        self.output_picker = FilePicker(mode="save", suggested_source=session.path, suggested_suffix="organizado")
         self.apply_button = QPushButton()
         self.action_buttons.append(self.apply_button)
         self.apply_button.clicked.connect(self._apply)
         self.discard_button = QPushButton(tr("Descartar"))
+        self.discard_button.setProperty("ofVariant", "ghost")
         self.discard_button.setToolTip(tr("Volta a grade para o documento como está"))
         self.discard_button.clicked.connect(self._load)
         self.footer_buttons = [self.discard_button]
 
-        self.status_label = QLabel()
-        self.status_label.setWordWrap(True)
-
-        hint = QLabel(
-            tr(
-                "Arraste as miniaturas para mudar a ordem; Ctrl ou Shift + clique seleciona várias. "
-                "Nada muda no documento até Aplicar."
-            )
-        )
-        hint.setWordWrap(True)
-        hint.setProperty("ofRole", "secondary")
-        moves = QHBoxLayout()
-        moves.addWidget(self.move_back_button)
-        moves.addWidget(self.move_forward_button)
         layout = QVBoxLayout(self)
-        layout.addWidget(hint)
-        layout.addLayout(moves)
-        layout.addWidget(self.extract_button)
-        layout.addWidget(self.status_label)
+        layout.addWidget(QLabel(tr("Arquivo de saída:")))
+        layout.addWidget(self.output_picker)
         layout.addWidget(self.discard_button)
         layout.addWidget(self.apply_button)
 
@@ -459,12 +525,20 @@ class OrganizePage(QWidget):
 
     # -- estado da grade --------------------------------------------------------------
 
+    def _set_status(self, text: str) -> None:
+        self.status_label.setText(text)
+        self.status_label.setVisible(bool(text))
+
     def layout_items(self) -> list[tuple[int | None, int]]:
-        """As páginas na ordem da grade, como `ArrangePages` as recebe."""
-        return [tuple(self.grid.item(row).data(_ROLE)) for row in range(self.grid.count())]
+        """As páginas na ordem da grade, como `ArrangePages` as recebe (sem as a excluir)."""
+        return [
+            tuple(self.grid.item(row).data(_ROLE))
+            for row in range(self.grid.count())
+            if not self.grid.item(row).data(_DELETED)
+        ]
 
     def _original(self) -> list[tuple[int | None, int]]:
-        return [(source, angle) for _uid, source, angle in self._base]
+        return [(source, angle) for _uid, source, angle, _deleted in self._base]
 
     def is_modified(self) -> bool:
         return self.layout_items() != self._original()
@@ -490,16 +564,21 @@ class OrganizePage(QWidget):
             self.grid.setCurrentRow(rows[-1], QItemSelectionModel.SelectionFlag.NoUpdate)
 
     def _update_buttons(self, *_args) -> None:
+        """Sem seleção, as ações somem e a barra diz o que fazer; com ela, "2 selecionadas"."""
         selected = len(self.grid.selectedItems())
+        for widget in self._selection_tools:
+            widget.setVisible(bool(selected))
         for button in self._selection_buttons:
             button.setEnabled(bool(selected))
+        self.selection_hint.setVisible(not selected and self._document is not None)
         self.blank_button.setEnabled(self._document is not None)
-        self.selection_badge.setText(tr("{count} selecionadas").format(count=selected))
+        self.selection_badge.setText(plural(selected, "1 selecionada", "{count} selecionadas"))
         modified = self.is_modified()
         count = len(self._ops)
-        self.apply_button.setText(tr("Aplicar {count} alterações").format(count=count) if count else tr("Aplicar"))
-        self.apply_button.setEnabled(modified and self.grid.count() > 0)
+        self.apply_button.setText(plural(count, "Aplicar 1 alteração", "Aplicar {count} alterações") if count else tr("Aplicar"))
+        self.apply_button.setEnabled(modified and bool(self.layout_items()))
         self.discard_button.setEnabled(bool(self._ops))
+        self.undo_all_button.setVisible(bool(self._ops))
 
     # -- documento --------------------------------------------------------------------
 
@@ -508,7 +587,7 @@ class OrganizePage(QWidget):
         self._timer.stop()
         self._pixmaps = {}
         self._pending = set()
-        self.status_label.clear()
+        self._set_status("")
         total = 0
         with PDFIUM_LOCK:
             if self._document is not None:
@@ -521,8 +600,8 @@ class OrganizePage(QWidget):
                     total = len(self._document)
                 except Exception as exc:
                     self._document = None
-                    self.status_label.setText(error_text(exc))
-        self._base = [(index, index, 0) for index in range(total)]
+                    self._set_status(error_text(exc))
+        self._base = [(index, index, 0, False) for index in range(total)]
         self._next_uid = total
         self._ops, self._redo = [], []
         self._pending = set(range(total))
@@ -574,25 +653,29 @@ class OrganizePage(QWidget):
 
     # -- operações ----------------------------------------------------------------------
 
-    def _replay(self, ops) -> list[tuple[int, int | None, int]]:
-        """O documento com as operações aplicadas em ordem. Uma operação sobre uma miniatura
-        que não existe mais (desfeita a que a criou) é ignorada naquele ponto."""
+    def _replay(self, ops) -> list[tuple[int, int | None, int, bool]]:
+        """O documento com as operações aplicadas em ordem: (identidade, página, giro, a excluir).
+        Uma operação sobre uma miniatura que não existe mais (desfeita a que a criou) é ignorada
+        naquele ponto. Excluir só marca: a miniatura fica na grade até Aplicar."""
         items = list(self._base)
         for kind, data, _description in ops:
             if kind == "rotate":
                 uids, delta = data
-                items = [(uid, source, (angle + delta) % 360 if uid in uids else angle) for uid, source, angle in items]
+                items = [
+                    (uid, source, (angle + delta) % 360 if uid in uids else angle, deleted)
+                    for uid, source, angle, deleted in items
+                ]
             elif kind == "delete":
-                items = [item for item in items if item[0] not in data]
+                items = [(uid, source, angle, deleted or uid in data) for uid, source, angle, deleted in items]
             elif kind == "duplicate":
                 for source_uid, new_uid in data:
                     at = next((n for n, item in enumerate(items) if item[0] == source_uid), None)
                     if at is not None:
-                        items.insert(at + 1, (new_uid, items[at][1], items[at][2]))
+                        items.insert(at + 1, (new_uid, items[at][1], items[at][2], False))
             elif kind == "blank":
                 new_uid, after = data
                 at = next((n for n, item in enumerate(items) if item[0] == after), None)
-                items.insert(len(items) if at is None else at + 1, (new_uid, None, 0))
+                items.insert(len(items) if at is None else at + 1, (new_uid, None, 0, False))
             elif kind == "move":
                 for uid, before in data:
                     at = next((n for n, item in enumerate(items) if item[0] == uid), None)
@@ -608,11 +691,14 @@ class OrganizePage(QWidget):
         self._rebuilding = True
         self.grid.clear()
         rows = []
-        for uid, source, angle in self._replay(self._ops):
+        for uid, source, angle, deleted in self._replay(self._ops):
             item = QListWidgetItem()
             item.setData(_ROLE, (source, angle))
             item.setData(_UID, uid)
+            item.setData(_DELETED, deleted)
             label = tr("Página em branco") if source is None else tr("Página {number}").format(number=source + 1)
+            if deleted:
+                label = tr("{page}, a excluir").format(page=label)
             item.setText(label)
             item.setToolTip(label)
             self._refresh_pixmap(item)
@@ -637,7 +723,12 @@ class OrganizePage(QWidget):
             self._rebuild(self._selected_uids())
 
     def _refresh_changes(self) -> None:
-        self.changes_list.clear()
+        """A lista "Alterações pendentes": fundo raised, ícone em warning, a frase e o "↶" que
+        desfaz só aquela."""
+        while self.changes_rows.count():
+            widget = self.changes_rows.takeAt(0).widget()
+            if widget is not None:
+                widget.deleteLater()
         icons = {
             "rotate": build_rotate_icon,
             "delete": build_trash_icon,
@@ -646,15 +737,16 @@ class OrganizePage(QWidget):
             "move": sidebar_icons.build_organize_icon,
         }
         for position, (kind, _data, description) in enumerate(self._ops):
-            item = QListWidgetItem()
-            row = QWidget()
+            row = QFrame()
             row.setObjectName("ChangeRow")
             icon = QLabel()
-            icon.setPixmap(icons[kind]().pixmap(QSize(16, 16)))
+            icon.setPixmap(_warning_pixmap(icons[kind]))
             text = QLabel(description)
             text.setWordWrap(True)
             undo = QToolButton()
-            undo.setIcon(build_close_icon())
+            undo.setIcon(build_rotate_left_icon())
+            undo.setIconSize(QSize(16, 16))
+            undo.setFixedSize(28, 28)
             undo.setProperty("ofRole", "icon")
             undo.setToolTip(tr("Desfazer só esta alteração"))
             undo.setAccessibleName(tr("Desfazer: {change}").format(change=description))
@@ -665,23 +757,24 @@ class OrganizePage(QWidget):
             layout.addWidget(icon)
             layout.addWidget(text, 1)
             layout.addWidget(undo)
-            item.setSizeHint(QSize(0, 40))
-            self.changes_list.addItem(item)
-            self.changes_list.setItemWidget(item, row)
-        self.changes_title.setText(tr("Alterações pendentes · {count}").format(count=len(self._ops)).upper())
-        self.changes_list.setVisible(bool(self._ops))
-        self.changes_list.setFixedHeight(min(6, max(1, len(self._ops))) * 42 + 4)
+            self.changes_rows.addWidget(row)
+        self.changes_title.setText(tr("Alterações pendentes · {count}").format(count=len(self._ops)))
+        self.changes_box.setVisible(bool(self._ops))
         self.changes_empty.setVisible(not self._ops)
         self._update_buttons()
         self.edits_changed.emit()
 
+    def _numbers(self, uids) -> list[int]:
+        """O número de cada miniatura na grade agora (o que o usuário vê embaixo dela)."""
+        position = {uid: n + 1 for n, (uid, *_rest) in enumerate(self._replay(self._ops))}
+        return sorted(position[uid] for uid in uids if uid in position)
+
     def _pages_text(self, uids) -> str:
-        """"a página 3", "a página em branco" ou "4 páginas" (pela página de origem)."""
-        sources = {uid: source for uid, source, _angle in self._replay(self._ops)}
-        if len(uids) != 1:
-            return tr("{count} páginas").format(count=len(uids))
-        source = sources.get(uids[0])
-        return tr("a página em branco") if source is None else tr("a página {number}").format(number=source + 1)
+        """"a página 3", "as páginas 10 e 11", "a página em branco" ou "6 páginas"."""
+        sources = {uid: source for uid, source, _angle, _deleted in self._replay(self._ops)}
+        if len(uids) == 1 and sources.get(uids[0], 0) is None:
+            return tr("a página em branco")
+        return page_list(self._numbers(uids))
 
     # -- desfazer na grade --------------------------------------------------------------
 
@@ -693,7 +786,9 @@ class OrganizePage(QWidget):
         moves = _moves(self._last_order, order)
         if not moves:
             return
-        self._ops.append(("move", moves, tr("Moveu {pages}").format(pages=self._pages_text([uid for uid, _ in moves]))))
+        # Quem foi arrastado são as selecionadas; sem seleção, as que a ordem nova moveu.
+        moved = [uid for uid in self._selected_uids() if uid in order] or [uid for uid, _before in moves]
+        self._ops.append(("move", moves, self._move_text(moved, order)))
         self._redo.clear()
         self._last_order = order
         self._refresh_changes()
@@ -716,11 +811,22 @@ class OrganizePage(QWidget):
 
     # -- edição -----------------------------------------------------------------------
 
+    def _move_text(self, uids, order) -> str:
+        """"Mover a página 7 para antes da 3", pelas páginas que o usuário moveu (`uids`) e a que
+        fica logo depois delas na ordem nova (com os números de antes de mover), ou "para o fim"."""
+        numbers = {uid: n + 1 for n, uid in enumerate(self._last_order)}
+        pages = page_list(sorted(numbers[uid] for uid in uids))
+        after = max(order.index(uid) for uid in uids) + 1
+        following = next((uid for uid in order[after:] if uid not in uids), None)
+        if following is None:
+            return tr("Mover {pages} para o fim").format(pages=pages)
+        return tr("Mover {pages} para antes da {number}").format(pages=pages, number=numbers[following])
+
     def rotate_selected(self, delta: int) -> None:
         uids = self._selected_uids()
         if not uids:
             return
-        text = tr("Girou {pages} à direita") if delta == 90 else tr("Girou {pages} à esquerda")
+        text = tr("Girar {pages} em 90°") if delta == 90 else tr("Girar {pages} em 90° à esquerda")
         self._add("rotate", (frozenset(uids), delta), text.format(pages=self._pages_text(uids)), uids)
 
     def move_selected(self, step: int) -> None:
@@ -732,7 +838,7 @@ class OrganizePage(QWidget):
         for row in rows if step < 0 else reversed(rows):
             order.insert(row + step, order.pop(row))
         moves = _moves(self._order(), order)
-        self._add("move", moves, tr("Moveu {pages}").format(pages=self._pages_text(uids)), uids)
+        self._add("move", moves, self._move_text(uids, order), uids)
 
     def duplicate_selected(self) -> None:
         uids = self._selected_uids()
@@ -742,14 +848,15 @@ class OrganizePage(QWidget):
         for uid in uids:
             pairs.append((uid, self._next_uid))
             self._next_uid += 1
-        text = tr("Duplicou {pages}").format(pages=self._pages_text(uids))
+        text = tr("Duplicar {pages}").format(pages=self._pages_text(uids))
         self._add("duplicate", pairs, text, [new for _uid, new in pairs])  # a cópia fica selecionada
 
     def delete_selected(self) -> None:
-        uids = self._selected_uids()
+        deleted = {self.grid.item(row).data(_UID) for row in range(self.grid.count()) if self.grid.item(row).data(_DELETED)}
+        uids = [uid for uid in self._selected_uids() if uid not in deleted]
         if not uids:
             return
-        self._add("delete", frozenset(uids), tr("Apagou {pages}").format(pages=self._pages_text(uids)), [])
+        self._add("delete", frozenset(uids), tr("Excluir {pages}").format(pages=self._pages_text(uids)), [])
 
     def insert_blank(self) -> None:
         if self._document is None:
@@ -757,7 +864,11 @@ class OrganizePage(QWidget):
         uids = self._selected_uids()
         new_uid = self._next_uid
         self._next_uid += 1
-        self._add("blank", (new_uid, uids[-1] if uids else None), tr("Inseriu uma página em branco"), [new_uid])
+        if uids:
+            text = tr("Inserir página em branco após a {number}").format(number=self._numbers(uids[-1:])[0])
+        else:
+            text = tr("Inserir página em branco no fim")
+        self._add("blank", (new_uid, uids[-1] if uids else None), text, [new_uid])
 
     # -- gravar -----------------------------------------------------------------------
 
@@ -766,7 +877,7 @@ class OrganizePage(QWidget):
         layout = self.layout_items()
         if not input_path or not layout or not self.is_modified():
             return
-        output_path = self.session.new_version_path()
+        output_path = self.output_picker.path() or self.session.new_version_path()
         run_task(
             self,
             tr("Organizar páginas"),
@@ -779,7 +890,7 @@ class OrganizePage(QWidget):
         rows = self._selected_rows()
         if not input_path or not rows:
             return
-        layout = [tuple(self.grid.item(row).data(_ROLE)) for row in rows]
+        layout = [tuple(self.grid.item(row).data(_ROLE)) for row in rows if not self.grid.item(row).data(_DELETED)]
         stem = Path(self.session.source_path() or input_path).stem
         target, _ = QFileDialog.getSaveFileName(
             self, tr("Extrair páginas"), str(Path(start_folder()) / f"{stem}_paginas.pdf"), "PDF (*.pdf)"
@@ -794,7 +905,9 @@ class OrganizePage(QWidget):
             self,
             tr("Extrair páginas"),
             lambda _progress: ArrangePages().run(input_path, target, layout),
-            on_success=lambda _result: self.status_label.setText(
-                tr("{count} página(s) salva(s) em {path}.").format(count=len(layout), path=target)
+            on_success=lambda _result: self._set_status(
+                (tr("1 página salva em {name}.") if len(layout) == 1 else tr("{count} páginas salvas em {name}.")).format(
+                    count=len(layout), name=Path(target).name
+                )
             ),
         )

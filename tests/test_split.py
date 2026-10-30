@@ -235,4 +235,4 @@ def test_split_page_ranges_mode_uses_the_selected_thumbnails(make_pdf, tmp_path,
 
     output_dir = tmp_path / "out"
     assert [_widths(str(path)) for path in sorted(output_dir.iterdir())] == [[102, 103, 105], [101, 102, 103, 104, 105]]
-    assert shown == ["PDF dividido em 2 arquivo(s)."]
+    assert shown == ["PDF dividido em 2 arquivos."]

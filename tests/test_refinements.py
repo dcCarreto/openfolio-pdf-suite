@@ -147,7 +147,7 @@ def test_the_tasks_button_and_popover(window, tmp_path):
     try:
         run_task(doc.viewer, "Lenta", lambda progress: release.wait(5))
         QApplication.processEvents()
-        assert window.tasks_button.isVisible() and window.tasks_button.text() == "1 tarefa"
+        assert window.tasks_button.isVisible() and window.tasks_button.text() == "1 tarefa em andamento"
         window.tasks_button.click()
         popover = window.tasks_button.popover
         assert popover.isVisible() and popover.rows.count() == 1
@@ -155,10 +155,50 @@ def test_the_tasks_button_and_popover(window, tmp_path):
     finally:
         release.set()
     assert wait_for_tasks()
-    assert not window.tasks_button.isVisible()  # só aparece com tarefa rodando
+    assert window.tasks_button.text() == "1 concluída"
     assert [entry.state for entry in window.task_log.entries] == ["ok"]
     popover.clear_button.click()
     assert window.task_log.entries == []
+    assert not window.tasks_button.isVisible()  # só aparece quando há tarefas
+
+
+def test_each_task_row_says_how_it_ended(window, tmp_path, monkeypatch):
+    from ui.widgets import task_popover
+
+    doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
+    _show(window, 1440, 900)
+    release = threading.Event()
+    try:
+        run_task(doc.viewer, "Lenta", lambda progress: release.wait(5))
+        QApplication.processEvents()
+        window.tasks_button.click()
+        popover = window.tasks_button.popover
+        row = popover.rows.itemAt(0).widget()
+        assert row.action.text() == "Cancelar" and popover.width() == 380
+        corner = window.mapToGlobal(window.rect().bottomRight())
+        # 8 px da direita e 32 de baixo da janela (com folga para a moldura de cada sistema)
+        assert abs(corner.x() - popover.geometry().right() - 8) <= 4
+        assert abs(corner.y() - popover.geometry().bottom() - 32) <= 4
+    finally:
+        release.set()
+    assert wait_for_tasks()
+
+    monkeypatch.setattr("ui.tasks.show_error", lambda *args, **kwargs: None)
+
+    def fail(_progress):
+        raise ValueError("O arquivo pede senha.")
+
+    run_task(doc.viewer, "Comprimir", fail)
+    assert wait_for_tasks()
+    QApplication.processEvents()
+    failed, done = (popover.rows.itemAt(n).widget() for n in range(2))
+    assert failed.entry.state == task_popover.FAILED and "O arquivo pede senha." in failed.detail.text()
+    assert failed.action.text() == "Ver motivo"
+    assert done.action.text() == "Ver" and "agora" in done.detail.text()
+    window.tabs.setCurrentWidget(window.home)
+    done.action.click()  # Ver: a aba do documento em que ela rodou
+    assert window.tabs.currentWidget() is doc
+    assert task_popover.ago(1000, now=1000 + 150) == "há 2 min"
 
 
 # -- aviso de atualização -----------------------------------------------------------------------
@@ -259,5 +299,7 @@ def test_rail_tooltips_show_a_configured_shortcut(window, tmp_path, monkeypatch)
     window._preferences.set_shortcut("tool.CompressPage", "Ctrl+Alt+C")
     window._apply_shortcuts()
     shown = QKeySequence("Ctrl+Alt+C").toString(QKeySequence.SequenceFormat.NativeText)  # "⌥⌘C" no macOS
-    assert doc._quick_buttons[ROW_OF["CompressPage"]].toolTip() == f"Comprimir ({shown})"
-    assert doc._quick_buttons[ROW_OF["MergePage"]].toolTip() == "Mesclar"
+    # A dica rica: o nome com o atalho, em negrito, e uma frase sobre o efeito.
+    assert doc._quick_buttons["CompressPage"].toolTip().startswith(f"<b>Comprimir ({shown})</b><br>Diminua")
+    assert doc._quick_buttons["MergePage"].toolTip().startswith("<b>Mesclar</b><br>")
+    assert doc._quick_buttons["CompressPage"].text() == "Comprimir"  # o rótulo embaixo do ícone

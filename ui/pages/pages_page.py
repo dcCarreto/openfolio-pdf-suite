@@ -57,7 +57,7 @@ class PagesPage(QWidget):
         self.rotate_angle_combo = QComboBox()
         self.rotate_angle_combo.addItems([tr(label) for label, _angle in _ROTATIONS])
         self.rotate_pages_edit = QLineEdit()
-        self.rotate_pages_edit.setPlaceholderText(tr("Páginas (vazio = todas), ex: 1, 3-5"))
+        self.rotate_pages_edit.setPlaceholderText(tr("Todas · ex.: 1-3, 5, 8-"))
 
         self.reorder_edit = QLineEdit()
         self.reorder_edit.setPlaceholderText(tr("Todas as páginas na nova ordem, ex: 3, 1, 2 ou 4-1"))
@@ -230,7 +230,7 @@ class PagesPage(QWidget):
 
         def done(_result):
             self.session.open(output_path)
-            notify_success(self, tr("Páginas"), tr("Operação concluída com sucesso."))
+            notify_success(self, tr("Páginas"), tr("Páginas organizadas. Aplicado neste documento; salve para gravar no arquivo."))
 
         # As variáveis capturadas por `action` já são valores lidos dos widgets aqui, na
         # thread da interface.

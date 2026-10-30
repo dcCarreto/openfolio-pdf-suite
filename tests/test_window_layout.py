@@ -80,7 +80,11 @@ def _show(window, width, height):
 
 def test_every_menu_action_and_shortcut_is_still_there(window):
     found = [(action.objectName(), [key.toString() for key in action.shortcuts()]) for _label, action in window.commands()]
-    assert [command for command in found if command in _COMMANDS_BEFORE] == _COMMANDS_BEFORE
+    menus = [command for command in _COMMANDS_BEFORE if not command[0].startswith("tool.")]
+    assert [command for command in found if command in menus] == menus
+    # As 30 chaves antigas das ferramentas continuam valendo (atalhos gravados): as 23
+    # ferramentas e as telas que viraram modo de uma delas.
+    assert {key for key, _keys in _COMMANDS_BEFORE if key.startswith("tool.")} <= {key for key, _keys in found}
     assert ("edit.run_tool", ["Ctrl+Return", "Ctrl+Enter"]) in found  # novo: a ação da ferramenta
 
 
@@ -154,15 +158,15 @@ def test_the_document_tab_layout(window, tmp_path):
     doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
     _show(window, 1600, 900)
 
-    assert doc.left_rail.width() == 48 and doc.right_rail.width() == 52
+    assert doc.left_rail.width() == 44 and doc.right_rail.width() == 68
     assert doc.viewer.toolbar.parent() is doc.center and doc.viewer.toolbar.height() == 44
-    assert window.statusBar().objectName() == "StatusBar" and window.statusBar().height() == 28
+    assert window.statusBar().objectName() == "StatusBar" and window.statusBar().height() == 26
     assert doc.splitter.widget(2) is doc.tool_panel
 
 
-def test_a_tool_in_a_1280_window_folds_the_thumbnails_and_gives_them_back(window, tmp_path):
+def test_a_tool_in_a_crowded_window_folds_the_thumbnails_and_gives_them_back(window, tmp_path):
     doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
-    _show(window, 1280, 800)
+    _show(window, 1240, 800)
     side_panel = doc.viewer.side_panel
     assert side_panel.isVisible() and doc._left_buttons[0].isChecked()
 
@@ -188,12 +192,12 @@ def test_a_narrow_window_compacts_the_bars(window, tmp_path):
     doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
     _show(window, 1024, 720)
 
-    assert doc.viewer.more_button.isVisible() and not doc.viewer.single_page_button.isVisible()
-    assert window._command_launcher.text() == "" and window._command_launcher.width() == 32
+    assert doc.viewer.more_button.isVisible() and not doc.viewer.mode_button.isVisible()
+    assert window._command_launcher.text() == "" and window._command_launcher.width() == 84  # a lupa e o "Ctrl K"
     assert window.tabs.tabBar().property("compact")
 
     _show(window, 1440, 900)
-    assert not doc.viewer.more_button.isVisible() and doc.viewer.single_page_button.isVisible()
+    assert not doc.viewer.more_button.isVisible() and doc.viewer.mode_button.isVisible()
     assert window._command_launcher.text() == "Buscar ferramentas e comandos"
 
 

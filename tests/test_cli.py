@@ -26,7 +26,7 @@ def test_merge_then_extract_rotate_and_remove(make_pdf, tmp_path, capsys):
     rotated, removed = tmp_path / "girado.pdf", tmp_path / "removido.pdf"
 
     assert main(["merge", str(a), str(b), "-o", str(merged)]) == 0
-    assert "2 arquivo(s) juntado(s)" in capsys.readouterr().out
+    assert "2 arquivos juntados" in capsys.readouterr().out
     assert _widths(merged) == [100, 200, 300]
 
     assert main(["extract", str(merged), "-o", str(extracted), "--paginas", "3, 1"]) == 0
@@ -121,7 +121,7 @@ def test_images_in_tiff_with_chosen_pages(make_pdf, tmp_path, capsys):
     assert [p.name for p in images.iterdir()] == ["doc.tif"]
     with Image.open(images / "doc.tif") as tiff:
         assert tiff.n_frames == 3
-    assert "1 imagem(ns)" in capsys.readouterr().out
+    assert "1 imagem em" in capsys.readouterr().out
 
 
 def test_info_json_is_for_scripts(make_pdf, capsys):

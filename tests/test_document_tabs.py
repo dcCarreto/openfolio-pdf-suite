@@ -46,10 +46,15 @@ def test_each_pdf_gets_a_tab_and_the_menus_follow_the_tab_in_front(window, tmp_p
     page.text_edit.setText("RASCUNHO")
     page._apply()
     assert wait_for_tasks()
-    # Na aba, o ponto no lugar do "x"; o "*" fica no título da janela.
+    # Na aba, o ponto no lugar do "x"; na barra do visualizador, o selo e "Salvar"; na de
+    # status, quantas alterações faltam salvar. Nada de "*" no nome.
     assert window.tabs.tabText(3) == "dois.pdf" and second.close_button.is_dirty() and not first.close_button.is_dirty()
     assert "alterações não salvas" in second.close_button.accessibleName()
-    assert window.windowTitle() == "dois.pdf * — OpenFolio PDF Suite" and window._undo_action.isEnabled()
+    assert window.windowTitle() == "dois.pdf — OpenFolio PDF Suite" and window._undo_action.isEnabled()
+    assert second.state_badge.text().startswith("● ") and second.state_badge.property("state") == "unsaved"
+    assert first.state_badge.text() == "✓ Salvo"
+    assert window.doc_state_label.text() == "1 alteração aplicada, não salva"
+    assert window.page_status_label.text().startswith("Página 1 de ")
     assert second.save_button.isEnabled() and not first.save_button.isEnabled()  # a barra segue cada documento
     assert first.print_button.isEnabled() and second.print_button.isEnabled()
 
@@ -124,7 +129,7 @@ def test_left_rail_shows_and_hides_the_side_panel(window, tmp_path):
 def test_quick_tool_opens_and_a_second_click_closes_it(window, tmp_path):
     doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
     row = window._row_of["CompressPage"]
-    button = doc._quick_buttons[row]
+    button = doc._quick_buttons["CompressPage"]
 
     button.click()
     assert doc.current_tool() == row and doc.stack.isVisibleTo(doc)
@@ -133,5 +138,5 @@ def test_quick_tool_opens_and_a_second_click_closes_it(window, tmp_path):
 
     doc.all_tools_button.click()
     assert window.tabs.currentWidget() is window.tools_center
-    window.tools_center.cards[row].click()
+    window.tools_center.cards["CompressPage"].click()
     assert window.document is doc and doc.current_tool() == row and window.tabs.currentWidget() is doc
