@@ -4,6 +4,17 @@ O OpenFolio PDF Suite não tem número de versão: há uma só, que recebe atual
 atualização é identificada pela data em que foi publicada e só é instalada se você aceitar,
 depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no aviso do app).
 
+## Próxima atualização
+
+### Visualizador
+
+- Os links do PDF funcionam: um clique abre o site no navegador (ou o e-mail no programa de
+  e-mail) e um link para outra parte do documento leva até ela, na página única e na
+  rolagem. Endereços escritos no texto sem link, como "www.exemplo.com", também abrem.
+- Com o mouse em cima, o link mostra a mãozinha e para onde leva. Arrastar a partir dele
+  continua selecionando o texto, e links que abririam programas ou arquivos do computador
+  não fazem nada.
+
 ## 2026-10-29
 
 ### Visual

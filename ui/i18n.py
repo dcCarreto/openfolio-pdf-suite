@@ -1890,6 +1890,8 @@ _EN_TRANSLATIONS: dict[str, str] = {
     ),
     'Ir para a página... (Ctrl+G)': 'Go to page... (Ctrl+G)',
     'Ir para a página': 'Go to page',
+    'Ir para a página {page}': 'Go to page {page}',
+    'Escrever para {address}': 'Write to {address}',
     'Página (1 a {total}):': 'Page (1 to {total}):',
     'Ajustar à página (Ctrl+0)': 'Fit page (Ctrl+0)',
     'Girar a visualização (o arquivo não muda)': 'Rotate the view (the file does not change)',

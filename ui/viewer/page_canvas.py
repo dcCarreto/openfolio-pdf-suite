@@ -1,7 +1,7 @@
 """QLabel que expõe eventos de mouse como sinais, para a ferramenta de anotações
 desenhar diretamente sobre a página renderizada (modo página única)."""
 
-from PySide6.QtCore import QPointF, Signal
+from PySide6.QtCore import QPointF, Qt, Signal
 from PySide6.QtWidgets import QLabel
 
 
@@ -12,8 +12,14 @@ class PageCanvas(QLabel):
     página — e antes os cliques e arrastos caíam deslocados."""
 
     mouse_pressed = Signal(float, float)
-    mouse_moved = Signal(float, float)
+    mouse_moved = Signal(float, float)  # com um botão apertado (arrastos)
     mouse_released = Signal(float, float)
+    mouse_hovered = Signal(float, float)  # sem botão: o mouse só passa (o cursor nos links)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMouseTracking(True)
+        self.pressed_button = Qt.MouseButton.NoButton  # o do último clique
 
     def pixmap_offset(self) -> QPointF:
         pixmap = self.pixmap()
@@ -31,13 +37,17 @@ class PageCanvas(QLabel):
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
+        self.pressed_button = event.button()
         pos = self._page_position(event)
         self.mouse_pressed.emit(pos.x(), pos.y())
 
     def mouseMoveEvent(self, event):
         super().mouseMoveEvent(event)
         pos = self._page_position(event)
-        self.mouse_moved.emit(pos.x(), pos.y())
+        if event.buttons() == Qt.MouseButton.NoButton:
+            self.mouse_hovered.emit(pos.x(), pos.y())
+        else:
+            self.mouse_moved.emit(pos.x(), pos.y())
 
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
