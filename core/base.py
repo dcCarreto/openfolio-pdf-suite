@@ -5,6 +5,7 @@ import math
 import os
 import shutil
 import tempfile
+import threading
 from collections.abc import Iterator
 
 import pypdfium2 as pdfium
@@ -91,7 +92,13 @@ def open_reader(input_path: str, *, purpose: str = MODIFY) -> PdfReader:
     FileNotDecryptedError cru do pypdf. Ferramentas que lidam com PDFs protegidos de
     propósito (Proteger/Remover senha) não usam este helper; leem o PdfReader diretamente.
     """
-    reader = PdfReader(input_path)
+    shared = getattr(_shared, "reader", None)
+    if shared is not None and shared[0] == _password_key(input_path):
+        if shared[2] is None:
+            shared[2] = PdfReader(shared[1])
+        reader = shared[2]
+    else:
+        reader = PdfReader(input_path)
     if not reader.is_encrypted:
         return reader
 
@@ -112,6 +119,27 @@ def open_reader(input_path: str, *, purpose: str = MODIFY) -> PdfReader:
         if purpose == PRINT and permissions is not None and not permissions & UserAccessPermissions.PRINT:
             raise RestrictedPDFError(_PRINT_DENIED_MESSAGE)
     return reader
+
+
+_shared = threading.local()
+
+
+@contextlib.contextmanager
+def shared_reader(input_path: str) -> Iterator[None]:
+    """Dentro do bloco, nesta thread, `open_reader(input_path)` devolve sempre o mesmo
+    PdfReader, que lê do arquivo só o que precisa.
+
+    Com um caminho, o pypdf carrega o arquivo inteiro na memória antes de ler a estrutura; o
+    visualizador, ao abrir um documento, lia o sumário, os anexos, os campos, os avisos e a
+    visão inicial assim — cinco vezes o arquivo inteiro (450 MB num escaneado de 90 MB). Só
+    para leituras: o que sair do bloco não pode depender do leitor, que fecha o arquivo."""
+    previous = getattr(_shared, "reader", None)
+    with open(input_path, "rb") as handle:
+        _shared.reader = [_password_key(input_path), handle, None]
+        try:
+            yield
+        finally:
+            _shared.reader = previous
 
 
 def open_pdfium(input_path: str) -> pdfium.PdfDocument:

@@ -31,8 +31,8 @@ from PySide6.QtWidgets import (
 
 from core.annotations import STAMP_FONT_SIZE, AnnotationSpec, arrow_head, spec_rect, stamp_box
 from core.base import known_password, remember_password
-from core.document_info import document_notices, initial_view
-from core.form_fields import FillFormFields, FormWidget, ListFormWidgets
+from core.document_info import DocumentNotices
+from core.form_fields import FillFormFields, FormWidget
 from core.geometry import PageGeometry
 from core.page_links import PageLink, PageNote, file_destination, linked_pdf_path, page_links, page_notes
 from core.page_text import can_copy_text, char_at, line_range, word_range
@@ -48,9 +48,11 @@ from ui.measure_state import MeasureState, format_distance
 from ui.redaction_state import RedactionState
 from ui.preferences import preferences
 from ui.tasks import run_task
+from ui.viewer.document_details import DetailsLoader, read_form_widgets, read_initial_view
 from ui.viewer.page_canvas import PageCanvas
+from ui.viewer.page_renderer import NEARBY, VISIBLE, PageRenderer, PixmapCache
 from ui.viewer.presentation import PresentationWindow
-from ui.viewer.render import logical_size, render_page
+from ui.viewer.render import logical_size, render_image, to_pixmap
 from ui.viewer.search import DocumentSearch, SearchMatch
 from ui.viewer.search_bar import SearchBar
 from ui.viewer.side_panel import DocumentSidePanel
@@ -98,6 +100,10 @@ _WHEEL_NOTCH = 120  # um dente da roda do mouse
 # descartada (voltam a ser renderizadas se o usuário rolar até elas). Antes nenhuma página
 # era liberada e a memória crescia sem limite ao rolar documentos longos.
 _KEEP_RENDERED_SCREENS = 3
+# Render na hora (a página aparece pronta, sem piscar) só enquanto couber neste tempo; o que
+# passar disso vai para a thread de render e a janela continua respondendo. Num documento de
+# texto quase tudo cabe; num escaneado ou numa planta, quase nada.
+_SYNC_RENDER_BUDGET = 0.03
 
 # Layouts das páginas (A15). Página dupla e livro são a rolagem contínua com duas páginas
 # por linha; no livro a capa fica sozinha, e as páginas pares à esquerda, como impressas.
@@ -119,6 +125,14 @@ _NAMED_LINK_TIPS = {
 _SEARCH_SLICE_SECONDS = 0.03
 
 
+def _stretched(pixmap: QPixmap, width: int) -> QPixmap:
+    """A mesma imagem ocupando `width` pixels lógicos (sem copiar os pixels): o que fica à
+    vista, esticado, enquanto a página na escala nova não chega."""
+    stretched = QPixmap(pixmap)
+    stretched.setDevicePixelRatio(pixmap.width() / max(1, width))
+    return stretched
+
+
 class PdfViewer(QWidget):
     """Mostra o PDF atualmente aberto na sessão compartilhada. A única edição feita aqui é
     preencher os campos de formulário (página única, sem ferramenta ativa): cada campo
@@ -127,6 +141,7 @@ class PdfViewer(QWidget):
     verify_signatures_requested = Signal()
     remove_password_requested = Signal()
     layout_changed = Signal(str)
+    details_loaded = Signal()  # avisos, campos, sumário e anexos do documento chegaram
 
     def __init__(
         self,
@@ -147,6 +162,22 @@ class PdfViewer(QWidget):
         self.open_path = session.open
         self._document: pdfium.PdfDocument | None = None
         self._geometries: dict[int, PageGeometry] = {}  # geometria do arquivo, sem a rotação da tela
+        self._page_sizes: dict[int, tuple[float, float]] = {}  # largura e altura visuais, sem abrir a página
+        # Páginas renderizadas numa thread própria, e as prontas guardadas: voltar a uma página
+        # ou redesenhar as marcações por cima dela não renderiza de novo.
+        self._renderer = PageRenderer(self)
+        self._renderer.rendered.connect(self._on_page_rendered)
+        self._pixmaps = PixmapCache()
+        self._render_cost: float | None = None  # segundos por página (média), neste documento
+        self._shown_page: int | None = None  # a página cuja imagem a página única mostra
+        self._total_pages = 0
+        # Avisos, campos, sumário e anexos: lidos numa thread depois que a página aparece.
+        self._details = DetailsLoader(self)
+        self._details.loaded.connect(self._on_details_loaded)
+        self._details_request = 0
+        self._details_received = 0
+        self._wanted_panel = ""  # o painel que o PDF pede, aberto quando o sumário chegar
+        self._notices = DocumentNotices()
         self._view_rotation = 0  # "girar a visualização": só na tela, o arquivo não muda
         self._scale = _DEFAULT_SCALE
         self._continuous = False
@@ -317,7 +348,7 @@ class PdfViewer(QWidget):
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(0)
 
-        self.thumbnail_list = ThumbnailList()
+        self.thumbnail_list = ThumbnailList(self._renderer)
         self.thumbnail_list.page_selected.connect(self._on_thumbnail_selected)
         self.thumbnail_list.pages_selected.connect(self.session.set_selected_pages)
         self.side_panel = DocumentSidePanel(self.thumbnail_list)
@@ -612,10 +643,20 @@ class PdfViewer(QWidget):
         não pode ser apagado, e as versões temporárias do documento precisam sair."""
         if self._document is not None:
             self._save_reading_position()
-            self.thumbnail_list.clear_document()
-            with PDFIUM_LOCK:
+            self._close_pdfium()
+        self._renderer.stop()
+
+    def _close_pdfium(self):
+        """Fecha o documento no pdfium; a thread de render deixa de usá-lo antes."""
+        self.thumbnail_list.clear_document()
+        with PDFIUM_LOCK:
+            self._renderer.set_document(None)
+            if self._document is not None:
                 self._document.close()
-            self._document = None
+        self._document = None
+        self._pixmaps.clear()
+        self._page_sizes = {}
+        self._render_cost = None
 
     def _save_reading_position(self):
         if self._position_path:
@@ -638,10 +679,7 @@ class PdfViewer(QWidget):
         self._stop_search()
         self._pending_scroll = None
         if self._document is not None:
-            self.thumbnail_list.clear_document()
-            with PDFIUM_LOCK:
-                self._document.close()
-            self._document = None
+            self._close_pdfium()
 
         if not path:
             self._show_empty_state()
@@ -652,12 +690,15 @@ class PdfViewer(QWidget):
             self._show_empty_state()
             return
 
-        view = initial_view(path) if not same_document else None
+        view = read_initial_view(path) if not same_document else None
         # O modo de exibição do PDF vale até o usuário escolher um (a escolha dele fica guardada).
         if view is not None and view.layout and preferences().page_layout() is None:
             self.set_layout(view.layout)
 
+        with PDFIUM_LOCK:
+            self._total_pages = len(document)
         self._document = document
+        self._renderer.set_document(document)
         self._text_selection, self._selection_rects = None, {}
         # Um PDF anexado abre de um arquivo temporário, de outro nome a cada vez: nada a lembrar.
         self._position_path = None if self.session.needs_save_as() else self.session.source_path()
@@ -681,13 +722,17 @@ class PdfViewer(QWidget):
 
         self._set_document_controls_enabled(True)
         self.thumbnail_list.load_document(self._document)
-        self.side_panel.load(path)
+        self.side_panel.set_document(path, keep_contents=same_document)
         self.side_panel.setVisible(self._show_thumbnails)
+        self._wanted_panel = ""
         if view is not None and view.panel:
+            self._wanted_panel = view.panel
             self.side_panel.show_panel(view.panel)
             self.show_side_panel(True)
         self._update_notices(path)
-        self._form_widgets = self._load_form_widgets(path)
+        if self._next_field:  # Tab entre campos: o próximo campo abre já, sem esperar a leitura
+            self._form_widgets = read_form_widgets(path)
+        self._details_request = self._details.load(path)
         self.content_stack.setCurrentIndex(1)
         self._rebuild_canvas()
         self._on_markup_state_changed()  # o modo do PDF não vale com uma ferramenta de desenho
@@ -707,9 +752,39 @@ class PdfViewer(QWidget):
 
     def _update_notices(self, path: str):
         if self.session.last_change() != "version":
-            self._dismissed_notices = set()  # outro documento: os avisos voltam
-        self._notices = document_notices(path)
+            # Outro documento: os avisos voltam, e os do anterior saem já (os novos chegam com
+            # os detalhes). Numa versão nova, os atuais ficam até lá, sem piscar.
+            self._dismissed_notices = set()
+            self._notices = DocumentNotices()
+            self._show_notices()
+
+    def _on_details_loaded(self, request: int, details) -> None:
+        """Avisos, campos, sumário e anexos lidos na thread (ver `document_details`)."""
+        if request != self._details_request or self._document is None:
+            return  # de um documento que já saiu
+        self._details_received = request
+        self._notices = details.notices
         self._show_notices()
+        had_fields = bool(self._form_widgets)
+        self._form_widgets = details.form_widgets
+        self.side_panel.set_contents(details.outline, details.attachments)
+        if self._wanted_panel:
+            self.side_panel.show_panel(self._wanted_panel)
+            self._wanted_panel = ""
+        if self._form_widgets or had_fields:
+            self._refresh_current_render()  # os destaques dos campos
+        self.details_loaded.emit()
+
+    def _details_done(self) -> bool:
+        return self._document is None or self._details_received == self._details_request
+
+    def wait_for_details(self, timeout_ms: int = 10_000) -> bool:
+        """Processa eventos até os detalhes do documento atual chegarem (testes)."""
+        deadline = time.monotonic() + timeout_ms / 1000
+        while self._details_request and not self._details_done() and time.monotonic() < deadline:
+            QApplication.processEvents()
+            time.sleep(0.002)
+        return self._details_done()
 
     def _show_notices(self):
         while self._notice_layout.count():
@@ -779,10 +854,8 @@ class PdfViewer(QWidget):
         self._update_page_indicator()
 
     def _page_count(self) -> int:
-        if self._document is None:
-            return 0
-        with PDFIUM_LOCK:
-            return len(self._document)
+        # Guardada ao abrir: perguntar ao pdfium esperaria a thread de render largar o lock.
+        return self._total_pages if self._document is not None else 0
 
     def _open_document_with_password_prompt(self, path: str):
         """Abre o PDF em `path`, pedindo a senha ao usuário se estiver protegido.
@@ -833,9 +906,15 @@ class PdfViewer(QWidget):
 
     def _rebuild_canvas(self):
         self._finish_field_edit()
+        # Zoom ou troca de layout na rolagem: as páginas que estavam à vista continuam nela,
+        # esticadas, até a versão na escala nova chegar (em vez de piscarem em branco).
+        previous: dict[int, QPixmap] = {}
+        if self._continuous and len(self._page_labels) == self._page_count():
+            previous = {index: self._page_labels[index].pixmap() for index in self._rendered_pages}
         self._rendered_pages = set()
         self._page_labels = []
         self._page_tops = []
+        self._shown_page = None
 
         if self._continuous:
             container = QWidget()
@@ -856,6 +935,9 @@ class PdfViewer(QWidget):
                     self._page_tops.append(offset)
                 offset += max(label.height() for label in labels) + spacing
             vlayout.addStretch()
+            for index, pixmap in previous.items():
+                if index < len(self._page_labels) and pixmap is not None and not pixmap.isNull():
+                    self._page_labels[index].setPixmap(_stretched(pixmap, self._page_labels[index].width()))
 
             self.scroll_area.setWidget(container)
             self._update_visible_pages()
@@ -910,14 +992,35 @@ class PdfViewer(QWidget):
     def _row_of(self, page: int) -> list[int]:
         return next((row for row in self._rows() if page in row), [page])
 
+    def _row_start(self, index: int) -> int:
+        """A primeira página da linha de `index` na rolagem (na página dupla, a da esquerda)."""
+        while index > 0 and self._page_tops[index - 1] == self._page_tops[index]:
+            index -= 1
+        return index
+
+    def _visual_size(self, index: int) -> tuple[float, float]:
+        """Largura e altura da página na tela, em pontos (com a rotação da visualização).
+
+        Vem do pdfium sem abrir a página (só as caixas e o /Rotate, como `PageGeometry`):
+        abrir cada página para saber o tamanho dela lia o conteúdo inteiro, e montar a
+        rolagem de uma planta de 40 páginas levava quase um segundo."""
+        geometry = self._geometries.get(index)
+        if geometry is not None:
+            size = (geometry.width, geometry.height)
+        else:
+            if not self._page_sizes and self._document is not None:
+                with PDFIUM_LOCK:  # todas de uma vez: a thread de render espera uma vez só
+                    self._page_sizes = {i: self._document.get_page_size(i) for i in range(self._page_count())}
+            size = self._page_sizes.get(index, (0.0, 0.0))
+        return (size[1], size[0]) if self._view_rotation in (90, 270) else size
+
     def _make_placeholder_label(self, index: int) -> QLabel:
-        geometry = self._geometry(index)
-        width_pt, height_pt = geometry.width, geometry.height
+        width_pt, height_pt = self._visual_size(index)
         # Na rolagem a página não tem ferramentas de desenho (elas passam para a página única),
         # mas tudo o que é de leitura funciona: links, seleção de texto, notas e formulários.
         label = PageCanvas()
         label.setFixedSize(max(1, int(width_pt * self._scale)), max(1, int(height_pt * self._scale)))
-        label.setStyleSheet("background-color: white;")
+        label.fill_blank = True  # papel branco até a imagem chegar
         label.setCursor(self._canvas_cursor())
         label.mouse_hovered.connect(lambda x, y, canvas=label: self._on_page_hovered(canvas, index, x, y))
         label.mouse_pressed.connect(lambda x, y, canvas=label: self._on_scroll_page_pressed(canvas, index, x, y))
@@ -927,12 +1030,47 @@ class PdfViewer(QWidget):
         label.mouse_triple_clicked.connect(lambda x, y: self._on_scroll_page_clicked_again(index, x, y, line_range))
         return label
 
-    def _render_with_overlays(self, index: int) -> QPixmap:
+    def _render_key(self, index: int) -> tuple:
+        return ("page", index, round(self._scale, 4), self.devicePixelRatioF(), self._view_rotation)
+
+    def _request_render(self, index: int, priority: int) -> tuple:
+        key = self._render_key(index)
+        self._renderer.request(key, index, self._scale, self.devicePixelRatioF(), self._view_rotation, priority)
+        return key
+
+    def _fits_budget(self, spent: float) -> bool:
+        """Dá para renderizar mais uma página aqui mesmo sem a janela parar?"""
+        return self._render_cost is None or spent + self._render_cost <= _SYNC_RENDER_BUDGET
+
+    def _note_render_cost(self, seconds: float) -> None:
+        self._render_cost = seconds if self._render_cost is None else 0.7 * self._render_cost + 0.3 * seconds
+
+    def _render_now(self, index: int) -> QPixmap:
+        """Renderiza a página aqui mesmo (e a guarda)."""
+        key = self._render_key(index)
         with PDFIUM_LOCK:
             assert self._document is not None
+            started = time.perf_counter()
             page = self._document[index]
-            pixmap = render_page(page, self._scale, self.devicePixelRatioF(), rotation=self._view_rotation)
-            page.close()
+            try:
+                if index not in self._geometries:
+                    self._geometries[index] = PageGeometry.from_pdfium_page(page)
+                image = render_image(page, self._scale, self.devicePixelRatioF(), rotation=self._view_rotation)
+            finally:
+                page.close()
+            self._note_render_cost(time.perf_counter() - started)
+        pixmap = to_pixmap(image)
+        self._pixmaps.put(key, pixmap)
+        self._renderer.cancel([key])
+        return pixmap
+
+    def _base_pixmap(self, index: int) -> QPixmap:
+        """A página sem marcações por cima: a guardada ou, se não houver, renderizada agora."""
+        pixmap = self._pixmaps.get(self._render_key(index))
+        return pixmap if pixmap is not None else self._render_now(index)
+
+    def _render_with_overlays(self, index: int, base: QPixmap | None = None) -> QPixmap:
+        pixmap = base if base is not None else self._base_pixmap(index)
         pixmap = self._with_form_fields(pixmap, index)
         pixmap = self._with_highlight(pixmap, index)
         pixmap = self._with_pending_annotations(pixmap, index)
@@ -945,15 +1083,95 @@ class PdfViewer(QWidget):
             return
         self._finish_field_edit()  # o editor fica sobre a página: grava antes de trocá-la
         self._current_page = index
-        pixmap = self._render_with_overlays(index)
-        self._page_labels[0].setPixmap(pixmap)
-        self._page_labels[0].resize(logical_size(pixmap))
-        self._apply_selection(index, self._page_labels[0])
+        label = self._page_labels[0]
+        base = self._pixmaps.get(self._render_key(index))
+        if base is None and not self._fits_budget(0.0):
+            # Página pesada: a tela responde já — com a imagem anterior esticada (zoom), a
+            # miniatura ou o papel em branco — e a nítida chega da thread de render.
+            previous = label.pixmap() if self._shown_page == index else None
+            shown = self._placeholder_pixmap(index, previous)
+            self._request_render(index, VISIBLE)
+        else:
+            shown = self._render_with_overlays(index, base)
+        label.setPixmap(shown)
+        self._shown_page = index
+        label.resize(logical_size(shown))
+        self._apply_selection(index, label)
         self.thumbnail_list.select_page(index)
         self._update_page_indicator()
+        self._prefetch_around(index)
 
-    def _render_page_into_label(self, index: int, label: QLabel):
-        label.setPixmap(self._render_with_overlays(index))
+    def _placeholder_pixmap(self, index: int, previous: QPixmap | None) -> QPixmap:
+        width_pt, height_pt = self._visual_size(index)
+        width, height = max(1, int(width_pt * self._scale)), max(1, int(height_pt * self._scale))
+        source = previous if previous is not None and not previous.isNull() else None
+        if source is None and not self._view_rotation:
+            source = self.thumbnail_list.thumbnail(index)
+        if source is not None:
+            return _stretched(source, width)
+        ratio = self.devicePixelRatioF()
+        blank = QPixmap(max(1, round(width * ratio)), max(1, round(height * ratio)))
+        blank.setDevicePixelRatio(ratio)
+        blank.fill(QColor("white"))
+        return blank
+
+    def _prefetch_around(self, index: int) -> None:
+        """Página única: a seguinte e a anterior ficam prontas enquanto o usuário lê esta."""
+        keep = {self._render_key(index)}
+        for neighbor in (index + 1, index - 1):
+            if 0 <= neighbor < self._page_count() and self._render_key(neighbor) not in self._pixmaps:
+                keep.add(self._request_render(neighbor, NEARBY))
+        self._renderer.retain(lambda key: key[0] != "page" or key in keep)
+
+    def _drawing_preview_active(self) -> bool:
+        """Um arrasto de ferramenta está desenhando sobre a imagem atual da página."""
+        return any(
+            base is not None
+            for base in (
+                self._drag_preview_base,
+                self._ink_preview_base,
+                self._shape_preview_base,
+                self._comment_preview_base,
+                self._area_preview_base,
+                self._measure_preview_base,
+            )
+        )
+
+    def _on_page_rendered(self, tagged_key, image, info) -> None:
+        """Uma página chegou da thread de render (na thread da interface)."""
+        key = self._renderer.accept(tagged_key)
+        if key is None or key[0] != "page" or self._document is None:
+            return
+        index = key[1]
+        seconds, geometry = info
+        self._note_render_cost(seconds)
+        if geometry is not None:
+            self._geometries.setdefault(index, geometry)
+        pixmap = to_pixmap(image)
+        self._pixmaps.put(key, pixmap)
+        if key != self._render_key(index):
+            return  # de um zoom que já passou
+        if self._continuous:
+            if index < len(self._page_labels) and index not in self._rendered_pages and self._near_screen(index):
+                self._render_page_into_label(index, self._page_labels[index], pixmap)
+        elif index == self._current_page and self._page_labels and not self._drawing_preview_active():
+            label = self._page_labels[0]
+            shown = self._render_with_overlays(index, pixmap)
+            label.setPixmap(shown)
+            label.resize(logical_size(shown))
+            self._apply_selection(index, label)
+
+    def _near_screen(self, index: int) -> bool:
+        """A página está até `_KEEP_RENDERED_SCREENS` telas da área visível (rolagem)."""
+        viewport_top = self.scroll_area.verticalScrollBar().value()
+        viewport_height = self.scroll_area.viewport().height()
+        keep = viewport_height * _KEEP_RENDERED_SCREENS
+        top = self._page_tops[index]
+        bottom = top + self._page_labels[index].height()
+        return bottom >= viewport_top - keep and top <= viewport_top + viewport_height + keep
+
+    def _render_page_into_label(self, index: int, label: QLabel, base: QPixmap | None = None):
+        label.setPixmap(self._render_with_overlays(index, base))
         self._rendered_pages.add(index)
         self._apply_selection(index, label)
 
@@ -1228,20 +1446,40 @@ class PdfViewer(QWidget):
         viewport_bottom = viewport_top + viewport_height
         buffer = viewport_height
         keep = viewport_height * _KEEP_RENDERED_SCREENS
+        tops = self._page_tops
 
-        current_page = 0
-        for index, label in enumerate(self._page_labels):
-            label_top = self._page_tops[index]
-            label_bottom = label_top + label.height()
-            if label_top <= viewport_top and (index == 0 or self._page_tops[index - 1] != label_top):
-                current_page = index  # na página dupla, a primeira da linha
-            if label_bottom >= viewport_top - buffer and label_top <= viewport_bottom + buffer:
-                if index not in self._rendered_pages:
-                    self._render_page_into_label(index, label)
-            elif index in self._rendered_pages and (
-                label_bottom < viewport_top - keep or label_top > viewport_bottom + keep
-            ):
+        # Só as páginas perto da tela são visitadas (antes, todas a cada passo da rolagem). As
+        # à vista vêm primeiro; as de uma tela acima e abaixo ficam prontas antes de chegarem.
+        visible: list[int] = []
+        nearby: list[int] = []
+        first = self._row_start(max(0, bisect.bisect_right(tops, viewport_top - buffer) - 1))
+        for index in range(first, bisect.bisect_right(tops, viewport_bottom + buffer)):
+            top = tops[index]
+            bottom = top + self._page_labels[index].height()
+            if bottom < viewport_top - buffer or index in self._rendered_pages:
+                continue
+            (visible if bottom >= viewport_top and top <= viewport_bottom else nearby).append(index)
+        wanted = set()
+        spent = 0.0
+        for index in visible + nearby:
+            base = self._pixmaps.get(self._render_key(index))
+            if base is None and index in visible and self._fits_budget(spent):
+                started = time.perf_counter()
+                base = self._render_now(index)
+                spent += time.perf_counter() - started
+            if base is not None:
+                self._render_page_into_label(index, self._page_labels[index], base)
+            else:
+                wanted.add(self._request_render(index, VISIBLE if index in visible else NEARBY))
+        self._renderer.retain(lambda key: key[0] != "page" or key in wanted)
+        for index in list(self._rendered_pages):
+            top = tops[index]
+            if top + self._page_labels[index].height() < viewport_top - keep or top > viewport_bottom + keep:
                 self._release_page(index)
+
+        # A página atual é a da linha no alto da tela (na página dupla, a primeira da linha).
+        above = bisect.bisect_right(tops, viewport_top) - 1
+        current_page = self._row_start(above) if above >= 0 else 0
         if scrollbar.maximum() > 0 and viewport_top >= scrollbar.maximum():
             # No fim da rolagem a última linha não chega ao topo: ela é a atual (senão
             # "próxima" e o indicador ficariam presos na penúltima).
@@ -1297,16 +1535,16 @@ class PdfViewer(QWidget):
         self.page_field.setAccessibleName(tip)
 
     def _page_name(self, index: int) -> str:
-        name = self._page_names.get(index)
-        if name is None:
-            try:
-                with PDFIUM_LOCK:
-                    assert self._document is not None
-                    name = self._document.get_page_label(index)
-            except Exception:
-                name = ""  # um rótulo malformado não impede de ver a página
-            self._page_names[index] = name
-        return name
+        if not self._page_names and self._document is not None:
+            # Todos de uma vez (milissegundos): página a página, cada página nova esperava a
+            # thread de render largar o pdfium só para escrever o número no indicador.
+            with PDFIUM_LOCK:
+                for page in range(self._page_count()):
+                    try:
+                        self._page_names[page] = self._document.get_page_label(page)
+                    except Exception:
+                        self._page_names[page] = ""  # um rótulo malformado não impede de ver a página
+        return self._page_names.get(index, "")
 
     def _go_to_typed_page(self):
         text = self.page_field.text().strip()
@@ -1536,6 +1774,7 @@ class PdfViewer(QWidget):
             return
         self._view_rotation = (self._view_rotation + 90) % 360
         page = self._current_page
+        self._rendered_pages = set()
         self._rebuild_canvas()
         self._go_to_page(page)
         self._refit()
@@ -1742,11 +1981,11 @@ class PdfViewer(QWidget):
     def _row_size(self, page: int) -> tuple[float, float]:
         """Largura e altura, em pontos, do que o zoom precisa caber: a página, ou a linha na
         página dupla (página sozinha ocupa o lugar de duas, como nas outras linhas)."""
-        geometries = [self._geometry(index) for index in self._row_of(page)]
+        sizes = [self._visual_size(index) for index in self._row_of(page)]
         if not self._spread:
-            return geometries[0].width, geometries[0].height
+            return sizes[0]
         gap = _PAGE_GAP / 2 / self._scale  # o vão entre as páginas não cresce com o zoom
-        return 2 * max(g.width for g in geometries) + gap, max(g.height for g in geometries)
+        return 2 * max(w for w, _h in sizes) + gap, max(h for _w, h in sizes)
 
     def start_presentation(self):
         """Exibir > Apresentação: o documento de trabalho em tela cheia, a partir da página
@@ -2347,7 +2586,15 @@ class PdfViewer(QWidget):
     def _on_page_hovered(self, canvas: PageCanvas, page_index: int, x: float, y: float):
         """Com o mouse em cima: a mãozinha e o destino do link, a mãozinha num campo para clicar
         e o texto de um comentário."""
-        target = self._hover_at(page_index, x, y)
+        if page_index in self._links and page_index in self._notes and page_index in self._geometries:
+            target = self._hover_at(page_index, x, y)
+        elif PDFIUM_LOCK.acquire(blocking=False):
+            try:
+                target = self._hover_at(page_index, x, y)
+            finally:
+                PDFIUM_LOCK.release()
+        else:
+            return  # a thread de render está com o pdfium: o próximo movimento do mouse tenta de novo
         if target == self._hover_target:
             return
         self._hover_target = target
@@ -2663,12 +2910,6 @@ class PdfViewer(QWidget):
                 return
 
     # -- formulários (A02) ---------------------------------------------------------
-
-    def _load_form_widgets(self, path: str) -> list[FormWidget]:
-        try:
-            return ListFormWidgets().run(path)
-        except Exception:
-            return []  # um formulário malformado não impede de ver o PDF
 
     def _with_form_fields(self, pixmap: QPixmap, page_index: int) -> QPixmap:
         widgets = [w for w in self._form_widgets if w.page_index == page_index and not w.read_only]

@@ -189,6 +189,7 @@ def test_side_panel_lists_bookmarks_and_attachments_and_navigates(tmp_path):
     session = DocumentSession()
     viewer = PdfViewer(session, AnnotationState(), RedactionState())
     session.open(str(path))
+    viewer.wait_for_details()  # sumário e anexos são lidos numa thread
     panel = viewer.side_panel
 
     assert panel.isTabVisible(1) and panel.isTabVisible(2)
@@ -226,6 +227,7 @@ def test_notice_bar_tells_about_forms_signatures_and_layers(tmp_path):
     viewer.verify_signatures_requested.connect(lambda: requested.append(1))
 
     session.open(str(signed))
+    viewer.wait_for_details()  # os avisos são lidos numa thread
 
     rows = viewer.notice_bar.findChildren(QFrame, "documentNotice")
     assert [row.property("kind") for row in rows] == ["signed", "form"]  # uma faixa por aviso, na cor dele

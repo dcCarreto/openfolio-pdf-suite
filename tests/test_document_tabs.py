@@ -113,7 +113,7 @@ def test_the_viewer_open_button_opens_another_tab(window, tmp_path, monkeypatch)
 def test_left_rail_shows_and_hides_the_side_panel(window, tmp_path):
     doc = window.open_document(_pdf(tmp_path / "doc.pdf", with_outline=True))
     window.show()
-    QApplication.processEvents()
+    doc.viewer.wait_for_details()  # o sumário é lido numa thread
     side_panel = doc.viewer.side_panel
     thumbnails, bookmarks, attachments = doc._left_buttons
 
