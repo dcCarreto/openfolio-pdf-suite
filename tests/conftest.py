@@ -144,3 +144,18 @@ def _no_modal_dialogs(monkeypatch):
     from PySide6.QtWidgets import QMessageBox
 
     monkeypatch.setattr(QMessageBox, "exec", lambda self: QMessageBox.StandardButton.Ok)
+
+
+@pytest.fixture(autouse=True)
+def _collect_widgets_in_the_main_thread():
+    """Os visualizadores de um teste viram lixo com ciclos (sinais ligados a métodos), e a
+    coleta automática do Python roda na thread que estiver alocando no momento — às vezes uma
+    thread de trabalho (render, detalhes), que destruiria widgets fora da thread da interface
+    e derrubaria o processo. Coletados aqui, ao fim de cada teste, eles saem na thread certa.
+    O que sobrevive é congelado (`gc.freeze`): a coleta seguinte só olha o que é novo, e a suite
+    não fica mais lenta."""
+    yield
+    import gc
+
+    gc.collect()
+    gc.freeze()

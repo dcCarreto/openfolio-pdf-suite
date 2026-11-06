@@ -179,6 +179,7 @@ def _with_attachment(tmp_path) -> str:
 
 def test_saving_an_attached_pdf_asks_where_and_then_uses_that_file(window, tmp_path, monkeypatch):
     doc = window.open_document(_with_attachment(tmp_path))
+    doc.viewer.wait_for_details()  # os anexos são lidos numa thread
     panel = doc.viewer.side_panel
     panel._on_attachment_activated(panel.attachments_list.item(0))
     attached = window.document
@@ -209,6 +210,7 @@ def test_saving_an_attached_pdf_asks_where_and_then_uses_that_file(window, tmp_p
 
 def test_cancelling_the_save_of_an_attached_pdf_keeps_it_open_and_unsaved(window, tmp_path, monkeypatch):
     doc = window.open_document(_with_attachment(tmp_path))
+    doc.viewer.wait_for_details()  # os anexos são lidos numa thread
     panel = doc.viewer.side_panel
     panel._on_attachment_activated(panel.attachments_list.item(0))
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *args: ("", ""))
@@ -219,6 +221,7 @@ def test_cancelling_the_save_of_an_attached_pdf_keeps_it_open_and_unsaved(window
 
 def test_opening_the_same_attachment_twice_returns_to_its_tab(window, tmp_path):
     doc = window.open_document(_with_attachment(tmp_path))
+    doc.viewer.wait_for_details()  # os anexos são lidos numa thread
     panel = doc.viewer.side_panel
     panel._on_attachment_activated(panel.attachments_list.item(0))
     count = len(window.documents())

@@ -50,7 +50,8 @@ from ui.i18n import error_text, plural, tr
 from ui.preferences import remember_folder_of, start_folder
 from ui.tasks import run_task
 from ui.top_bar import bar_separator
-from ui.viewer.render import render_page
+from ui.viewer.page_renderer import THUMBNAIL, PageRenderer
+from ui.viewer.render import render_page, to_pixmap
 from ui.viewer.viewer_icons import (
     build_duplicate_icon,
     build_rotate_icon,
@@ -234,6 +235,7 @@ class OrganizerView(QListWidget):
         self.tile_width = width
         self.setGridSize(QSize(width + GAP[0], _tile_height(width) + 8 + NUMBER_HEIGHT + GAP[1]))
         self.doItemsLayout()
+        self.shown.emit()
 
     def drop_bar(self) -> QRect | None:
         return self._drop_bar
@@ -328,6 +330,10 @@ class OrganizerView(QListWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self.shown.emit()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.shown.emit()  # mais quadros à vista: as miniaturas deles são pedidas
 
 
 def _tool_button(icon: QIcon, text: str) -> QToolButton:
@@ -516,9 +522,17 @@ class OrganizePage(QWidget):
         layout.addWidget(self.discard_button)
         layout.addWidget(self.apply_button)
 
+        # As miniaturas saem de uma thread de render, só as à vista (e as de uma tela antes e
+        # depois): antes eram todas, na thread da interface, uma por volta do laço de eventos —
+        # num escaneado a janela engasgava enquanto a grade estivesse aberta. Os pedidos saem
+        # quando a rolagem e o layout assentam.
+        self._renderer = PageRenderer(self)
+        self._renderer.rendered.connect(self._on_rendered)
         self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
         self._timer.setInterval(0)
-        self._timer.timeout.connect(self._render_next)
+        self._timer.timeout.connect(self._request_visible)
+        self.grid.verticalScrollBar().valueChanged.connect(lambda _value: self._start_rendering())
 
         session.path_changed.connect(self._load)
         self._load()
@@ -590,6 +604,7 @@ class OrganizePage(QWidget):
         self._set_status("")
         total = 0
         with PDFIUM_LOCK:
+            self._renderer.set_document(None)
             if self._document is not None:
                 self._document.close()
                 self._document = None
@@ -601,6 +616,7 @@ class OrganizePage(QWidget):
                 except Exception as exc:
                     self._document = None
                     self._set_status(error_text(exc))
+            self._renderer.set_document(self._document)
         self._base = [(index, index, 0, False) for index in range(total)]
         self._next_uid = total
         self._ops, self._redo = [], []
@@ -609,7 +625,7 @@ class OrganizePage(QWidget):
         self._start_rendering()
 
     def _start_rendering(self) -> None:
-        if self._pending and self.grid.isVisible():
+        if self._pending:
             self._timer.start()
 
     def render_all(self) -> None:
@@ -617,26 +633,47 @@ class OrganizePage(QWidget):
         while self._pending:
             self._render_page(min(self._pending))
 
-    def _render_next(self) -> None:
+    def _request_visible(self) -> None:
         # Só enquanto a grade está à vista: escondida, cada versão nova do documento
-        # renderizaria todas as miniaturas à toa.
+        # renderizaria miniaturas à toa.
         if self._document is None or not self._pending or not self.grid.isVisible():
-            self._timer.stop()
             return
-        first = self.grid.indexAt(QPoint(10, 10)).row()
-        visible = (self.grid.item(row).data(_ROLE)[0] for row in range(max(first, 0), self.grid.count()))
-        index = next((index for index in visible if index in self._pending), min(self._pending))
-        self._render_page(index)
+        viewport = self.grid.viewport()
+        count = self.grid.count()
+        first = max(0, self.grid.indexAt(QPoint(10, 10)).row())
+        last = self.grid.indexAt(QPoint(viewport.width() - 10, viewport.height() - 10)).row()
+        last = last if last >= 0 else min(count - 1, first + 40)
+        margin = last - first + 1
+        wanted = set()
+        ratio = self.devicePixelRatioF()
+        rows = sorted(range(max(0, first - margin), min(count, last + margin + 1)), key=lambda r: (not first <= r <= last, r))
+        for row in rows:
+            source = self.grid.item(row).data(_ROLE)[0]
+            if source in self._pending:
+                key = ("tile", source)
+                wanted.add(key)
+                # Pelo lado maior: girada ou não, a página ocupa a altura do quadro.
+                priority = THUMBNAIL if first <= row <= last else THUMBNAIL + 1
+                self._renderer.request(key, source, 0.2, ratio, priority=priority, fit_longest=_RENDER_HEIGHT)
+        self._renderer.retain(lambda key: key in wanted)
+
+    def _on_rendered(self, tagged_key, image, _info) -> None:
+        key = self._renderer.accept(tagged_key)
+        if key is not None and key[1] in self._pending:
+            self._set_pixmap(key[1], to_pixmap(image))
 
     def _render_page(self, index: int) -> None:
-        self._pending.discard(index)
         with PDFIUM_LOCK:
             page = self._document[index]
-            # Pelo lado maior: girada ou não, a página ocupa a altura do quadro.
             longest = max(page.get_size())
             scale = _RENDER_HEIGHT / longest if longest > 0 else 0.2
-            self._pixmaps[index] = render_page(page, scale, self.devicePixelRatioF())
+            pixmap = render_page(page, scale, self.devicePixelRatioF())
             page.close()
+        self._set_pixmap(index, pixmap)
+
+    def _set_pixmap(self, index: int, pixmap: QPixmap) -> None:
+        self._pending.discard(index)
+        self._pixmaps[index] = pixmap
         for row in range(self.grid.count()):
             item = self.grid.item(row)
             if item.data(_ROLE)[0] == index:

@@ -4,6 +4,26 @@ O OpenFolio PDF Suite não tem número de versão: há uma só, que recebe atual
 atualização é identificada pela data em que foi publicada e só é instalada se você aceitar,
 depois de ver o que ela traz (o texto de cada uma abaixo é o que aparece no aviso do app).
 
+## 2026-11-06
+
+### Mais rápido
+
+O OpenFolio abre, mostra e percorre os documentos sem a janela travar, mesmo em PDFs pesados,
+como escaneados e plantas.
+
+- O app abre mais rápido, e os arquivos recentes da tela Início não atrasam mais a abertura (nem
+  a travam quando estão numa pasta de rede fora do ar).
+- Rolar, mudar o zoom, ir para uma página e trocar o modo de exibição respondem na hora. Uma
+  página pesada aparece logo e fica nítida em seguida, sem a janela parar enquanto ela é
+  desenhada; no zoom, a página continua à vista em vez de piscar em branco.
+- Na página única, a página seguinte já está pronta quando você chega nela.
+- Abrir um documento não espera mais o sumário, os anexos e os avisos, que aparecem logo depois
+  da primeira página. O arquivo é lido uma vez só, e não cinco.
+- As miniaturas são desenhadas só quando aparecem na tela, sem atrasar o resto.
+- As ferramentas abrem mais rápido em documentos longos, e Organizar páginas não trava mais a
+  janela enquanto mostra as miniaturas.
+- Fechar o app enquanto uma página está sendo desenhada não causa mais um erro na saída.
+
 ## 2026-10-30
 
 ### Visualizador

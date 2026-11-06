@@ -44,6 +44,7 @@ from core.annotations import (
     UpdateAnnotation,
     default_author,
 )
+from core.base import shared_reader
 from core.xfdf import ExportAnnotationsXFDF, ImportAnnotationsXFDF
 from ui import theme
 from ui.annotation_state import AnnotationState
@@ -563,7 +564,12 @@ class AnnotationsPage(QWidget):
         só valem para o arquivo de onde foram lidas."""
         input_path = self.session.path()
         try:
-            comments = ListAnnotations().run(input_path) if input_path else []
+            if input_path:
+                # Lendo do arquivo só o necessário: o pypdf carregaria o arquivo inteiro.
+                with shared_reader(input_path):
+                    comments = ListAnnotations().run(input_path)
+            else:
+                comments = []
         except Exception:
             comments = []  # PDF protegido ou ilegível: as outras ferramentas avisam
         self._fill_list(comments)

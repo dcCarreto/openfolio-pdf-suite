@@ -68,6 +68,7 @@ def _open(path, layout=SINGLE, size=(800, 700)) -> PdfViewer:
     viewer.show()
     session.open(path)
     QApplication.processEvents()
+    viewer.wait_for_details()  # campos, anexos e avisos chegam de uma thread
     return viewer
 
 
@@ -344,7 +345,30 @@ def test_hovering_a_note_shows_it_with_the_pdf_text_escaped(tmp_path, monkeypatc
     viewer = _open(_with_note(_reading_pdf(tmp_path / "doc.pdf")))
     canvas = viewer._page_labels[0]
 
+    # O mouse para em cima da nota enquanto outra thread (o render) está no pdfium: a interface
+    # não espera por ela, e a nota aparece logo que o pdfium fica livre, sem outro movimento.
+    import threading
+
+    from core.progress import PDFIUM_LOCK
+
+    busy, done = threading.Event(), threading.Event()
+
+    def render_elsewhere():
+        with PDFIUM_LOCK:
+            busy.set()
+            done.wait(5)
+
+    thread = threading.Thread(target=render_elsewhere)
+    thread.start()
+    assert busy.wait(5)
     viewer._on_page_hovered(canvas, 0, *_point(viewer, 0, 310, 310))
+    assert not shown
+    done.set()
+    thread.join()
+    for _ in range(200):
+        if shown:
+            break
+        QTest.qWait(10)
 
     assert shown and "<b>Ana</b>" in shown[0] and "&lt;b&gt;isto&lt;/b&gt;" in shown[0]
     viewer.close_document()
@@ -725,13 +749,30 @@ def _click_field(viewer, name):
     QTest.mouseClick(label, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, center.toPoint())
 
 
-def test_forms_fill_in_continuous_mode_without_losing_the_position(tmp_path):
+def _hold_details(monkeypatch):
+    """Os detalhes do documento (avisos, campos, sumário...) chegam de uma thread: com isto,
+    só quando o teste deixa (`set` no Event devolvido)."""
+    import threading
+
+    from ui.viewer import document_details
+
+    gate = threading.Event()
+    gate.set()
+    read_details = document_details.read_details
+    monkeypatch.setattr(document_details, "read_details", lambda path: gate.wait(10) and read_details(path))
+    return gate
+
+
+def test_forms_fill_in_continuous_mode_without_losing_the_position(tmp_path, monkeypatch):
+    details_gate = _hold_details(monkeypatch)
     viewer = _open(_build_pdf_with_various_fields(tmp_path), CONTINUOUS)
+    assert viewer.wait_for_details()
     _settle()
 
     _click_field(viewer, "nome")
     editor, _widget = viewer._field_editor
     editor.setText("Ana")
+    details_gate.clear()  # o próximo campo responde antes de o resto do documento chegar
     editor.editingFinished.emit()
     assert wait_for_tasks()
     _settle()
@@ -741,23 +782,31 @@ def test_forms_fill_in_continuous_mode_without_losing_the_position(tmp_path):
     _click_field(viewer, "aceite")
     assert wait_for_tasks()
     assert _values(viewer.session.path())["aceite"] == "/Yes"
+    details_gate.set()
     viewer.close_document()
 
 
-def test_tab_writes_the_field_and_opens_the_next_text_field(tmp_path):
-    source = _build_pdf_with_various_fields(tmp_path)
+def test_tab_writes_the_field_and_opens_the_next_text_field(tmp_path, monkeypatch):
     from core.form_fields import AddFormField
 
+    # Chegar depois do Tab, os detalhes não fecham o campo que ele abriu.
+    details_gate = _hold_details(monkeypatch)
+    source = _build_pdf_with_various_fields(tmp_path)
     target = tmp_path / "dois.pdf"
     AddFormField().run(source, str(target), field_name="sobrenome", page_number=0, x=50, y=100, field_type="text")
     viewer = _open(str(target))
+    assert viewer.wait_for_details()
     _click_field(viewer, "nome")
     editor, _widget = viewer._field_editor
     editor.setText("Ana")
 
+    details_gate.clear()
     viewer._tab_to_field(1)
     assert wait_for_tasks()
     _settle()
+    assert viewer._field_editor is not None and viewer._field_editor[1].name == "sobrenome"
+    details_gate.set()
+    assert viewer.wait_for_details()
 
     assert _values(viewer.session.path())["nome"] == "Ana"
     assert viewer._field_editor is not None and viewer._field_editor[1].name == "sobrenome"

@@ -77,15 +77,33 @@ class DocumentSidePanel(QTabWidget):
         self.attachments_list.setToolTip(tr("Duplo clique abre um PDF anexado ou salva os outros arquivos"))
 
     def load(self, path: str) -> None:
-        """Lê o sumário e os anexos do documento (as miniaturas são carregadas à parte)."""
-        self._path = path
-        self.outline_tree.clear()
-        self.attachments_list.clear()
+        """Lê o sumário e os anexos do documento aqui mesmo (as miniaturas são carregadas à
+        parte). O visualizador lê numa thread e usa `set_document` e `set_contents`."""
         try:
             outline = ListOutline().run(path)
         except Exception:
             logger.debug("Sem sumário legível em %s", path, exc_info=True)
             outline = []
+        try:
+            attachments = ListAttachments().run(path)
+        except Exception:
+            logger.debug("Sem anexos legíveis em %s", path, exc_info=True)
+            attachments = []
+        self.set_document(path)
+        self.set_contents(outline, attachments)
+
+    def set_document(self, path: str, keep_contents: bool = False) -> None:
+        """O arquivo de onde os anexos são extraídos. `keep_contents`: uma versão nova do mesmo
+        documento mantém o sumário e os anexos à vista até os novos chegarem (sem piscar)."""
+        self._path = path
+        if not keep_contents:
+            self.outline_tree.clear()
+            self.attachments_list.clear()
+            self._update_tabs()
+
+    def set_contents(self, outline, attachments) -> None:
+        self.outline_tree.clear()
+        self.attachments_list.clear()
         parents: list[QTreeWidgetItem] = []
         for entry in outline:
             item = QTreeWidgetItem([entry.title or tr("(sem título)")])
@@ -103,12 +121,6 @@ class DocumentSidePanel(QTabWidget):
                 self.outline_tree.addTopLevelItem(item)
             parents.append(item)
         self.outline_tree.expandToDepth(0)
-
-        try:
-            attachments = ListAttachments().run(path)
-        except Exception:
-            logger.debug("Sem anexos legíveis em %s", path, exc_info=True)
-            attachments = []
         for info in attachments:
             attachment = QListWidgetItem(f"{info.name} ({_size(info.size)})")
             attachment.setData(Qt.ItemDataRole.UserRole, info.name)

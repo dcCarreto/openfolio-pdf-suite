@@ -16,6 +16,8 @@ from pathlib import Path
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QFileDialog, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
+from core.base import open_pdfium
+from core.progress import PDFIUM_LOCK
 from ui.document_session import DocumentSession
 from ui.i18n import PT_BR, get_language, plural, tr
 from ui.preferences import start_folder
@@ -30,13 +32,31 @@ def format_size(size: int) -> str:
     return f"{max(1, round(size / 1024))} KB"
 
 
-def _page_count(path: str) -> int | None:
-    try:
-        from pypdf import PdfReader
+# Páginas de cada arquivo, por (caminho, data de modificação, tamanho): cada painel de
+# ferramenta tem o seu cartão, e todos se atualizam a cada versão do documento.
+_page_counts: dict[tuple[str, float, int], int | None] = {}
 
-        return len(PdfReader(path).pages)
-    except Exception:  # protegido, corrompido: o cartão mostra só o tamanho
+
+def _page_count(path: str) -> int | None:
+    """Pelo pdfium, que só lê o índice do arquivo. Antes era o pypdf, que carregava o arquivo
+    inteiro e percorria a árvore de páginas: abrir uma ferramenta num PDF de 1500 páginas
+    levava 350 ms só para escrever "1500 páginas"."""
+    try:
+        stat = os.stat(path)
+    except OSError:
         return None
+    key = (os.path.normcase(os.path.abspath(path)), stat.st_mtime, stat.st_size)
+    if key not in _page_counts:
+        try:
+            with PDFIUM_LOCK:
+                document = open_pdfium(path)
+                try:
+                    _page_counts[key] = len(document)
+                finally:
+                    document.close()
+        except Exception:  # protegido, corrompido: o cartão mostra só o tamanho
+            _page_counts[key] = None
+    return _page_counts[key]
 
 
 class DocumentSourceBar(QFrame):
