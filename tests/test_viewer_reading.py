@@ -344,7 +344,30 @@ def test_hovering_a_note_shows_it_with_the_pdf_text_escaped(tmp_path, monkeypatc
     viewer = _open(_with_note(_reading_pdf(tmp_path / "doc.pdf")))
     canvas = viewer._page_labels[0]
 
+    # O mouse para em cima da nota enquanto outra thread (o render) está no pdfium: a interface
+    # não espera por ela, e a nota aparece logo que o pdfium fica livre, sem outro movimento.
+    import threading
+
+    from core.progress import PDFIUM_LOCK
+
+    busy, done = threading.Event(), threading.Event()
+
+    def render_elsewhere():
+        with PDFIUM_LOCK:
+            busy.set()
+            done.wait(5)
+
+    thread = threading.Thread(target=render_elsewhere)
+    thread.start()
+    assert busy.wait(5)
     viewer._on_page_hovered(canvas, 0, *_point(viewer, 0, 310, 310))
+    assert not shown
+    done.set()
+    thread.join()
+    for _ in range(200):
+        if shown:
+            break
+        QTest.qWait(10)
 
     assert shown and "<b>Ana</b>" in shown[0] and "&lt;b&gt;isto&lt;/b&gt;" in shown[0]
     viewer.close_document()
