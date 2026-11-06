@@ -194,5 +194,10 @@ def test_hovering_a_link_shows_the_hand(viewer):
             ),
         )
         expected = Qt.CursorShape.PointingHandCursor if where == point else Qt.CursorShape.IBeamCursor
+        # Com a thread de render no pdfium, o visualizador tenta de novo logo depois.
+        for _ in range(200):
+            if label.cursor().shape() == expected:
+                break
+            QTest.qWait(10)
         assert label.cursor().shape() == expected
     assert viewer._link_tip(viewer._page_links(0)[2]) == "Escrever para contato@exemplo.com"

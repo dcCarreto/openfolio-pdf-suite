@@ -244,6 +244,13 @@ class PdfViewer(QWidget):
         self._layout_timer.setSingleShot(True)
         self._layout_timer.setInterval(0)
         self._layout_timer.timeout.connect(self._after_layout)
+        # O mouse parado em cima de uma nota enquanto a thread desenha a página: tenta de novo
+        # logo depois, em vez de só no próximo movimento (que pode não vir).
+        self._pending_hover: tuple[PageCanvas, int, float, float] | None = None
+        self._hover_retry = QTimer(self)
+        self._hover_retry.setSingleShot(True)
+        self._hover_retry.setInterval(30)
+        self._hover_retry.timeout.connect(self._retry_hover)
         self._translatable_tooltips: list[tuple[QWidget, str]] = []
         self._dismissed_notices: set[str] = set()  # avisos fechados com o "x" (até outro documento)
         # Rolagem contínua: (página, fração da altura dela) a mostrar no topo assim que o
@@ -672,6 +679,7 @@ class PdfViewer(QWidget):
         self._form_widgets = []
         self._geometries = {}
         self._links, self._notes, self._hover_target, self._link_press = {}, {}, None, None
+        self._pending_hover = None
         self._page_names = {}
         self._stop_search()
         self._pending_scroll = None
@@ -2601,9 +2609,16 @@ class PdfViewer(QWidget):
             return widget
         return next((note for note in self._page_notes(page_index) if note.contains(*point)), None)
 
+    def _retry_hover(self):
+        pending, self._pending_hover = self._pending_hover, None
+        # A página pode ter sido trocada (outro documento, zoom) enquanto isso.
+        if pending is not None and self._document is not None and pending[0] in self._page_labels:
+            self._on_page_hovered(*pending)
+
     def _on_page_hovered(self, canvas: PageCanvas, page_index: int, x: float, y: float):
         """Com o mouse em cima: a mãozinha e o destino do link, a mãozinha num campo para clicar
         e o texto de um comentário."""
+        self._pending_hover = None
         if page_index in self._links and page_index in self._notes and page_index in self._geometries:
             target = self._hover_at(page_index, x, y)
         elif PDFIUM_LOCK.acquire(blocking=False):
@@ -2611,8 +2626,10 @@ class PdfViewer(QWidget):
                 target = self._hover_at(page_index, x, y)
             finally:
                 PDFIUM_LOCK.release()
-        else:
-            return  # a thread de render está com o pdfium: o próximo movimento do mouse tenta de novo
+        else:  # a thread de render está com o pdfium: sem esperar por ela, tenta logo depois
+            self._pending_hover = (canvas, page_index, x, y)
+            self._hover_retry.start()
+            return
         if target == self._hover_target:
             return
         self._hover_target = target
