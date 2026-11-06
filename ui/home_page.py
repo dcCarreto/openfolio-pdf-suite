@@ -4,11 +4,12 @@ fazer e os arquivos recentes, com miniatura, pasta, páginas e data."""
 import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtCore import QObject, QPoint, QRect, QSize, Qt, QUrl, Signal
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -34,7 +35,7 @@ from ui.i18n import plural, tr
 from ui.icon_utils import in_accent
 from ui.sidebar_icons import build_protect_icon
 from ui.tools import TOOLS
-from ui.viewer.render import render_page
+from ui.viewer.render import render_image, to_pixmap
 from ui.viewer.viewer_icons import build_file_drop_icon, build_more_icon
 from ui.widgets.flow_layout import FlowLayout
 
@@ -65,28 +66,72 @@ def _key(path: str) -> tuple[str, float]:
         return path, 0.0
 
 
-def recent_info(path: str, ratio: float = 1.0) -> tuple[QPixmap | None, int | None]:
-    """(miniatura da primeira página, número de páginas), do cache ou renderizada agora. Um
-    PDF protegido ou ilegível fica sem miniatura e sem contagem."""
-    key = _key(path)
-    if key not in _cache:
-        pixmap, pages = None, None
-        try:
-            with PDFIUM_LOCK:
-                document = open_pdfium(path)
+# A versão de cada recente que a lista mostra (o arquivo e a data de modificação dele).
+_shown: dict[str, tuple[str, float]] = {}
+
+
+def _read_first_page(path: str, ratio: float) -> tuple[QImage | None, int | None]:
+    """Miniatura da primeira página e número de páginas; um PDF protegido ou ilegível fica
+    sem as duas coisas. Pode rodar fora da thread da interface (devolve um QImage)."""
+    try:
+        with PDFIUM_LOCK:
+            document = open_pdfium(path)
+            try:
+                pages = len(document)
+                page = document[0]
                 try:
-                    pages = len(document)
-                    page = document[0]
                     width, height = page.get_size()
                     scale = min(THUMB.width() / width, THUMB.height() / height) if width and height else 0.05
-                    pixmap = render_page(page, scale, ratio)
-                    page.close()
+                    return render_image(page, scale, ratio), pages
                 finally:
-                    document.close()
-        except Exception:
-            pass
-        _cache[key] = (pixmap, pages)
+                    page.close()
+            finally:
+                document.close()
+    except Exception:
+        return None, None
+
+
+def recent_info(path: str, ratio: float = 1.0) -> tuple[QPixmap | None, int | None]:
+    """(miniatura da primeira página, número de páginas), do cache ou lida agora."""
+    key = _key(path)
+    if key not in _cache:
+        image, pages = _read_first_page(path, ratio)
+        _cache[key] = (to_pixmap(image) if image is not None else None, pages)
+    _shown[path] = key
     return _cache[key]
+
+
+def shown_info(path: str) -> tuple[QPixmap | None, int | None, float]:
+    """O que a lista já sabe do recente, sem tocar no arquivo: (miniatura, páginas, data de
+    modificação). Antes de `RecentLoader` ler o arquivo, nada."""
+    key = _shown.get(path)
+    if key is None:
+        return None, None, 0.0
+    pixmap, pages = _cache.get(key, (None, None))
+    return pixmap, pages, key[1]
+
+
+class RecentLoader(QObject):
+    """Lê a miniatura, as páginas e a data dos recentes numa thread.
+
+    Antes a lista lia cada arquivo ao se desenhar, na thread da interface: com dez PDFs
+    grandes na lista, a janela levava centenas de milissegundos a mais para aparecer, e um
+    recente numa pasta de rede fora do ar a travava até o sistema desistir de procurá-lo."""
+
+    loaded = Signal(str, object, object, object)  # caminho, (caminho, data), QImage, páginas
+
+    def load(self, paths: list[str], ratio: float) -> None:
+        if paths:
+            threading.Thread(target=self._run, args=(list(paths), ratio), name="openfolio-recentes", daemon=True).start()
+
+    def _run(self, paths: list[str], ratio: float) -> None:
+        for path in paths:
+            key = _key(path)
+            image, pages = (None, None) if key in _cache else _read_first_page(path, ratio)
+            try:
+                self.loaded.emit(path, key, image, pages)
+            except RuntimeError:  # a janela já fechou
+                return
 
 
 def relative_date(timestamp: float, now: float | None = None) -> str:
@@ -135,7 +180,7 @@ class _RecentDelegate(QStyledItemDelegate):
             painter.setBrush(QColor(t["hover"]))
             painter.drawRoundedRect(rect.adjusted(0, 1, 0, -1), 8, 8)
 
-        pixmap, pages = recent_info(path, painter.device().devicePixelRatioF())
+        pixmap, pages, modified = shown_info(path)
         thumb = QRect(rect.left() + 14, rect.top() + (rect.height() - THUMB.height()) // 2, THUMB.width(), THUMB.height())
         painter.setPen(QPen(QColor(t["border_strong"]), 1))
         painter.setBrush(QColor("#ffffff"))
@@ -165,7 +210,7 @@ class _RecentDelegate(QStyledItemDelegate):
 
         meta = QRect(more.left() - meta_width - 4, rect.top(), meta_width, rect.height())
         pages_text = plural(pages, "1 página", "{count} páginas") if pages else ""
-        date = relative_date(_key(path)[1]) if _key(path)[1] else ""
+        date = relative_date(modified) if modified else ""
         painter.drawText(meta, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, " · ".join(p for p in (pages_text, date) if p))
         build_more_icon().paint(painter, more.adjusted(6, 6, -6, -6))
         painter.restore()
@@ -224,6 +269,8 @@ class HomePage(QScrollArea):
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setAcceptDrops(True)
         self._preferences = preferences
+        self._recent_loader = RecentLoader(self)
+        self._recent_loader.loaded.connect(self._on_recent_loaded)
 
         outer = QWidget()
         outer.setObjectName("homeContent")
@@ -385,6 +432,13 @@ class HomePage(QScrollArea):
         self.recent_list.setVisible(has_recent)
         self._clear_button.setVisible(has_recent)
         self._empty_label.setVisible(not has_recent)
+        self.recent_list.viewport().update()
+        self._recent_loader.load(self._preferences.recent_files(), self.recent_list.devicePixelRatioF())
+
+    def _on_recent_loaded(self, path: str, key, image, pages) -> None:
+        if key not in _cache:
+            _cache[key] = (to_pixmap(image) if image is not None else None, pages)
+        _shown[path] = key
         self.recent_list.viewport().update()
 
     def _clear_recent(self):

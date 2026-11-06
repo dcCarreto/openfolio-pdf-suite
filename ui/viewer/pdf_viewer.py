@@ -49,6 +49,7 @@ from ui.redaction_state import RedactionState
 from ui.preferences import preferences
 from ui.tasks import run_task
 from ui.viewer.document_details import DetailsLoader, read_form_widgets, read_initial_view
+from ui.viewer.layouts import BOOK, CONTINUOUS, DOUBLE, LAYOUTS, SINGLE  # noqa: F401 (LAYOUTS: importado daqui)
 from ui.viewer.page_canvas import PageCanvas
 from ui.viewer.page_renderer import NEARBY, VISIBLE, PageRenderer, PixmapCache
 from ui.viewer.presentation import PresentationWindow
@@ -105,13 +106,6 @@ _KEEP_RENDERED_SCREENS = 3
 # texto quase tudo cabe; num escaneado ou numa planta, quase nada.
 _SYNC_RENDER_BUDGET = 0.03
 
-# Layouts das páginas (A15). Página dupla e livro são a rolagem contínua com duas páginas
-# por linha; no livro a capa fica sozinha, e as páginas pares à esquerda, como impressas.
-SINGLE = "single"
-CONTINUOUS = "continuous"
-DOUBLE = "double"
-BOOK = "book"
-LAYOUTS = (SINGLE, CONTINUOUS, DOUBLE, BOOK)
 _PAGE_GAP = 12
 _NAMED_LINK_TIPS = {
     "NextPage": "Próxima página",

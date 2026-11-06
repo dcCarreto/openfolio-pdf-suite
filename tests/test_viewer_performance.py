@@ -223,6 +223,59 @@ def test_document_details_arrive_after_the_first_page(tmp_path):
     viewer.close_document()
 
 
+def test_the_window_opens_without_loading_the_pdf_libraries():
+    # pypdf, reportlab, PIL e cryptography somavam ~1,3 s da abertura a frio, antes de haver
+    # um PDF para ler. Só a aba de documento os usa, e ela é importada ao abrir o primeiro.
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; import main; "
+        "print(sorted(m for m in ('pypdf', 'reportlab.pdfgen', 'PIL.Image', 'cryptography', "
+        "'ui.document_tab') if m in sys.modules))"
+    )
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=root, timeout=120)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "[]"
+
+
+def test_closing_the_app_while_a_thread_renders_does_not_crash(tmp_path):
+    # O pypdfium2 fecha documentos e páginas e destrói a biblioteca ao sair, sem lock: com a
+    # thread de render (ou a dos recentes) no meio de uma página, o processo lia memória
+    # liberada — violação de acesso, ou abortava ao fechar o app.
+    import random
+    import subprocess
+    import sys
+
+    heavy = tmp_path / "planta.pdf"  # uma página que leva dezenas de ms para renderizar
+    canvas = rl_canvas.Canvas(str(heavy), pagesize=(595, 842))
+    rng = random.Random(1)
+    for _ in range(20000):
+        x, y = rng.uniform(0, 595), rng.uniform(0, 842)
+        canvas.line(x, y, x + rng.uniform(-30, 30), y + rng.uniform(-30, 30))
+    canvas.save()
+    code = (
+        "import sys, threading, time\n"
+        "import core.base\n"
+        "import pypdfium2 as pdfium\n"
+        "from core.progress import PDFIUM_LOCK\n"
+        "def loop():\n"
+        "    while True:\n"
+        "        with PDFIUM_LOCK:\n"
+        "            doc = pdfium.PdfDocument(sys.argv[1]); page = doc[0]\n"
+        "            page.render(scale=2).close(); page.close(); doc.close()\n"
+        "threading.Thread(target=loop, daemon=True).start()\n"
+        "time.sleep(0.3)\n"
+    )
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for _ in range(2):
+        result = subprocess.run(
+            [sys.executable, "-c", code, str(heavy)], capture_output=True, text=True, cwd=root, timeout=120
+        )
+        assert result.returncode == 0 and "Traceback" not in result.stderr, result.stderr
+
+
 def test_shared_reader_reads_the_file_once_and_gives_the_same_results(tmp_path, monkeypatch):
     writer = PdfWriter()
     writer.add_blank_page(300, 400)
@@ -230,9 +283,11 @@ def test_shared_reader_reads_the_file_once_and_gives_the_same_results(tmp_path, 
     path = str(tmp_path / "doc.pdf")
     writer.write(path)
     plain = read_details(path)  # já usa o leitor compartilhado
+    import pypdf
+
     readers = []
-    original = base.PdfReader
-    monkeypatch.setattr(base, "PdfReader", lambda source: readers.append(source) or original(source))
+    original = pypdf.PdfReader
+    monkeypatch.setattr(pypdf, "PdfReader", lambda source: readers.append(source) or original(source))
 
     with shared_reader(path):
         first = open_reader(path, purpose=base.READ)

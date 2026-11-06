@@ -11,7 +11,7 @@ import logging
 import shutil
 import sys
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import QByteArray, QProcess, QSettings, QSize, QStandardPaths, Qt, QUrl
 from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QGuiApplication, QIcon, QKeySequence
@@ -33,22 +33,18 @@ from PySide6.QtWidgets import (
 )
 
 from core import updates
-from core.properties import ReadDocumentProperties
 from core.version import APP_VERSION
 from ui import desktop_integration, i18n, sidebar_icons, theme
 from ui.about_dialog import AboutDialog
 from ui.annotation_state import TOOLS as MARKUP_TOOLS
 from ui.app_events import pdf_paths_from_mime
 from ui.diagnostics import log_path
-from ui.document_tab import PANEL_MIN_WIDTH, PANEL_WIDTH, SIDE_WIDTH, VIEWER_MIN_WIDTH, DocumentTab
 from ui.errors import show_error
 from ui.home_page import HomePage
 from ui.i18n import plural, tr
 from ui.icon import build_app_icon, build_logo_tile
 from ui.sidebar_icons import build_protect_icon
 from ui.preferences import Preferences, start_folder, use_preferences
-from ui.printing import page_count_for_printing, pages_to_print, print_pages
-from ui.properties_dialog import DocumentPropertiesDialog
 from ui.shortcuts import CommandPalette, ShortcutsDialog
 from ui.tasks import call, run_task
 from ui.theme import apply_titlebar
@@ -56,13 +52,24 @@ from ui.tools import ROW_OF, SECTIONS, TOOLS, mode_key
 from ui.tools_center import ToolsCenter
 from ui.top_bar import FIXED_TABS, CommandLauncher, DocumentTabs, LangSwitch, bar_separator
 from ui.update_dialog import UpdateDialog
-from ui.viewer import pdf_viewer as viewer_layouts
+from ui.viewer import layouts as viewer_layouts
 from ui.viewer.markup_bar import DEFAULT_KEYS as MARKUP_KEYS
 from ui.viewer.markup_bar import TOOL_LABELS as MARKUP_LABELS
 from ui.widgets.task_popover import TaskLog, TasksButton
 from ui.viewer.viewer_icons import build_file_icon, build_home_icon, build_markup_icon, build_plus_icon
 
+if TYPE_CHECKING:
+    from ui.document_tab import DocumentTab
+
 logger = logging.getLogger(__name__)
+
+
+def _is_document(widget) -> bool:
+    """Uma aba de documento? A aba (com o visualizador e as ferramentas, que trazem o pypdf e o
+    reportlab) só é importada ao abrir o primeiro documento: antes disso, nenhuma existe, e a
+    janela abre sem esperar esses módulos."""
+    module = sys.modules.get("ui.document_tab")
+    return module is not None and isinstance(widget, module.DocumentTab)
 
 _SECTIONS = SECTIONS  # nome antigo, usado pelos testes que percorrem todas as ferramentas
 _HOME, _TOOLS = 0, 1  # as abas fixas, antes das de documento
@@ -195,7 +202,7 @@ class MainWindow(QMainWindow):
     def _update_status_bar(self):
         """O estado do documento da frente ("1 alteração aplicada, não salva", "Salvo às
         14:32") e a página ("Página 1 de 25")."""
-        doc = self.document if isinstance(self.tabs.currentWidget(), DocumentTab) else None
+        doc = self.document if _is_document(self.tabs.currentWidget()) else None
         session = doc.session if doc is not None else None
         has_document = session is not None and session.path() is not None
         text = ""
@@ -287,7 +294,7 @@ class MainWindow(QMainWindow):
     # -- abas de documento --------------------------------------------------------
 
     def documents(self) -> list[DocumentTab]:
-        return [w for i in range(self.tabs.count()) if isinstance(w := self.tabs.widget(i), DocumentTab)]
+        return [w for i in range(self.tabs.count()) if _is_document(w := self.tabs.widget(i))]
 
     @property
     def document(self) -> DocumentTab | None:
@@ -303,6 +310,8 @@ class MainWindow(QMainWindow):
 
     def new_document(self) -> DocumentTab:
         """Uma aba de documento vazia, já à frente."""
+        from ui.document_tab import DocumentTab
+
         doc = DocumentTab()
         doc.viewer.open_path = self.open_document  # "Abrir" da barra abre em outra aba
         doc.session.set_discard_confirmation(lambda d=doc: self._confirm_discard_changes(d))
@@ -399,12 +408,12 @@ class MainWindow(QMainWindow):
 
     def _on_tab_close_requested(self, index: int):
         widget = self.tabs.widget(index)
-        if isinstance(widget, DocumentTab):
+        if _is_document(widget):
             self.close_document(widget)
 
     def _on_tab_changed(self, index: int):
         widget = self.tabs.widget(index)
-        if isinstance(widget, DocumentTab):
+        if _is_document(widget):
             self._active = widget
         elif widget is self.home:
             self.home.refresh()
@@ -743,7 +752,7 @@ class MainWindow(QMainWindow):
         o trilho da direita; no Início e em Ferramentas, a página."""
         regions: list[QWidget | None] = [self.menuWidget()]
         current = self.tabs.currentWidget()
-        if isinstance(current, DocumentTab):
+        if _is_document(current):
             center = current.center_widget()
             if center is None:
                 regions += [current.viewer.toolbar, current.viewer.scroll_area]
@@ -828,6 +837,8 @@ class MainWindow(QMainWindow):
         state = self._settings.value("ui/splitter") if self._settings else None
         if isinstance(state, QByteArray) and doc.splitter.restoreState(state):
             return
+        from ui.document_tab import PANEL_MIN_WIDTH, PANEL_WIDTH, SIDE_WIDTH, VIEWER_MIN_WIDTH
+
         width = max(self.width(), VIEWER_MIN_WIDTH + PANEL_MIN_WIDTH)
         panel = min(PANEL_WIDTH, max(PANEL_MIN_WIDTH, width // 3))
         side = SIDE_WIDTH
@@ -1047,6 +1058,8 @@ class MainWindow(QMainWindow):
         if path is None:
             return
         try:
+            from ui.printing import page_count_for_printing
+
             page_count = page_count_for_printing(path)
         except Exception as exc:  # noqa: BLE001 — protegido, restrito ou corrompido
             show_error(self, tr("Imprimir"), "{error}", exc)
@@ -1070,8 +1083,12 @@ class MainWindow(QMainWindow):
         modified = doc.session.is_modified()
 
         def done(properties):
+            from ui.properties_dialog import DocumentPropertiesDialog
+
             self._properties_dialog = DocumentPropertiesDialog(properties, file_name, modified, doc.session, self)
             self._properties_dialog.open()
+
+        from core.properties import ReadDocumentProperties  # só aqui: o pypdf e o reportlab pesam na abertura do app
 
         return run_task(
             doc,
@@ -1086,6 +1103,8 @@ class MainWindow(QMainWindow):
         doc = self.current_document()
         path = doc.session.path()
         assert path is not None  # Imprimir só fica habilitado com documento
+        from ui.printing import pages_to_print, print_pages
+
         pages = pages_to_print(printer, page_count, doc.session.current_page(), doc.session.selected_pages())
         return run_task(
             doc,

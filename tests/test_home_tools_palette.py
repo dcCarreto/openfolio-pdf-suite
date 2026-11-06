@@ -94,6 +94,29 @@ def test_the_drop_zone_shrinks_to_a_strip_when_there_are_recent_files(window, tm
     assert window.home.drop_zone.height() == 96
 
 
+def test_recent_files_are_read_outside_the_interface_thread(window, tmp_path, monkeypatch):
+    # Antes cada recente era aberto e renderizado ao desenhar a lista, com a janela parada.
+    import threading
+    import time
+
+    path = _pdf(tmp_path / "lento.pdf", 4)
+    window._preferences.add_recent_file(path)
+    original = home_page.open_pdfium
+    threads = []
+    monkeypatch.setattr(home_page, "open_pdfium", lambda p: threads.append(threading.current_thread()) or original(p))
+
+    window.home.refresh()
+    window.home.recent_list.grab()  # desenhar a lista não lê o arquivo
+    deadline = time.monotonic() + 10
+    while home_page.shown_info(path)[1] is None and time.monotonic() < deadline:
+        QApplication.processEvents()
+        time.sleep(0.002)
+
+    pixmap, pages, modified = home_page.shown_info(path)
+    assert pages == 4 and pixmap is not None and modified == os.path.getmtime(path)
+    assert threads and threading.main_thread() not in threads
+
+
 def test_recent_files_show_thumbnail_pages_and_a_menu(window, tmp_path):
     first, second = _pdf(tmp_path / "um.pdf", 3), _pdf(tmp_path / "dois.pdf")
     window._preferences.add_recent_file(first)

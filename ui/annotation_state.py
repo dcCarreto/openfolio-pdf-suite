@@ -1,8 +1,11 @@
 """Estado compartilhado da ferramenta de anotações: ferramenta/cor ativas e pendentes."""
 
+from typing import TYPE_CHECKING
+
 from PySide6.QtCore import QObject, Signal
 
-from core.annotations import AnnotationSpec
+if TYPE_CHECKING:  # o módulo traz o pypdf e o reportlab, que a janela não precisa para abrir
+    from core.annotations import AnnotationSpec
 
 TOOLS = ("select", "highlight", "underline", "strikeout", "note", "ink", "square", "circle", "arrow", "stamp")
 
@@ -33,7 +36,7 @@ class AnnotationState(QObject):
         self._active_color = DEFAULT_COLOR
         self._stamp_text = DEFAULT_STAMP_TEXT
         self._width = DEFAULT_WIDTH
-        self._pending: list[AnnotationSpec] = []
+        self._pending: list["AnnotationSpec"] = []
         self._page_active = False
         self._selected_comment: tuple[int, tuple[float, float, float, float]] | None = None
 
@@ -102,14 +105,14 @@ class AnnotationState(QObject):
     def set_stamp_text(self, text: str) -> None:
         self._stamp_text = text
 
-    def pending(self) -> list[AnnotationSpec]:
+    def pending(self) -> list["AnnotationSpec"]:
         return list(self._pending)
 
-    def add_pending(self, spec: AnnotationSpec) -> None:
+    def add_pending(self, spec: "AnnotationSpec") -> None:
         self._pending.append(spec)
         self.pending_changed.emit()
 
-    def remove_pending(self, spec: AnnotationSpec) -> None:
+    def remove_pending(self, spec: "AnnotationSpec") -> None:
         self._pending.remove(spec)
         self.pending_changed.emit()
 
@@ -119,7 +122,7 @@ class AnnotationState(QObject):
         self._pending = []
         self.pending_changed.emit()
 
-    def set_pending(self, specs: list[AnnotationSpec]) -> None:
+    def set_pending(self, specs: list["AnnotationSpec"]) -> None:
         """Troca a lista inteira (desfazer/refazer)."""
         self._pending = list(specs)
         self.pending_changed.emit()

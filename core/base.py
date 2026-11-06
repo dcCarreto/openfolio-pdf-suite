@@ -1,18 +1,42 @@
 """Classes e helpers base compartilhados pelos módulos de core."""
 
+import atexit
 import contextlib
 import math
 import os
 import shutil
 import tempfile
 import threading
+import weakref
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 import pypdfium2 as pdfium
-from pypdf import PasswordType, PdfReader, PdfWriter
-from pypdf.constants import UserAccessPermissions
 
 from .messages import Message, plural_message
+from .progress import PDFIUM_LOCK
+
+
+def _quiet_pdfium_at_exit() -> None:
+    """Ao sair, o pypdfium2 fecha os documentos abertos e destrói a biblioteca, sem lock. Se
+    uma thread (render, miniaturas dos recentes, uma operação) estivesse no meio do pdfium, ela
+    lia memória já liberada: violação de acesso ou o processo abortado ao fechar o app. Com o
+    lock seguro até o fim, nenhuma thread está dentro do pdfium nem volta a entrar nele.
+
+    O atexit vai do último registrado ao primeiro: este roda antes do pypdfium2 (registrado
+    no `import`) e antes do `weakref.finalize`, com que o pypdfium2 fecha documentos e páginas
+    esquecidos — o finalize se registra no primeiro objeto criado, então um é criado aqui."""
+    PDFIUM_LOCK.acquire(timeout=10)  # uma página muito pesada no meio: espera até ela acabar
+
+
+weakref.finalize(_quiet_pdfium_at_exit, lambda: None)
+atexit.register(_quiet_pdfium_at_exit)
+
+# O pypdf (e o que ele carrega: PIL, cryptography) é importado só quando uma função daqui o
+# usa: importado no topo, ele vinha junto com qualquer módulo do app e pesava na abertura da
+# janela, antes de haver um PDF para ler.
+if TYPE_CHECKING:
+    from pypdf import PdfReader, PdfWriter
 
 
 class EncryptedPDFError(ValueError):
@@ -73,7 +97,7 @@ def known_password(path) -> str | None:
     return _known_passwords.get(_password_key(path))
 
 
-def open_reader(input_path: str, *, purpose: str = MODIFY) -> PdfReader:
+def open_reader(input_path: str, *, purpose: str = MODIFY) -> "PdfReader":
     """Abre um PdfReader tratando PDFs protegidos de acordo com o `purpose` da operação.
 
     PDF sem proteção: abre normalmente. PDF protegido:
@@ -92,6 +116,9 @@ def open_reader(input_path: str, *, purpose: str = MODIFY) -> PdfReader:
     FileNotDecryptedError cru do pypdf. Ferramentas que lidam com PDFs protegidos de
     propósito (Proteger/Remover senha) não usam este helper; leem o PdfReader diretamente.
     """
+    from pypdf import PasswordType, PdfReader
+    from pypdf.constants import UserAccessPermissions
+
     shared = getattr(_shared, "reader", None)
     if shared is not None and shared[0] == _password_key(input_path):
         if shared[2] is None:
@@ -176,7 +203,7 @@ def atomic_output(output_path: str) -> Iterator[str]:
             os.remove(temp_path)
 
 
-def add_object(writer: PdfWriter, obj):
+def add_object(writer: "PdfWriter", obj):
     """Registra `obj` como objeto indireto do `writer` e devolve a referência.
 
     O pypdf não tem API pública para isso; o acesso à API privada fica concentrado aqui e
@@ -184,7 +211,7 @@ def add_object(writer: PdfWriter, obj):
     return writer._add_object(obj)
 
 
-def replace_object(writer: PdfWriter, reference, obj) -> None:
+def replace_object(writer: "PdfWriter", reference, obj) -> None:
     """Põe `obj` no lugar do objeto indireto `reference` do `writer`: quem aponta para a
     referência (páginas, formulários) passa a ver o objeto novo."""
     writer._replace_object(reference, obj)
@@ -203,7 +230,7 @@ def render_scale(pdfium_page, scale: float) -> float:
     return scale if pixels <= MAX_RENDER_PIXELS else scale * math.sqrt(MAX_RENDER_PIXELS / pixels)
 
 
-def write_pdf(writer: PdfWriter, output_path: str) -> None:
+def write_pdf(writer: "PdfWriter", output_path: str) -> None:
     """Grava o PDF de forma atômica (ver `atomic_output`)."""
     with atomic_output(output_path) as temp_path:
         with open(temp_path, "wb") as f:
