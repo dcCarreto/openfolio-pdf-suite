@@ -314,3 +314,39 @@ def test_moving_pages_works_from_the_keyboard(make_pdf, tmp_path):
         assert page.layout_items() == [(1, 0), (0, 0), (2, 0)]
     finally:
         window.close()
+
+
+def test_tiles_in_view_come_from_the_render_thread(tmp_path, monkeypatch):
+    # Antes todas as miniaturas eram renderizadas na thread da interface, uma por volta do
+    # laço de eventos, e cada uma percorria a grade inteira: num escaneado longo a janela
+    # engasgava enquanto a grade estivesse aberta.
+    import time
+
+    from reportlab.pdfgen import canvas as rl_canvas
+
+    from ui.pages import organize_page
+
+    _app()
+    path = tmp_path / "longo.pdf"
+    canvas = rl_canvas.Canvas(str(path), pagesize=(300, 400))
+    for number in range(120):
+        canvas.drawString(50, 350, f"Pagina {number + 1}")
+        canvas.showPage()
+    canvas.save()
+    session = DocumentSession()
+    session.open(str(path))
+    page = organize_page.OrganizePage(session)
+    in_interface = []
+    monkeypatch.setattr(organize_page, "render_page", lambda *args: in_interface.append(args))
+    page.center_widget.resize(900, 700)  # na janela, a grade ocupa o centro da aba de documento
+    page.center_widget.show()
+
+    deadline = time.monotonic() + 10
+    while (0 in page._pending or not page._renderer.is_idle()) and time.monotonic() < deadline:
+        QApplication.processEvents()
+        time.sleep(0.002)
+    QApplication.processEvents()
+
+    assert 0 not in page._pending and page._pixmaps[0] is not None
+    assert 119 in page._pending  # longe da vista: não renderizada
+    assert in_interface == []

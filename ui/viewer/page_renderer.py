@@ -45,15 +45,16 @@ _IDLE_SECONDS = 10.0  # a thread termina sozinha depois disso sem pedidos
 
 
 class _Job:
-    __slots__ = ("key", "page", "scale", "ratio", "rotation", "fit_width")
+    __slots__ = ("key", "page", "scale", "ratio", "rotation", "fit_width", "fit_longest")
 
-    def __init__(self, key, page, scale, ratio, rotation, fit_width):
+    def __init__(self, key, page, scale, ratio, rotation, fit_width, fit_longest):
         self.key = key
         self.page = page
         self.scale = scale
         self.ratio = ratio
         self.rotation = rotation
         self.fit_width = fit_width
+        self.fit_longest = fit_longest
 
 
 class PageRenderer(QObject):
@@ -111,11 +112,13 @@ class PageRenderer(QObject):
         rotation: int = 0,
         priority: int = VISIBLE,
         fit_width: float | None = None,
+        fit_longest: float | None = None,
     ) -> None:
         """Pede o render de `page`. Um pedido com a mesma chave só muda de prioridade.
 
-        `fit_width`: em vez de `scale`, a escala que deixa a página com essa largura em pixels
-        lógicos (miniaturas), calculada pela thread com a página já aberta."""
+        `fit_width` / `fit_longest`: em vez de `scale`, a escala que deixa a página com essa
+        largura (ou o lado maior com esse tamanho) em pixels lógicos — miniaturas —, calculada
+        pela thread com a página já aberta."""
         with self._cond:
             if self._document is None:
                 return
@@ -123,7 +126,7 @@ class PageRenderer(QObject):
             if current is not None and current[0] <= priority:
                 return
             order = current[1] if current is not None else next(self._order)
-            self._jobs[key] = (priority, order, _Job(key, page, scale, ratio, rotation, fit_width))
+            self._jobs[key] = (priority, order, _Job(key, page, scale, ratio, rotation, fit_width, fit_longest))
             self._stopped = False
             if self._thread is None or not self._thread.is_alive():
                 self._thread = threading.Thread(target=self._run, name="openfolio-render", daemon=True)
@@ -204,6 +207,9 @@ class PageRenderer(QObject):
                 if job.fit_width is not None:
                     width = page.get_height() if job.rotation in (90, 270) else page.get_width()
                     scale = job.fit_width / width if width > 0 else job.scale
+                elif job.fit_longest is not None:
+                    longest = max(page.get_size())
+                    scale = job.fit_longest / longest if longest > 0 else job.scale
                 image = render_image(page, scale, job.ratio, rotation=job.rotation)
             finally:
                 page.close()
