@@ -6,6 +6,8 @@ comandos e o idioma. Os menus, a barra de status e as ações de documento (salv
 imprimir...) valem para a aba de documento atual.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import shutil
