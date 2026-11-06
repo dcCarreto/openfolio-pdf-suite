@@ -17,7 +17,54 @@ from typing import TypeVar
 
 T = TypeVar("T")
 
-PDFIUM_LOCK = threading.RLock()
+
+class _PdfiumLock:
+    """Um RLock que, ao fechar o app, para de admitir quem chega (`close`).
+
+    Ao sair, o pypdfium2 fecha os documentos e destrói a biblioteca sem lock (ver
+    `core.base`), e para isso o app precisa segurar este lock. Mas um RLock não tem fila: uma
+    thread que o solta e logo o pega de novo (renders seguidos, uma operação página a página)
+    pode passar na frente de quem espera indefinidamente. Do Python 3.10 ao 3.13 a saída
+    esperava assim até desistir, e o pdfium era destruído com a thread dentro dele. Depois de
+    `close`, quem já está dentro termina (e pode reentrar), e quem chega espera para sempre:
+    na saída só sobram threads daemon, que o Python descarta."""
+
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._depth = threading.local()
+        self._closing = False
+
+    def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+        depth = getattr(self._depth, "count", 0)
+        if self._closing and depth == 0:
+            if blocking:
+                threading.Event().wait(None if timeout < 0 else timeout)
+            return False
+        if not self._lock.acquire(blocking, timeout):
+            return False
+        self._depth.count = depth + 1
+        return True
+
+    def release(self) -> None:
+        self._lock.release()
+        self._depth.count -= 1
+
+    def __enter__(self) -> bool:
+        return self.acquire()
+
+    def __exit__(self, *exc_info) -> None:
+        self.release()
+
+    def close(self, timeout: float) -> bool:
+        """Fecha a entrada e espera (até `timeout`) quem está dentro sair; fica com o lock."""
+        self._closing = True
+        if not self._lock.acquire(timeout=timeout):
+            return False
+        self._depth.count = getattr(self._depth, "count", 0) + 1
+        return True
+
+
+PDFIUM_LOCK = _PdfiumLock()
 
 
 class OperationCancelled(Exception):

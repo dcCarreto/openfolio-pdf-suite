@@ -252,6 +252,40 @@ def test_the_window_opens_without_loading_the_pdf_libraries():
     assert result.stdout.strip() == "[]"
 
 
+def test_closing_the_pdfium_lock_is_not_starved_by_a_busy_thread():
+    # Uma thread que solta o lock e o pega de novo em seguida (renders seguidos) passava na
+    # frente da saída indefinidamente do Python 3.10 ao 3.13: a saída desistia e destruía o
+    # pdfium com a thread dentro dele. Fechado, o lock deixa a thread terminar o que faz e
+    # não a deixa voltar.
+    import threading
+
+    from core.progress import _PdfiumLock
+
+    lock = _PdfiumLock()
+    inside = threading.Event()
+
+    def busy():
+        while True:
+            with lock:
+                inside.set()
+                started = time.perf_counter()
+                while time.perf_counter() - started < 0.005:  # segura o GIL, como um render longo
+                    pass
+
+    threading.Thread(target=busy, daemon=True).start()
+    assert inside.wait(5)
+    started = time.perf_counter()
+    assert lock.close(timeout=5)
+    assert time.perf_counter() - started < 1
+    with lock:  # quem fechou ainda pode reentrar
+        pass
+    others = []
+    probe = threading.Thread(target=lambda: others.append(lock.acquire(blocking=False)))
+    probe.start()
+    probe.join()
+    assert others == [False]  # quem chega depois não entra
+
+
 def test_closing_the_app_while_a_thread_renders_does_not_crash(tmp_path):
     # O pypdfium2 fecha documentos e páginas e destrói a biblioteca ao sair, sem lock: com a
     # thread de render (ou a dos recentes) no meio de uma página, o processo lia memória

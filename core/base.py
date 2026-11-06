@@ -26,7 +26,7 @@ def _quiet_pdfium_at_exit() -> None:
     O atexit vai do último registrado ao primeiro: este roda antes do pypdfium2 (registrado
     no `import`) e antes do `weakref.finalize`, com que o pypdfium2 fecha documentos e páginas
     esquecidos — o finalize se registra no primeiro objeto criado, então um é criado aqui."""
-    PDFIUM_LOCK.acquire(timeout=10)  # uma página muito pesada no meio: espera até ela acabar
+    PDFIUM_LOCK.close(timeout=10)  # uma página muito pesada no meio: espera até ela acabar
 
 
 weakref.finalize(_quiet_pdfium_at_exit, lambda: None)
