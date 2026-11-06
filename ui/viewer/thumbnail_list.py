@@ -7,7 +7,8 @@ from PySide6.QtWidgets import QAbstractItemView, QListView, QListWidget, QListWi
 from core.progress import PDFIUM_LOCK
 from ui import theme
 from ui.i18n import tr
-from ui.viewer.render import render_page
+from ui.viewer.page_renderer import THUMBNAIL, PageRenderer
+from ui.viewer.render import render_image, to_pixmap
 
 _THUMBNAIL_SCALE = 0.2
 _ICON_SIZE = QSize(104, 134)
@@ -55,15 +56,17 @@ class _ThumbnailDelegate(QStyledItemDelegate):
 class ThumbnailList(QListWidget):
     """Lista de miniaturas de página; emite page_selected(index) ao clicar em uma.
 
-    As miniaturas são renderizadas aos poucos, uma por volta do laço de eventos, começando
-    pelas que estão à vista: antes todas eram renderizadas de uma vez ao abrir o documento
-    (0,6 s num PDF de 400 páginas de texto, muito mais em escaneados), com a janela travada.
+    Só as miniaturas à vista (e as de uma tela antes e depois) são renderizadas, na thread de
+    render do visualizador, depois das páginas da tela. Antes todas eram renderizadas ao
+    abrir o documento, na thread da interface, uma por volta do laço de eventos: num
+    escaneado de 80 páginas a janela engasgava por quatro segundos, e num documento longo as
+    miniaturas que ninguém ia ver consumiam o processador.
     """
 
     page_selected = Signal(int)
     pages_selected = Signal(list)  # páginas selecionadas (Ctrl/Shift+clique), a partir de 0
 
-    def __init__(self, parent=None):
+    def __init__(self, renderer: PageRenderer | None = None, parent=None):
         super().__init__(parent)
         self.setObjectName("thumbnailList")
         # Modo ícone com fluxo de cima para baixo: legenda ("Página N") abaixo da
@@ -85,36 +88,52 @@ class ThumbnailList(QListWidget):
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.itemSelectionChanged.connect(self._on_selection_changed)
 
+        self._own_renderer = renderer is None
+        self._renderer = renderer if renderer is not None else PageRenderer(self)
+        self._renderer.rendered.connect(self._on_rendered)
         self._document = None
         self._pending: set[int] = set()
+        self._thumbnails: dict[int, QPixmap] = {}
         self._placeholder = QPixmap(_ICON_SIZE.width(), _ICON_SIZE.width() * 4 // 3)
         self._placeholder.fill(QColor("white"))
 
+        # Os pedidos saem depois que a rolagem e o layout assentam (vários eventos, um pedido).
         self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
         self._timer.setInterval(0)
-        self._timer.timeout.connect(self._render_next)
+        self._timer.timeout.connect(self._request_visible)
+        # Sem argumento: ligado direto, `valueChanged(int)` cairia em `start(msec)` e a
+        # posição da barra viraria o intervalo.
+        self.verticalScrollBar().valueChanged.connect(lambda _value: self._timer.start())
 
     def load_document(self, pdfium_document) -> None:
         self._timer.stop()
         self.blockSignals(True)
         self.clear()
         self._document = pdfium_document
+        if self._own_renderer:
+            self._renderer.set_document(pdfium_document)
         with PDFIUM_LOCK:
             total = len(pdfium_document)
+        icon = QIcon(self._placeholder)
         for index in range(total):
             item = QListWidgetItem(tr("Página {number}").format(number=index + 1))
-            item.setIcon(self._placeholder)
+            item.setIcon(icon)
             self.addItem(item)
         self.blockSignals(False)
         self._pending = set(range(total))
-        if self._pending:
-            self._timer.start()
+        self._thumbnails = {}
+        self._timer.start()
 
     def clear_document(self) -> None:
         """Esquece o documento (fechado pelo visualizador): nada mais é renderizado."""
         self._timer.stop()
         self._document = None
         self._pending = set()
+        self._thumbnails = {}
+        self._renderer.retain(lambda key: key[0] != "thumb")
+        if self._own_renderer:
+            self._renderer.set_document(None)
         self.clear()
 
     def retranslate(self) -> None:
@@ -124,10 +143,32 @@ class ThumbnailList(QListWidget):
     def pending_count(self) -> int:
         return len(self._pending)
 
+    def thumbnail(self, index: int) -> QPixmap | None:
+        """A miniatura da página, se já foi renderizada (a prévia de uma página pesada)."""
+        return self._thumbnails.get(index)
+
     def render_all(self) -> None:
-        """Renderiza o que falta de uma vez (usado nos testes)."""
-        while self._pending:
-            self._render_next()
+        """Renderiza o que falta de uma vez, aqui mesmo (usado nos testes)."""
+        if self._document is None:
+            return
+        for index in sorted(self._pending):
+            with PDFIUM_LOCK:
+                page = self._document[index]
+                try:
+                    width_pt = page.get_width()
+                    scale = _ICON_SIZE.width() / width_pt if width_pt > 0 else _THUMBNAIL_SCALE
+                    image = render_image(page, scale, self.devicePixelRatioF())
+                finally:
+                    page.close()
+            self._set_thumbnail(index, to_pixmap(image))
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._timer.start()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._timer.start()
 
     def _visible_rows(self) -> range:
         first = self.indexAt(QPoint(10, 10)).row()
@@ -138,24 +179,39 @@ class ThumbnailList(QListWidget):
             last = self.count() - 1
         return range(first, last + 1)
 
-    def _render_next(self) -> None:
-        if self._document is None or not self._pending:
-            self._timer.stop()
+    def _request_visible(self) -> None:
+        """Pede as miniaturas à vista e as de uma tela antes e depois; as que saíram de
+        perto deixam a fila."""
+        if self._document is None or not self._pending or not self.isVisible():
             return
-        index = next((row for row in self._visible_rows() if row in self._pending), min(self._pending))
+        rows = self._visible_rows() or range(min(self.count(), 8))
+        margin = max(4, len(rows))
+        nearby = range(max(0, rows.start - margin), min(self.count(), rows.stop + margin))
+        wanted = set()
+        ratio = self.devicePixelRatioF()
+        for index in sorted(nearby, key=lambda row: (row not in rows, row)):
+            if index in self._pending:
+                key = ("thumb", index)
+                wanted.add(key)
+                priority = THUMBNAIL if index in rows else THUMBNAIL + 1
+                self._renderer.request(
+                    key, index, _THUMBNAIL_SCALE, ratio, priority=priority, fit_width=_ICON_SIZE.width()
+                )
+        self._renderer.retain(lambda key: key[0] != "thumb" or key in wanted)
+
+    def _on_rendered(self, tagged_key, image, _info) -> None:
+        key = self._renderer.accept(tagged_key)
+        if key is None or key[0] != "thumb" or self._document is None:
+            return
+        if key[1] in self._pending:
+            self._set_thumbnail(key[1], to_pixmap(image))
+
+    def _set_thumbnail(self, index: int, pixmap: QPixmap) -> None:
         self._pending.discard(index)
-        with PDFIUM_LOCK:
-            page = self._document[index]
-            width_pt = page.get_width()
-            # Já na largura do ícone: sem reamostrar depois (e nítido em telas com escala).
-            scale = _ICON_SIZE.width() / width_pt if width_pt > 0 else _THUMBNAIL_SCALE
-            pixmap = render_page(page, scale, self.devicePixelRatioF())
-            page.close()
+        self._thumbnails[index] = pixmap
         item = self.item(index)
         if item is not None:
             item.setIcon(QIcon(pixmap))
-        if not self._pending:
-            self._timer.stop()
 
     def select_page(self, index: int) -> None:
         """Marca a página atual (navegação pelo visualizador). Com várias páginas

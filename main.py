@@ -1,9 +1,11 @@
 """Ponto de entrada da aplicação."""
 
+import importlib
 import logging
 import sys
+import threading
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtWidgets import QApplication
 
 from core.version import APP_VERSION
@@ -13,6 +15,24 @@ from ui.instances import AppWindows, InstanceServer, send_to_running_instance
 from ui.main_window import MainWindow
 from ui.preferences import Preferences
 from ui.theme import apply_theme
+
+
+# Bibliotecas que só o documento aberto usa. A janela abre sem elas (ver `_is_document` em
+# ui/main_window.py); carregadas numa thread logo depois, o primeiro PDF não espera por elas.
+# Só bibliotecas de fora: nenhuma importa o app de volta, então a thread não disputa com a da
+# interface um módulo pela metade.
+_WARM_UP = ("pypdf", "reportlab.pdfgen.canvas", "PIL.Image", "PIL.ImageQt")
+
+
+def _warm_up_libraries() -> None:
+    def run():
+        for name in _WARM_UP:
+            try:
+                importlib.import_module(name)
+            except Exception:  # noqa: BLE001 — quem precisar dela importa de novo e vê o erro
+                logging.getLogger("openfolio").debug("Pré-carga de %s falhou", name, exc_info=True)
+
+    threading.Thread(target=run, name="openfolio-warm-up", daemon=True).start()
 
 
 def main():
@@ -52,6 +72,10 @@ def main():
     app.installEventFilter(file_open_filter)
     _server = InstanceServer(windows.open)  # vive até o app fechar
     windows.open(paths)
+    QTimer.singleShot(300, _warm_up_libraries)  # depois da primeira pintura da janela
+    # A aba de documento (widgets: só na thread da interface), com o app parado e as
+    # bibliotecas já carregadas pela thread: ~50 ms que o primeiro PDF deixa de esperar.
+    QTimer.singleShot(2000, lambda: importlib.import_module("ui.document_tab"))
     sys.exit(app.exec())
 
 

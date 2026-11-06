@@ -8,6 +8,9 @@ from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QApplication, QLabel
 
 
+_PAPER = QColor("white")
+
+
 class PageCanvas(QLabel):
     """As posições dos sinais são relativas à página desenhada, não ao rótulo: o
     `QScrollArea` estica o rótulo até a área visível e a página fica centralizada nele,
@@ -32,6 +35,9 @@ class PageCanvas(QLabel):
         self._selection_rects: list[QRectF] = []
         self._selection_color = QColor()
         self._double_click_at = 0.0
+        # Rolagem contínua: o rótulo tem o tamanho da página e mostra papel branco enquanto a
+        # imagem não chega (antes era uma folha de estilo por página, cara de montar às centenas).
+        self.fill_blank = False
 
     def set_selection(self, rects: list[QRectF], color: QColor) -> None:
         """O texto selecionado, por cima da imagem: mudar a seleção não redesenha a página."""
@@ -54,6 +60,10 @@ class PageCanvas(QLabel):
         return event.position() - self.pixmap_offset()
 
     def paintEvent(self, event):
+        if self.fill_blank:
+            paper = QPainter(self)
+            paper.fillRect(self.rect(), _PAPER)
+            paper.end()
         super().paintEvent(event)
         if self._selection_rects:
             painter = QPainter(self)

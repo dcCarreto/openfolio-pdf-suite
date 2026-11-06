@@ -62,6 +62,7 @@ def viewer(tmp_path):
     session.open(_build_pdf_with_various_fields(tmp_path))
     viewer = PdfViewer(session, AnnotationState(), RedactionState())
     viewer.resize(800, 700)
+    viewer.wait_for_details()  # os campos são lidos numa thread
     yield viewer
     viewer.close_document()
 

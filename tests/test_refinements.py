@@ -89,6 +89,15 @@ def test_with_animations_off_nothing_animates(window, tmp_path, monkeypatch):
     assert doc.stack.isVisible() and doc.stack.width() > 0  # o estado final, sem animar
 
 
+def _wait_for(condition, timeout_ms: int) -> bool:
+    """Processa eventos até `condition()` valer ou o tempo acabar."""
+    for _ in range(timeout_ms // 10):
+        if condition():
+            return True
+        QTest.qWait(10)
+    return condition()
+
+
 def test_animations_leave_no_effect_behind(window, tmp_path, monkeypatch):
     monkeypatch.setattr(motion, "enabled", lambda: True)
     doc = window.open_document(_pdf(tmp_path / "doc.pdf"))
@@ -96,22 +105,20 @@ def test_animations_leave_no_effect_behind(window, tmp_path, monkeypatch):
     doc.open_tool(ROW_OF["CompressPage"])
     panel = doc.panel(ROW_OF["CompressPage"])
     panel.task_started("Comprimindo")
-    QTest.qWait(400)
-    assert doc.stack.width() >= 300  # abriu até a largura do painel
-    assert panel.footer.graphicsEffect() is None and doc.stack.graphicsEffect() is None
+    # O fim de cada animação, com folga para uma máquina lenta (o CI): ela dura bem menos.
+    assert _wait_for(lambda: doc.stack.width() >= 300, 3000)  # abriu até a largura do painel
+    assert _wait_for(lambda: doc.stack.graphicsEffect() is None and panel.footer.graphicsEffect() is None, 3000)
 
     doc.close_tool()
     assert doc.stack.isVisible()  # ainda encolhendo
-    QTest.qWait(400)
-    assert not doc.stack.isVisible()
+    assert _wait_for(lambda: not doc.stack.isVisible(), 3000)
 
     _show(window, 1024, 720)
     doc.open_tool(ROW_OF["CompressPage"])
-    QTest.qWait(400)
-    assert isinstance(doc.stack.graphicsEffect(), QGraphicsDropShadowEffect)  # a sombra volta na gaveta
+    # a sombra volta na gaveta
+    assert _wait_for(lambda: isinstance(doc.stack.graphicsEffect(), QGraphicsDropShadowEffect), 3000)
     doc.open_tool(ROW_OF["AnnotationsPage"])
-    QTest.qWait(400)
-    assert isinstance(doc.markup_bar.graphicsEffect(), QGraphicsDropShadowEffect)
+    assert _wait_for(lambda: isinstance(doc.markup_bar.graphicsEffect(), QGraphicsDropShadowEffect), 3000)
 
 
 # -- F6 -----------------------------------------------------------------------------------
