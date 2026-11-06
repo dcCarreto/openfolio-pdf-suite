@@ -146,6 +146,39 @@ def test_zoom_in_continuous_mode_keeps_the_old_image_until_the_new_one_arrives(l
     viewer.close_document()
 
 
+def test_details_of_a_closed_viewer_never_reach_it(long_pdf, monkeypatch):
+    # Fechar a aba enquanto a thread ainda lê o documento: antes a thread emitia o sinal de um
+    # objeto destruído na thread da interface ao mesmo tempo, e o processo podia cair.
+    import threading
+
+    import shiboken6
+
+    from ui.viewer import document_details
+
+    _app()
+    gate, finished = threading.Event(), threading.Event()
+
+    def slow_read(path):
+        gate.wait(10)
+        try:
+            return read_details(path)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(document_details, "read_details", slow_read)
+    loader = document_details.DetailsLoader()
+    received = []
+    loader.loaded.connect(lambda *args: received.append(args))
+    loader.load(str(long_pdf))
+    shiboken6.delete(loader)  # a aba fechou
+    gate.set()
+    assert finished.wait(10)
+    for _ in range(20):
+        QApplication.processEvents()
+        time.sleep(0.005)
+    assert received == []
+
+
 def test_results_of_a_closed_document_are_dropped(long_pdf, tmp_path):
     _app()
     renderer = PageRenderer()

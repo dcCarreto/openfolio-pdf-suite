@@ -30,6 +30,7 @@ from PySide6.QtGui import QImage, QPixmap
 
 from core.geometry import PageGeometry
 from core.progress import PDFIUM_LOCK
+from ui.thread_relay import ensure_relay, post
 from ui.viewer.render import render_image
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,7 @@ class PageRenderer(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        ensure_relay()
         self._cond = threading.Condition()
         self._document = None
         self._generation = 0
@@ -183,14 +185,10 @@ class PageRenderer(QObject):
             except Exception:  # a página fica sem imagem; as outras seguem
                 logger.debug("Falha ao renderizar a página %s", job.page, exc_info=True)
                 result = None
-            try:
-                if result is not None:
-                    self.rendered.emit((generation, job.key), *result)
-            except RuntimeError:  # o dono (e este objeto) já foi destruído
-                return
-            finally:
-                with self._cond:
-                    self._rendering = False
+            if result is not None:  # chega só se o dono ainda existir (ver `ui.thread_relay`)
+                post(self, "rendered", (generation, job.key), *result)
+            with self._cond:
+                self._rendering = False
             time.sleep(0)  # a thread da interface pega o lock do pdfium, se estiver esperando
 
     def _render(self, job: _Job, generation: int) -> tuple[QImage, tuple[float, PageGeometry]] | None:
