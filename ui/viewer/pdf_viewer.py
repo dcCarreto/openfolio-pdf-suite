@@ -221,6 +221,7 @@ class PdfViewer(QWidget):
         # O clique que pode seguir um link: página, o link sob o mouse e onde apertou.
         self._link_press: tuple[int, PageLink, QPointF] | None = None
         self._next_field: str | None = None  # o campo a abrir depois de gravar o atual (Tab)
+        self._filled_here = False  # a versão nova vem de um campo preenchido no visualizador
         # Voltar e Avançar (Alt+setas): (página, fração da altura dela) antes de cada salto.
         self._back: list[tuple[int, float]] = []
         self._forward: list[tuple[int, float]] = []
@@ -726,7 +727,9 @@ class PdfViewer(QWidget):
             self.side_panel.show_panel(view.panel)
             self.show_side_panel(True)
         self._update_notices(path)
-        if self._next_field:  # Tab entre campos: o próximo campo abre já, sem esperar a leitura
+        if self._next_field or self._filled_here:
+            # Preenchendo o formulário (Tab, ou o clique no campo seguinte logo depois de
+            # gravar um): os campos valem já, sem esperar a leitura dos detalhes.
             self._form_widgets = read_form_widgets(path)
         self._details_request = self._details.load(path)
         self.content_stack.setCurrentIndex(1)
@@ -761,13 +764,15 @@ class PdfViewer(QWidget):
         self._details_received = request
         self._notices = details.notices
         self._show_notices()
-        had_fields = bool(self._form_widgets)
+        # Campos já lidos na hora (preenchendo o formulário) chegam iguais: redesenhar a página
+        # fecharia o editor do campo que o usuário acabou de abrir.
+        fields_changed = details.form_widgets != self._form_widgets
         self._form_widgets = details.form_widgets
         self.side_panel.set_contents(details.outline, details.attachments)
         if self._wanted_panel:
             self.side_panel.show_panel(self._wanted_panel)
             self._wanted_panel = ""
-        if self._form_widgets or had_fields:
+        if fields_changed:
             self._refresh_current_render()  # os destaques dos campos
         self.details_loaded.emit()
 
@@ -3050,5 +3055,12 @@ class PdfViewer(QWidget):
             self,
             tr("Preencher formulário"),
             lambda _progress: FillFormFields().run(input_path, output_path, values),
-            on_success=lambda _result: self.session.open(output_path),
+            on_success=lambda _result: self._open_filled_version(output_path),
         )
+
+    def _open_filled_version(self, path: str):
+        self._filled_here = True
+        try:
+            self.session.open(path)
+        finally:
+            self._filled_here = False
