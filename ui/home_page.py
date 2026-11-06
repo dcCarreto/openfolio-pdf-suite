@@ -8,6 +8,7 @@ import threading
 import time
 from pathlib import Path
 
+import shiboken6
 from PySide6.QtCore import QObject, QPoint, QRect, QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
@@ -34,6 +35,7 @@ from ui.app_events import pdf_paths_from_mime
 from ui.i18n import plural, tr
 from ui.icon_utils import in_accent
 from ui.sidebar_icons import build_protect_icon
+from ui.thread_relay import ensure_relay, post
 from ui.tools import TOOLS
 from ui.viewer.render import render_image, to_pixmap
 from ui.viewer.viewer_icons import build_file_drop_icon, build_more_icon
@@ -120,6 +122,10 @@ class RecentLoader(QObject):
 
     loaded = Signal(str, object, object, object)  # caminho, (caminho, data), QImage, páginas
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        ensure_relay()
+
     def load(self, paths: list[str], ratio: float) -> None:
         if paths:
             threading.Thread(target=self._run, args=(list(paths), ratio), name="openfolio-recentes", daemon=True).start()
@@ -128,10 +134,9 @@ class RecentLoader(QObject):
         for path in paths:
             key = _key(path)
             image, pages = (None, None) if key in _cache else _read_first_page(path, ratio)
-            try:
-                self.loaded.emit(path, key, image, pages)
-            except RuntimeError:  # a janela já fechou
+            if not shiboken6.isValid(self):  # a janela já fechou: nada mais a ler
                 return
+            post(self, "loaded", path, key, image, pages)
 
 
 def relative_date(timestamp: float, now: float | None = None) -> str:

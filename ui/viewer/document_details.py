@@ -18,6 +18,7 @@ from core.base import shared_reader
 from core.bookmarks import ListOutline, OutlineItem
 from core.document_info import DocumentNotices, InitialView, document_notices, initial_view
 from core.form_fields import FormWidget, ListFormWidgets
+from ui.thread_relay import ensure_relay, post
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ class DetailsLoader(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        ensure_relay()
         self._request = 0
 
     def load(self, path: str) -> int:
@@ -85,7 +87,4 @@ class DetailsLoader(QObject):
 
     def _run(self, request: int, path: str) -> None:
         details = read_details(path)
-        try:
-            self.loaded.emit(request, details)
-        except RuntimeError:  # o visualizador já foi fechado
-            pass
+        post(self, "loaded", request, details)  # se o visualizador já fechou, não chega
