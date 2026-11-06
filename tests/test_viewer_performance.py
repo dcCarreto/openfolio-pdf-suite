@@ -119,18 +119,30 @@ def test_continuous_mode_renders_heavy_pages_in_the_background(long_pdf):
 
 
 def test_zoom_in_continuous_mode_keeps_the_old_image_until_the_new_one_arrives(long_pdf):
+    # No meio do documento: antes, trocar o conteúdo da rolagem levava a barra ao topo, as
+    # páginas à vista eram descartadas e as primeiras do documento renderizadas à toa.
     viewer = _viewer(long_pdf, CONTINUOUS)
-    assert 0 in viewer._rendered_pages
+    viewer._scroll_to_page(30)
+    QApplication.processEvents()
+    assert 30 in viewer._rendered_pages
     viewer._render_cost = 1.0
-    width = viewer._page_labels[0].pixmap().width()
 
     viewer._zoom_in()
 
-    label = viewer._page_labels[0]
+    assert viewer._current_page == 30 and 30 in viewer._stretched_pages
+    label = viewer._page_labels[30]
     assert label.pixmap() is not None and not label.pixmap().isNull()  # não ficou em branco
     assert label.sizeHint().width() == pytest.approx(label.width(), abs=1)  # esticada até a página nova
-    assert viewer._render_key(0) not in viewer._pixmaps and width > 0
-    assert _wait(lambda: 0 in viewer._rendered_pages)
+    assert viewer._render_key(30) not in viewer._pixmaps
+    assert 0 not in viewer._rendered_pages and not viewer._renderer.is_pending(viewer._render_key(0))
+
+    viewer._zoom_in()  # outro zoom antes de a página chegar: continua à vista, esticada de novo
+    assert 30 in viewer._stretched_pages and label is not viewer._page_labels[30]
+    label = viewer._page_labels[30]
+    assert label.pixmap() is not None and not label.pixmap().isNull()
+    assert label.sizeHint().width() == pytest.approx(label.width(), abs=1)
+    assert _wait(lambda: 30 in viewer._rendered_pages)
+    assert 30 not in viewer._stretched_pages
     viewer.close_document()
 
 

@@ -185,6 +185,8 @@ class PdfViewer(QWidget):
         self._page_labels: list[QLabel] = []
         self._page_tops: list[int] = []
         self._rendered_pages: set[int] = set()
+        self._stretched_pages: set[int] = set()  # com a imagem de outro zoom, até a nova chegar
+        self._rebuilding = False  # trocando o conteúdo da rolagem (a barra passa pelo topo)
         self._document_dependent_widgets: list[QWidget] = []
         self._drag_start_pdf: tuple[float, float] | None = None  # realce/sublinhado/riscado e carimbo
         self._drag_preview_base: QPixmap | None = None
@@ -898,14 +900,21 @@ class PdfViewer(QWidget):
 
     # -- renderização --------------------------------------------------------
 
-    def _rebuild_canvas(self):
+    def _rebuild_canvas(self, anchor: tuple[int, float] | None = None):
+        """Refaz a tela das páginas. `anchor` (rolagem): a página, e quanto dela já passou,
+        a mostrar no alto — as páginas são escolhidas já nessa posição, não no começo do
+        documento (antes cada zoom no meio de um documento renderizava as primeiras páginas à
+        toa e descartava as que estavam à vista)."""
         self._finish_field_edit()
         # Zoom ou troca de layout na rolagem: as páginas que estavam à vista continuam nela,
         # esticadas, até a versão na escala nova chegar (em vez de piscarem em branco).
         previous: dict[int, QPixmap] = {}
         if self._continuous and len(self._page_labels) == self._page_count():
-            previous = {index: self._page_labels[index].pixmap() for index in self._rendered_pages}
+            # As já esticadas também: dois zooms seguidos não deixam a página em branco.
+            shown = self._rendered_pages | self._stretched_pages
+            previous = {index: self._page_labels[index].pixmap() for index in shown}
         self._rendered_pages = set()
+        self._stretched_pages = set()
         self._page_labels = []
         self._page_tops = []
         self._shown_page = None
@@ -932,9 +941,19 @@ class PdfViewer(QWidget):
             for index, pixmap in previous.items():
                 if index < len(self._page_labels) and pixmap is not None and not pixmap.isNull():
                     self._page_labels[index].setPixmap(_stretched(pixmap, self._page_labels[index].width()))
+                    self._stretched_pages.add(index)
 
-            self.scroll_area.setWidget(container)
-            self._update_visible_pages()
+            # Trocar o conteúdo leva a barra ao topo: as páginas não são escolhidas lá.
+            self._rebuilding = True
+            try:
+                self.scroll_area.setWidget(container)
+                target = anchor or self._pending_scroll
+                if target is not None:
+                    self._scroll_to_page(*target)  # ou assim que o layout novo existir
+            finally:
+                self._rebuilding = False
+            if self._pending_scroll is None:
+                self._update_visible_pages()
         else:
             label = PageCanvas()
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1167,11 +1186,13 @@ class PdfViewer(QWidget):
     def _render_page_into_label(self, index: int, label: QLabel, base: QPixmap | None = None):
         label.setPixmap(self._render_with_overlays(index, base))
         self._rendered_pages.add(index)
+        self._stretched_pages.discard(index)
         self._apply_selection(index, label)
 
     def _release_page(self, index: int):
         self._page_labels[index].clear()
         self._rendered_pages.discard(index)
+        self._stretched_pages.discard(index)
 
     def _with_highlight(self, pixmap: QPixmap, page_index: int) -> QPixmap:
         """Todas as ocorrências da busca na página, e a atual em destaque (antes só a atual
@@ -1431,7 +1452,7 @@ class PdfViewer(QWidget):
         painter.drawPolyline(polyline)
 
     def _update_visible_pages(self):
-        if not self._continuous or self._document is None or not self._page_labels:
+        if not self._continuous or self._document is None or not self._page_labels or self._rebuilding:
             return
 
         scrollbar = self.scroll_area.verticalScrollBar()
@@ -1466,7 +1487,7 @@ class PdfViewer(QWidget):
             else:
                 wanted.add(self._request_render(index, VISIBLE if index in visible else NEARBY))
         self._renderer.retain(lambda key: key[0] != "page" or key in wanted)
-        for index in list(self._rendered_pages):
+        for index in list(self._rendered_pages | self._stretched_pages):
             top = tops[index]
             if top + self._page_labels[index].height() < viewport_top - keep or top > viewport_bottom + keep:
                 self._release_page(index)
@@ -1499,6 +1520,7 @@ class PdfViewer(QWidget):
     def _apply_pending_scroll(self, _minimum: int, _maximum: int):
         if self._pending_scroll is not None and self._continuous:
             self._scroll_to_page(*self._pending_scroll)
+            self._update_visible_pages()  # a rolagem pode não ter mudado (a página 1)
 
     def _scroll_anchor(self) -> tuple[int, float]:
         """Página no topo da área visível e quanto dela já passou (0 a 1)."""
@@ -1768,8 +1790,8 @@ class PdfViewer(QWidget):
             return
         self._view_rotation = (self._view_rotation + 90) % 360
         page = self._current_page
-        self._rendered_pages = set()
-        self._rebuild_canvas()
+        self._rendered_pages, self._stretched_pages = set(), set()
+        self._rebuild_canvas((page, 0.0) if self._continuous else None)
         self._go_to_page(page)
         self._refit()
 
@@ -1947,9 +1969,7 @@ class PdfViewer(QWidget):
             return
         if self._continuous:
             # Antes, reconstruir a rolagem contínua voltava para a página 1.
-            anchor = self._scroll_anchor()
-            self._rebuild_canvas()
-            self._scroll_to_page(*anchor)
+            self._rebuild_canvas(self._scroll_anchor())
         else:
             self._show_single_page(self._current_page)
 
@@ -2015,9 +2035,8 @@ class PdfViewer(QWidget):
         page = self._current_page
         self._continuous, self._spread = continuous, spread
         if self._document is not None:
-            self._rebuild_canvas()
-            if continuous:
-                self._scroll_to_page(page)  # continua na página em que o usuário estava
+            # Continua na página em que o usuário estava.
+            self._rebuild_canvas((page, 0.0) if continuous else None)
             self._refit()
         self.layout_changed.emit(layout)
 
