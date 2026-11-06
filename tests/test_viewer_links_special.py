@@ -3,6 +3,7 @@ outro PDF, links na apresentação, anexos, cópia bloqueada pelo autor, rótulo
 ferramenta de mão, Shift + clique, zoom alto e a posição exata de leitura."""
 
 import os
+import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -89,6 +90,7 @@ def _open(path, layout=SINGLE) -> PdfViewer:
     viewer.show()
     session.open(path)
     _settle()
+    viewer.wait_for_details()  # campos, anexos e avisos chegam de uma thread
     return viewer
 
 
@@ -464,6 +466,14 @@ def test_zoom_goes_up_to_800_percent(tmp_path):
     assert viewer._scale == 8.0
     viewer._set_zoom(5000)
     assert viewer._scale == 8.0
+    # A página nítida pode vir da thread de render (uma página a 800% passa do tempo de desenhar
+    # na hora numa máquina lenta); até lá, a anterior fica esticada.
+    for _ in range(1000):
+        if viewer._render_key(0) in viewer._pixmaps and viewer._renderer.is_idle():
+            break
+        QApplication.processEvents()
+        time.sleep(0.01)
+    QApplication.processEvents()
     assert viewer._page_labels[0].pixmap().deviceIndependentSize().width() == pytest.approx(612 * 8, abs=2)
     viewer.close_document()
 

@@ -68,6 +68,7 @@ def _open(path, layout=SINGLE, size=(800, 700)) -> PdfViewer:
     viewer.show()
     session.open(path)
     QApplication.processEvents()
+    viewer.wait_for_details()  # campos, anexos e avisos chegam de uma thread
     return viewer
 
 

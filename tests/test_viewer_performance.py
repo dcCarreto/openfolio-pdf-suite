@@ -124,7 +124,7 @@ def test_zoom_in_continuous_mode_keeps_the_old_image_until_the_new_one_arrives(l
     viewer = _viewer(long_pdf, CONTINUOUS)
     viewer._scroll_to_page(30)
     QApplication.processEvents()
-    assert 30 in viewer._rendered_pages
+    assert _wait(lambda: 30 in viewer._rendered_pages)  # na hora, ou da thread numa máquina lenta
     viewer._render_cost = 1.0
 
     viewer._zoom_in()
