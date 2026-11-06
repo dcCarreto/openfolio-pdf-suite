@@ -73,6 +73,9 @@ def main():
     _server = InstanceServer(windows.open)  # vive até o app fechar
     windows.open(paths)
     QTimer.singleShot(300, _warm_up_libraries)  # depois da primeira pintura da janela
+    # A aba de documento (widgets: só na thread da interface), com o app parado e as
+    # bibliotecas já carregadas pela thread: ~50 ms que o primeiro PDF deixa de esperar.
+    QTimer.singleShot(2000, lambda: importlib.import_module("ui.document_tab"))
     sys.exit(app.exec())
 
 
